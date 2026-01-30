@@ -38,6 +38,7 @@
     .metric-value.negative { color: #dc2626; }
     .positive-amount { color: #059669; font-weight: 600; }
     .negative-amount { color: #b91c1c; }
+    .neutral-amount { color: #a8a29e; font-weight: 500; }
     .metric-label { font-size: 11px; color: #78716c; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
     .tabs { display: flex; gap: 8px; margin-bottom: 24px; border-bottom: 1px solid #e7e5e4; padding-bottom: 12px; flex-wrap: wrap; }
     .tab { padding: 8px 16px; border-radius: 6px; border: none; background: transparent; font-size: 14px; font-weight: 500; cursor: pointer; color: #78716c; font-family: inherit; }
@@ -399,6 +400,67 @@ function extractLast4(account) {
   return match ? match[1] : null;
 }
 
+function formatLockDate(timestamp) {
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().split('T')[0];
+}
+
+function formatLockReason(reason, lockedAtTimestamp) {
+  if (lockedAtTimestamp) {
+    const lockDate = formatLockDate(lockedAtTimestamp);
+    return lockDate ? `${reason} (locked ${lockDate})` : `${reason} (locked)`;
+  }
+  return `${reason} (live)`;
+}
+
+function buildRuleLabel(card, cardId, category, multiplier) {
+  const cardName = card?.shortName || cardId || 'Card';
+  const detail = multiplier?.reason ? ` (${multiplier.reason})` : '';
+  return `${multiplier.rate}x ${category} — ${cardName}${detail}`;
+}
+
+const PAYMENT_KEYWORDS = [
+  { keyword: 'AUTOMATIC PAYMENT', reason: 'Automatic Payment' },
+  { keyword: 'AUTO PAYMENT', reason: 'Automatic Payment' },
+  { keyword: 'AUTOPAY', reason: 'Automatic Payment' },
+  { keyword: 'ONLINE PAYMENT', reason: 'Online Payment' },
+  { keyword: 'PAYMENT THANK YOU', reason: 'Thank You Payment' },
+  { keyword: 'THANK YOU', reason: 'Thank You Payment' },
+  { keyword: 'CREDIT CARD PAYMENT', reason: 'Card Payment' },
+  { keyword: 'CARD PAYMENT', reason: 'Card Payment' },
+  { keyword: 'ACH PAYMENT', reason: 'ACH Payment' },
+  { keyword: 'BILL PAYMENT', reason: 'Bill Payment' },
+  { keyword: 'PAYMENT', reason: 'Payment' }
+];
+
+function detectPaymentReason(merchant, originalStatement) {
+  const upper = `${merchant} ${originalStatement}`.toUpperCase();
+  const match = PAYMENT_KEYWORDS.find(entry => upper.includes(entry.keyword));
+  return match ? match.reason : null;
+}
+
+function getCashPlusSelections(txnDate = null) {
+  const requestedQuarter = txnDate ? getQuarterForDate(txnDate) : getCurrentQuarter();
+  let selections = state.cashPlusCategories[requestedQuarter];
+  let selectionQuarter = requestedQuarter;
+
+  if (!selections || (!selections.fivePercent?.length && !selections.twoPercent)) {
+    const currentQuarter = getCurrentQuarter();
+    if (state.cashPlusCategories[currentQuarter]) {
+      selections = state.cashPlusCategories[currentQuarter];
+      selectionQuarter = currentQuarter;
+    }
+  }
+
+  return {
+    selections: selections || { fivePercent: [], twoPercent: '' },
+    requestedQuarter,
+    selectionQuarter
+  };
+}
+
 // Get valid categories for a card (handles Cash+ and CFF dynamic categories)
 function getCardCategories(cardId, txnDate = null) {
   const card = CARDS[cardId];
@@ -406,8 +468,7 @@ function getCardCategories(cardId, txnDate = null) {
   
   // Special handling for Cash+
   if (cardId === 'us-bank-cash-plus') {
-    const quarter = txnDate ? getQuarterForDate(txnDate) : getCurrentQuarter();
-    const selections = state.cashPlusCategories[quarter] || { fivePercent: [], twoPercent: '' };
+    const selections = getCashPlusSelections(txnDate).selections;
     const categories = [...(selections.fivePercent || [])];
     if (selections.twoPercent) categories.push(selections.twoPercent);
     categories.push('other');
@@ -725,18 +786,18 @@ function getMultiplier(cardId, category, txnDate = null) {
   if (!card) return { rate: 1, reason: 'Unknown card' };
   
   // Special handling for Cash+ with quarterly category selection
-  if (cardId === 'us-bank-cash-plus' && txnDate) {
-    const quarter = getQuarterForDate(txnDate);
-    const quarterCats = state.cashPlusCategories[quarter];
+  if (cardId === 'us-bank-cash-plus') {
+    const { selections: quarterCats, requestedQuarter, selectionQuarter } = getCashPlusSelections(txnDate);
+    const selectionLabel = selectionQuarter === requestedQuarter ? `${selectionQuarter} selection` : `current selection (${selectionQuarter})`;
     
     if (quarterCats) {
       // Check 5% categories
       if (quarterCats.fivePercent?.includes(category)) {
-        return { rate: 5, reason: `5% ${category} (${quarter} selection)` };
+        return { rate: 5, reason: `5% ${category} (${selectionLabel})` };
       }
       // Check 2% category
       if (quarterCats.twoPercent === category) {
-        return { rate: 2, reason: `2% ${category} (${quarter} selection)` };
+        return { rate: 2, reason: `2% ${category} (${selectionLabel})` };
       }
     }
     // Cash+ base rate is 1%
@@ -781,6 +842,7 @@ function getMultiplier(cardId, category, txnDate = null) {
 // Determine badge color based on whether this is the optimal choice
 // Green = best/tied for best option, Yellow = good but better exists, Red = suboptimal
 function getCategoryBadgeStyle(txn) {
+  if (txn.isPayment) return 'background:#f5f5f4;color:#78716c;'; // Neutral for payments
   if (txn.isCredit) return 'background:#e0f2fe;color:#0369a1;'; // Blue for credits
   
   const category = txn.category;
@@ -832,8 +894,8 @@ function detectCredit(merchant, originalStatement, cardId, txnId) {
   const disabled = state.disabledCredits[cardId] || [];
   
   // Exclude payments and transfers - these are NOT statement credits
-  const excludeKeywords = ['PAYMENT', 'THANK YOU', 'AUTOMATIC PAYMENT', 'CREDIT CARD PAYMENT', 'TRANSFER'];
-  if (excludeKeywords.some(kw => upper.includes(kw))) return null;
+  if (PAYMENT_KEYWORDS.some(entry => upper.includes(entry.keyword))) return null;
+  if (upper.includes('TRANSFER')) return null;
   
   // Check each credit's keywords for a match
   for (const credit of card.credits) {
@@ -919,9 +981,20 @@ async function processTransactions(transactions) {
   state.llmCalls = 0;
   const needsLLM = [];
   const classifications = {};
+  let lockedUpdated = false;
   
   // First pass: classify with rules
   for (const txn of transactions) {
+    const paymentReason = txn.amount > 0 ? detectPaymentReason(txn.merchant, txn.original) : null;
+    if (paymentReason) {
+      classifications[txn.id] = {
+        category: 'payment',
+        source: 'payment',
+        confidence: CONFIDENCE.CERTAIN,
+        reason: paymentReason
+      };
+      continue;
+    }
     const result = classifyMerchant(txn.merchant, txn.monarchCategory);
     if (result.category) {
       classifications[txn.id] = result;
@@ -961,39 +1034,78 @@ async function processTransactions(transactions) {
     const cardId = state.cardMappings[txn.last4];
     const card = CARDS[cardId];
     const isCredit = txn.amount > 0;
+    const paymentReason = cls.source === 'payment' ? cls.reason : null;
+    const isPayment = !!paymentReason;
+    const canLock = !!cardId && !!card;
+    const hasLockedValues = typeof txn.lockedMultiplier === 'number'
+      && typeof txn.lockedPoints === 'number'
+      && typeof txn.lockedReason === 'string'
+      && typeof txn.lockedCategory === 'string'
+      && typeof txn.lockedAtTimestamp === 'string';
     
     // Map the generic category to a card-specific category
     // BUT: If source is 'rule', user explicitly chose this category - don't remap
-    const cardCategory = (cls.source === 'rule' || !card) ? cls.category : mapToCardCategory(cls.category, cardId, txn.date);
+    const cardCategory = hasLockedValues
+      ? txn.lockedCategory
+      : (isPayment
+        ? 'payment'
+        : ((cls.source === 'rule' || !card) ? cls.category : mapToCardCategory(cls.category, cardId, txn.date)));
     
     let multiplier = { rate: 1, reason: 'Card not mapped' };
     let creditMatch = null;
+    let baseReason = '';
     
     if (card) {
-      if (isCredit) {
+      if (isCredit && !isPayment) {
         creditMatch = detectCredit(txn.merchant, txn.original, cardId, txn.id);
-        multiplier = { rate: 0, reason: creditMatch ? `Credit: ${creditMatch}` : 'Refund (not tracked)' };
+      }
+      if (hasLockedValues) {
+        multiplier = { rate: txn.lockedMultiplier, reason: 'Locked rewards' };
+      } else if (isPayment) {
+        multiplier = { rate: 0, reason: paymentReason };
+      } else if (isCredit) {
+        multiplier = getMultiplier(cardId, cardCategory, txn.date);
       } else {
         multiplier = getMultiplier(cardId, cardCategory, txn.date);
       }
     }
     
-    const points = isCredit ? 0 : Math.abs(txn.amount) * multiplier.rate;
+    const points = hasLockedValues
+      ? txn.lockedPoints
+      : (isPayment ? 0 : (isCredit ? -Math.abs(txn.amount) * multiplier.rate : Math.abs(txn.amount) * multiplier.rate));
     const pointsValue = points * getPointValue(cardId);
+    const creditReason = creditMatch ? `Credit: ${creditMatch}` : 'Refund';
+    const ruleLabel = card ? buildRuleLabel(card, cardId, cardCategory, multiplier) : 'Card not mapped';
+    baseReason = hasLockedValues
+      ? txn.lockedReason
+      : (isPayment ? paymentReason : (isCredit ? `${creditReason} • ${ruleLabel}` : ruleLabel));
+    const lockTimestamp = hasLockedValues ? txn.lockedAtTimestamp : (canLock ? new Date().toISOString() : null);
+    const reason = formatLockReason(baseReason, lockTimestamp);
+
+    if (!hasLockedValues && canLock) {
+      txn.lockedCategory = cardCategory;
+      txn.lockedMultiplier = multiplier.rate;
+      txn.lockedPoints = points;
+      txn.lockedReason = baseReason;
+      txn.lockedAtTimestamp = lockTimestamp;
+      lockedUpdated = true;
+    }
     
     return {
       ...txn,
       cardId,
       cardName: card?.shortName || 'Unknown',
       category: cardCategory,
-      categorySource: cls.source,
+      categorySource: hasLockedValues ? 'locked' : cls.source,
       confidence: cls.confidence || CONFIDENCE.MEDIUM,
       multiplier: multiplier.rate,
-      reason: multiplier.reason,
+      reason,
       points,
       pointsValue,
       isCredit,
-      creditMatch
+      isPayment,
+      creditMatch,
+      lockedAtTimestamp: lockTimestamp
     };
   });
   
@@ -1010,12 +1122,16 @@ async function processTransactions(transactions) {
         spend: 0, points: 0, pointsValue: 0, credits: 0, count: 0
       };
     }
-    if (txn.isCredit && txn.creditMatch) byCard[cid].credits += Math.abs(txn.amount);
-    else {
-      byCard[cid].spend += Math.abs(txn.amount);
-      byCard[cid].points += txn.points;
-      byCard[cid].pointsValue += txn.pointsValue;
+    if (txn.isPayment) {
+      byCard[cid].count++;
+      continue;
     }
+    if (!txn.isCredit) {
+      byCard[cid].spend += Math.abs(txn.amount);
+    }
+    byCard[cid].points += txn.points;
+    byCard[cid].pointsValue += txn.pointsValue;
+    if (txn.isCredit && txn.creditMatch) byCard[cid].credits += Math.abs(txn.amount);
     byCard[cid].count++;
   }
   
@@ -1034,7 +1150,7 @@ async function processTransactions(transactions) {
     netValue: cards.reduce((s, c) => s + c.netValue, 0)
   };
   
-  return { processed, cards, totals };
+  return { processed, cards, totals, lockedUpdated };
 }
 
 // =============================================================================
@@ -1587,7 +1703,7 @@ function renderView(view) {
       
       if (cardFilter) txns = txns.filter(t => t.cardName === cardFilter);
       if (catFilter) txns = txns.filter(t => t.category === catFilter);
-      if (creditsOnly) txns = txns.filter(t => t.isCredit);
+      if (creditsOnly) txns = txns.filter(t => t.isCredit && !t.isPayment);
       
       document.getElementById('filteredCount').textContent = `Showing ${Math.min(txns.length, 200)} of ${txns.length}`;
       
@@ -1596,17 +1712,25 @@ function renderView(view) {
         <td style="max-width:180px;"><div style="font-weight:500;">${t.merchant}</div></td>
         <td style="font-size:12px;">${t.cardName}</td>
         <td>
-          <span class="badge category-badge" 
-                data-txn-id="${t.id}" data-merchant="${t.merchant}" data-current-cat="${t.category}" data-card-id="${t.cardId}"
-                style="cursor:pointer;${getCategoryBadgeStyle(t)}" title="Click to change category">
-            ${t.category}${t.categorySource === 'rule' ? ' ✓' : ''}
-          </span>
+          ${t.isPayment ? `
+            <span class="badge" style="${getCategoryBadgeStyle(t)}">${t.category}</span>
+          ` : `
+            <span class="badge category-badge" 
+                  data-txn-id="${t.id}" data-merchant="${t.merchant}" data-current-cat="${t.category}" data-card-id="${t.cardId}"
+                  style="cursor:pointer;${getCategoryBadgeStyle(t)}" title="Click to change category">
+              ${t.category}${t.categorySource === 'rule' ? ' ✓' : ''}
+            </span>
+          `}
         </td>
-        <td class="text-right mono" style="color:${t.isCredit ? '#059669' : '#b91c1c'};font-weight:${t.isCredit ? '600' : '500'};">${t.isCredit ? '+' : '-'}${formatCurrencyPrecise(Math.abs(t.amount))}</td>
-        <td class="text-right mono">${t.isCredit ? '—' : t.multiplier + 'x'}</td>
-        <td class="text-right mono">${t.isCredit ? '—' : formatNumber(t.points)}</td>
+        <td class="text-right mono ${t.isPayment ? 'neutral-amount' : (t.isCredit ? 'positive-amount' : 'negative-amount')}">
+          ${t.isPayment ? '' : (t.isCredit ? '+' : '-')}${formatCurrencyPrecise(Math.abs(t.amount))}
+        </td>
+        <td class="text-right mono">${t.isPayment ? '—' : `${t.multiplier}x`}</td>
+        <td class="text-right mono">
+          ${t.isPayment ? '—' : (t.isCredit ? `-${formatNumber(Math.abs(t.points))}` : formatNumber(t.points))}
+        </td>
         <td style="font-size:11px;color:#78716c;max-width:180px;">
-          ${t.isCredit ? `
+          ${t.isCredit && !t.isPayment ? `
             <span class="credit-toggle" data-txn-id="${t.id}" data-card-id="${t.cardId}" 
                   style="cursor:pointer;text-decoration:underline;color:#2563eb;">
               ${t.reason}
@@ -1727,7 +1851,8 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
   // Get current quarter selections for displaying rates
   const currentQuarter = getCurrentQuarter();
   const cffSelected = state.cffCategories[currentQuarter] || [];
-  const cashPlusSelected = state.cashPlusCategories[currentQuarter] || { fivePercent: [], twoPercent: '' };
+  const cashPlusInfo = getCashPlusSelections(txn?.date);
+  const cashPlusSelected = cashPlusInfo.selections;
   
   function getDisplayRate(cat) {
     if (cardId === 'chase-freedom-flex') {
@@ -1843,6 +1968,9 @@ async function runProcessing() {
   showLoading(true, 'Processing transactions...');
   try {
     const results = await processTransactions(state.transactions);
+    if (results.lockedUpdated) {
+      localStorage.setItem('ccTracker_transactions', JSON.stringify(state.transactions));
+    }
     showLoading(false);
     showResults(results);
   } catch (e) {

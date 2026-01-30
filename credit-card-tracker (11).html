@@ -1034,14 +1034,15 @@ async function processTransactions(transactions) {
     const cardId = state.cardMappings[txn.last4];
     const card = CARDS[cardId];
     const isCredit = txn.amount > 0;
-    const paymentReason = cls.source === 'payment' ? cls.reason : null;
-    const isPayment = !!paymentReason;
     const canLock = !!cardId && !!card;
     const hasLockedValues = typeof txn.lockedMultiplier === 'number'
       && typeof txn.lockedPoints === 'number'
       && typeof txn.lockedReason === 'string'
       && typeof txn.lockedCategory === 'string'
       && typeof txn.lockedAtTimestamp === 'string';
+    const lockedPayment = hasLockedValues && txn.lockedCategory === 'payment';
+    const paymentReason = lockedPayment ? txn.lockedReason : (cls.source === 'payment' ? cls.reason : null);
+    const isPayment = lockedPayment || !!paymentReason;
     
     // Map the generic category to a card-specific category
     // BUT: If source is 'rule', user explicitly chose this category - don't remap

@@ -1038,8 +1038,7 @@ async function processTransactions(transactions) {
     const hasLockedValues = typeof txn.lockedMultiplier === 'number'
       && typeof txn.lockedPoints === 'number'
       && typeof txn.lockedReason === 'string'
-      && typeof txn.lockedCategory === 'string'
-      && typeof txn.lockedAtTimestamp === 'string';
+      && typeof txn.lockedCategory === 'string';
     const lockedPayment = hasLockedValues && txn.lockedCategory === 'payment';
     const paymentReason = lockedPayment ? txn.lockedReason : (cls.source === 'payment' ? cls.reason : null);
     const isPayment = lockedPayment || !!paymentReason;
@@ -1080,7 +1079,9 @@ async function processTransactions(transactions) {
     baseReason = hasLockedValues
       ? txn.lockedReason
       : (isPayment ? paymentReason : (isCredit ? `${creditReason} • ${ruleLabel}` : ruleLabel));
-    const lockTimestamp = hasLockedValues ? txn.lockedAtTimestamp : (canLock ? new Date().toISOString() : null);
+    const lockTimestamp = hasLockedValues
+      ? (txn.lockedAtTimestamp || new Date().toISOString())
+      : (canLock ? new Date().toISOString() : null);
     const reason = formatLockReason(baseReason, lockTimestamp);
 
     if (!hasLockedValues && canLock) {
@@ -1088,6 +1089,9 @@ async function processTransactions(transactions) {
       txn.lockedMultiplier = multiplier.rate;
       txn.lockedPoints = points;
       txn.lockedReason = baseReason;
+      txn.lockedAtTimestamp = lockTimestamp;
+      lockedUpdated = true;
+    } else if (hasLockedValues && !txn.lockedAtTimestamp && lockTimestamp) {
       txn.lockedAtTimestamp = lockTimestamp;
       lockedUpdated = true;
     }

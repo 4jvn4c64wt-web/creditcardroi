@@ -654,6 +654,17 @@ function formatNumber(val) {
   return val.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
+// HTML escape function to prevent XSS attacks from user-controlled data
+function escapeHtml(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 // =============================================================================
 // CLASSIFICATION ENGINE WITH CONFIDENCE SCORING
 // =============================================================================
@@ -1401,7 +1412,7 @@ function showColumnMapping(csvText) {
           <tr style="background:#fafaf9;">
             ${headers.map(h => `
               <th style="padding:6px 12px;border-bottom:2px solid #e7e5e4;font-size:11px;color:#78716c;font-weight:normal;">
-                "${h}"
+                "${escapeHtml(h)}"
               </th>
             `).join('')}
           </tr>
@@ -1411,7 +1422,7 @@ function showColumnMapping(csvText) {
             <tr>
               ${headers.map((_, i) => `
                 <td style="padding:8px 12px;border-bottom:1px solid #f5f5f4;font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                  ${row[i] || '<em style="color:#a8a29e;">empty</em>'}
+                  ${row[i] ? escapeHtml(row[i]) : '<em style="color:#a8a29e;">empty</em>'}
                 </td>
               `).join('')}
             </tr>
@@ -1782,14 +1793,14 @@ function showMapping(allLast4s) {
     const acctName = txn ? txn.account.split('(')[0].trim() : '';
     return `
     <div class="card-mapping-row">
-      <span class="card-last4">•••• ${last4}</span>
-      <span style="font-size:12px;color:#78716c;min-width:140px;">${acctName}</span>
-      <select class="form-select" data-last4="${last4}" style="flex:1;max-width:300px;">
+      <span class="card-last4">•••• ${escapeHtml(last4)}</span>
+      <span style="font-size:12px;color:#78716c;min-width:140px;">${escapeHtml(acctName)}</span>
+      <select class="form-select" data-last4="${escapeHtml(last4)}" style="flex:1;max-width:300px;">
         <option value="">Select card...</option>
         ${Object.entries(CARDS)
           .sort(([,a], [,b]) => a.name.localeCompare(b.name))
-          .map(([id, c]) => 
-          `<option value="${id}" ${state.cardMappings[last4] === id ? 'selected' : ''}>${c.name}</option>`
+          .map(([id, c]) =>
+          `<option value="${escapeHtml(id)}" ${state.cardMappings[last4] === id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`
         ).join('')}
       </select>
       ${state.cardMappings[last4] ? '<span class="badge badge-green">Mapped</span>' : '<span class="badge badge-yellow">Needs mapping</span>'}
@@ -3302,14 +3313,14 @@ function renderView(view) {
         const badgeInfo = getCategoryBadgeStyle(t, true);
         
         return `<tr style="${t.isPayment ? 'opacity:0.6;' : ''}">
-        <td style="white-space:nowrap;font-size:12px;">${t.date}</td>
-        <td style="max-width:180px;"><div style="font-weight:500;">${t.merchant}</div></td>
-        <td style="font-size:12px;">${t.cardName}</td>
+        <td style="white-space:nowrap;font-size:12px;">${escapeHtml(t.date)}</td>
+        <td style="max-width:180px;"><div style="font-weight:500;">${escapeHtml(t.merchant)}</div></td>
+        <td style="font-size:12px;">${escapeHtml(t.cardName)}</td>
         <td>
-          <span class="badge category-badge" 
-                data-txn-id="${t.id}" data-merchant="${t.merchant}" data-current-cat="${t.category}" data-card-id="${t.cardId}"
-                style="cursor:pointer;${badgeInfo.style}" title="${badgeInfo.tooltip} — Click to change">
-            ${t.category}${t.categorySource === 'rule' ? ' ✓' : ''}
+          <span class="badge category-badge"
+                data-txn-id="${escapeHtml(t.id)}" data-merchant="${escapeHtml(t.merchant)}" data-current-cat="${escapeHtml(t.category)}" data-card-id="${escapeHtml(t.cardId)}"
+                style="cursor:pointer;${badgeInfo.style}" title="${escapeHtml(badgeInfo.tooltip)} — Click to change">
+            ${escapeHtml(t.category)}${t.categorySource === 'rule' ? ' ✓' : ''}
           </span>
         </td>
         <td class="text-right mono" style="color:${amountColor};font-weight:${amountWeight};">${t.isCredit ? '+' : '-'}${formatCurrencyPrecise(Math.abs(t.amount))}</td>
@@ -3317,11 +3328,11 @@ function renderView(view) {
         <td class="text-right mono" style="color:${pointsColor};">${pointsDisplay}</td>
         <td style="font-size:11px;color:#78716c;max-width:180px;">
           ${t.isCredit && !t.isPayment ? `
-            <span class="credit-toggle" data-txn-id="${t.id}" data-card-id="${t.cardId}" 
+            <span class="credit-toggle" data-txn-id="${escapeHtml(t.id)}" data-card-id="${escapeHtml(t.cardId)}"
                   style="cursor:pointer;text-decoration:underline;color:#2563eb;">
-              ${t.reason}
+              ${escapeHtml(t.reason)}
             </span>
-          ` : t.reason}
+          ` : escapeHtml(t.reason)}
         </td>
       </tr>`;
       }).join('');
@@ -3378,13 +3389,13 @@ function showCreditModal(txnId, cardId) {
   
   content.innerHTML = `
     <div style="margin-bottom:16px;">
-      <div style="font-weight:500;">${txn.merchant}</div>
-      <div style="font-size:13px;color:#78716c;">${txn.date} • +${formatCurrencyPrecise(Math.abs(txn.amount))}</div>
-      <div style="font-size:12px;color:#a8a29e;margin-top:4px;">${txn.original || ''}</div>
+      <div style="font-weight:500;">${escapeHtml(txn.merchant)}</div>
+      <div style="font-size:13px;color:#78716c;">${escapeHtml(txn.date)} • +${formatCurrencyPrecise(Math.abs(txn.amount))}</div>
+      <div style="font-size:12px;color:#a8a29e;margin-top:4px;">${escapeHtml(txn.original || '')}</div>
     </div>
-    
+
     <div style="margin-bottom:8px;font-size:13px;font-weight:500;">What is this?</div>
-    
+
     <div style="display:flex;flex-direction:column;gap:8px;">
       <label style="display:flex;align-items:center;gap:8px;padding:10px;border:1px solid #e7e5e4;border-radius:6px;cursor:pointer;">
         <input type="radio" name="creditType" value="refund" ${currentOverride === 'refund' || (!currentOverride && !txn.creditMatch) ? 'checked' : ''}>
@@ -3393,12 +3404,12 @@ function showCreditModal(txnId, cardId) {
           <div style="font-size:12px;color:#78716c;">Don't count toward card benefits</div>
         </div>
       </label>
-      
+
       ${credits.map(cr => `
         <label style="display:flex;align-items:center;gap:8px;padding:10px;border:1px solid #e7e5e4;border-radius:6px;cursor:pointer;">
-          <input type="radio" name="creditType" value="${cr.name}" ${(currentOverride === cr.name) || (!currentOverride && txn.creditMatch === cr.name) ? 'checked' : ''}>
+          <input type="radio" name="creditType" value="${escapeHtml(cr.name)}" ${(currentOverride === cr.name) || (!currentOverride && txn.creditMatch === cr.name) ? 'checked' : ''}>
           <div>
-            <div style="font-weight:500;">${cr.name}</div>
+            <div style="font-weight:500;">${escapeHtml(cr.name)}</div>
             <div style="font-size:12px;color:#78716c;">$${cr.amount} annual credit</div>
           </div>
         </label>
@@ -3489,11 +3500,11 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
   
   content.innerHTML = `
     <div style="margin-bottom:16px;">
-      <div style="font-weight:500;">${merchant}</div>
-      <div style="font-size:13px;color:#78716c;">Card: ${card?.shortName || cardId} • Current: ${currentCategory}</div>
+      <div style="font-weight:500;">${escapeHtml(merchant)}</div>
+      <div style="font-size:13px;color:#78716c;">Card: ${escapeHtml(card?.shortName || cardId)} • Current: ${escapeHtml(currentCategory)}</div>
       ${hasRule ? '<div style="font-size:12px;color:#059669;margin-top:4px;">✓ Has saved rule</div>' : ''}
     </div>
-    
+
     <div style="margin-bottom:12px;">
       <label style="font-size:13px;font-weight:500;display:block;margin-bottom:6px;">Change category to:</label>
       <div style="display:grid;gap:6px;max-height:300px;overflow-y:auto;">
@@ -3503,18 +3514,18 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
           const rateDisplay = isVariable ? rate : `${rate}x`;
           return `
             <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid ${isSelected ? '#1c1917' : '#e7e5e4'};border-radius:6px;cursor:pointer;background:${isSelected ? '#f5f5f4' : '#fff'};">
-              <input type="radio" name="newCategory" value="${cat}" ${isSelected ? 'checked' : ''}>
-              <span style="flex:1;font-size:13px;">${cat}</span>
+              <input type="radio" name="newCategory" value="${escapeHtml(cat)}" ${isSelected ? 'checked' : ''}>
+              <span style="flex:1;font-size:13px;">${escapeHtml(cat)}</span>
               <span style="font-size:12px;font-weight:600;color:${bonus ? '#059669' : '#78716c'};">${rateDisplay}</span>
             </label>
           `;
         }).join('')}
       </div>
     </div>
-    
+
     <label style="display:flex;align-items:center;gap:8px;margin-bottom:16px;cursor:pointer;">
       <input type="checkbox" id="saveAsRule" checked>
-      <span style="font-size:13px;">Save as rule for "${merchant.substring(0, 30)}${merchant.length > 30 ? '...' : ''}"</span>
+      <span style="font-size:13px;">Save as rule for "${escapeHtml(merchant.substring(0, 30))}${merchant.length > 30 ? '...' : ''}"</span>
     </label>
     
     <div style="margin-top:20px;display:flex;gap:12px;">

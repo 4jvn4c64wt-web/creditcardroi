@@ -1154,71 +1154,6 @@ const SPECIFIC_CATEGORY_KEYWORDS = {
   'charity': ['charity', 'donation', 'nonprofit', 'red cross', 'united way']
 };
 
-// CSV/Monarch category mappings - maps bank-provided category keywords to our categories
-// This consolidates all CSV category field matching into one place
-// Order matters: more specific matches should come first
-const CSV_CATEGORY_MAPPINGS = {
-  // High confidence mappings (95%+)
-  'food': 'dining',
-  'drink': 'dining',
-  'restaurant': 'dining',
-  'groceries': 'grocery',
-  'supermarket': 'grocery',
-  'gas': 'gas',
-  'fuel': 'gas',
-  'pharmacy': 'drugstore',
-  'drug store': 'drugstore',
-  'fitness': 'fitness',
-  'gym': 'fitness',
-  'subscriptions': 'streaming',
-  'rent': 'rent',
-  'mortgage': 'rent',
-
-  // Travel - return special marker for additional processing
-  'travel': '_travel_',
-  'vacation': '_travel_',
-  'airline': '_travel_',
-  'hotel': '_travel_',
-  'lodging': '_travel_',
-
-  // Transit
-  'taxi': 'transit',
-  'ride share': 'transit',
-  'rideshare': 'transit',
-  'public transit': 'transit',
-  'transportation': 'transit',
-
-  // Medium confidence mappings (75-90%)
-  'entertainment': 'entertainment',
-  'recreation': 'entertainment',
-  'movies': 'movies',
-  'theater': 'theater',
-  'shopping': 'shopping',
-  'retail': 'shopping',
-  'merchandise': 'shopping',
-  'clothing': 'clothing',
-  'electronics': 'electronics',
-  'home improvement': 'home-improvement',
-
-  // Utilities
-  'utilities': 'utilities',
-  'electric': 'electric',
-  'water': 'water',
-  'internet': 'internet',
-  'cable': 'cable',
-  'phone': 'phone',
-  'cell phone': 'cell-phone',
-  'mobile': 'cell-phone',
-
-  // Services
-  'insurance': 'insurance',
-  'education': 'education',
-  'tuition': 'education',
-  'healthcare': 'other',
-  'medical': 'other',
-  'charity': 'charity',
-  'donation': 'charity'
-};
 
 /**
  * Find the effective category for a specific card by walking up the hierarchy.
@@ -1467,181 +1402,225 @@ function escapeHtml(str) {
 }
 
 // =============================================================================
-// CLASSIFICATION ENGINE WITH ADDITIVE CONFIDENCE SCORING
+// CLASSIFICATION ENGINE
 // =============================================================================
 
-// Additive confidence scoring for SUBCATEGORY detection
-// Key insight: Confidence measures "how sure are we about the subcategory?"
-// NOT whether it earns bonus points. A transaction confidently classified as
-// 'salon' should NOT need review, even though it displays as 'other' on most cards.
-const CONFIDENCE_SCORES = {
-  USER_RULE: 100,              // Instant confident - user explicitly set this
-  KNOWN_MERCHANT: 100,         // Instant confident - curated merchant list
-  MERCHANT_KEYWORD: 50,        // Found specific keyword in merchant name
-  CSV_CATEGORY_SPECIFIC: 40,   // CSV gave useful category (Food, Grocery, etc.)
-  CSV_AGREES_WITH_KEYWORD: 20, // CSV doesn't contradict keyword match
-  POS_PATTERN: 20,             // SQ*, TST* suggests dining
-  ADDRESS_PATTERN: 15          // Weak signal for local business
+// PRINCIPLE: Trust the CSV category for subcategory determination.
+// Confidence scoring is used when mapping subcategory → earning category.
+
+const CONFIDENCE_ADJUSTMENTS = {
+  BASE_MATCH: 50,              // Subcategory identified from CSV category
+  KEYWORD_SUPPORTS: 15,        // Merchant name keyword agrees with subcategory
+  KEYWORD_CONFLICTS: -20,      // Merchant name keyword disagrees with subcategory
+  POS_PATTERN_SUPPORTS: 15,    // TST*, SQ* etc. agrees (suggests dining)
+  POS_PATTERN_CONFLICTS: -15,  // POS pattern disagrees with subcategory
+  KNOWN_MERCHANT_OVERRIDE: 100 // Known merchant list always wins
 };
 
-// Vague CSV categories that provide NO signal but also NO conflict
-// They don't add points, but they don't contradict keyword matches either
+// Vague CSV categories that trigger discovery mode
+// These should NOT be trusted - fall back to keyword/pattern matching
 const VAGUE_CSV_CATEGORIES = [
-  'personal', 'other', 'miscellaneous', 'misc', 'family', 'business',
-  'general', 'uncategorized', 'unknown', 'transfer', 'payment'
+  'other', 'unknown', 'personal', 'miscellaneous', 'misc',
+  'general', 'uncategorized', 'family', 'business'
 ];
 
 // Transactions below this threshold are flagged for review
-// This means: "We couldn't confidently identify a specific subcategory"
-// NOT: "The subcategory doesn't earn bonus points"
 const CONFIDENCE_THRESHOLD = 50;
 
-function classifyMerchant(merchant, monarchCategory, cardId = null) {
+// Map CSV category keywords to our subcategories
+const CSV_TO_SUBCATEGORY = {
+  // High confidence mappings
+  'food': 'dining',
+  'drink': 'dining',
+  'restaurant': 'dining',
+  'dining': 'dining',
+  'groceries': 'grocery',
+  'grocery': 'grocery',
+  'supermarket': 'grocery',
+  'gas': 'gas',
+  'fuel': 'gas',
+  'pharmacy': 'drugstore',
+  'drug store': 'drugstore',
+  'fitness': 'fitness',
+  'gym': 'fitness',
+  'subscriptions': 'streaming',
+  'streaming': 'streaming',
+  'rent': 'rent',
+  'mortgage': 'rent',
+
+  // Transit
+  'taxi': 'transit',
+  'ride share': 'transit',
+  'rideshare': 'transit',
+  'transportation': 'transit',
+  'transit': 'transit',
+
+  // Travel - return special marker for additional processing
+  'travel': '_travel_',
+  'vacation': '_travel_',
+  'airline': '_travel_',
+  'hotel': '_travel_',
+  'lodging': '_travel_',
+
+  // Entertainment
+  'entertainment': 'entertainment',
+  'recreation': 'entertainment',
+  'movies': 'entertainment',
+
+  // Shopping
+  'shopping': 'shopping',
+  'retail': 'shopping',
+  'merchandise': 'shopping',
+  'clothing': 'shopping',
+
+  // Utilities
+  'utilities': 'utilities',
+  'electric': 'utilities',
+  'internet': 'utilities',
+  'phone': 'utilities'
+};
+
+function classifyMerchant(merchant, csvCategory, cardId = null) {
   const norm = normalize(merchant);
   const cacheKey = norm.substring(0, 50);
-  const normCSV = (monarchCategory || '').toLowerCase();
+  const normCSV = (csvCategory || '').toLowerCase().trim();
+
+  // Determine if CSV category is vague (triggers discovery mode)
   const isVagueCSV = !normCSV || VAGUE_CSV_CATEGORIES.some(v => normCSV.includes(v));
 
-  // DEBUG: Log classification inputs (first 10 only to avoid spam)
-  if (!window._classifyDebugCount) window._classifyDebugCount = 0;
-  if (window._classifyDebugCount < 10) {
-    console.log(`[Classify Debug] "${merchant}" | CSV: "${monarchCategory}" | isVague: ${isVagueCSV}`);
-    window._classifyDebugCount++;
-  }
-
   // ==========================================================================
-  // INSTANT CONFIDENCE CASES (100 points - no need to score further)
+  // PRIORITY 1: Skip Detection
   // ==========================================================================
-
-  // Skip Detection - filter out non-purchase transactions
   const skipPatterns = SPECIFIC_CATEGORY_KEYWORDS['skip'] || [];
   for (const pattern of skipPatterns) {
     if (norm.includes(pattern)) {
       return {
         subcategory: 'skip',
-        confidence: CONFIDENCE_SCORES.USER_RULE,
-        source: 'pattern',
+        confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE,
+        source: 'skip-pattern',
         reason: `Skipped: "${pattern}"`
       };
     }
   }
 
-  // User-defined Merchant Rules - card-specific takes precedence
+  // ==========================================================================
+  // PRIORITY 2: User-defined Merchant Rules (always 100 confidence)
+  // ==========================================================================
   const cardSpecificKey = cardId ? `${cardId}:${cacheKey}` : null;
   const ruleCategory = (cardSpecificKey && state.merchantRules[cardSpecificKey]) || state.merchantRules[cacheKey];
   if (ruleCategory) {
     return {
       subcategory: ruleCategory,
-      confidence: CONFIDENCE_SCORES.USER_RULE,
-      source: 'rule',
+      confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE,
+      source: 'user-rule',
       reason: cardSpecificKey && state.merchantRules[cardSpecificKey] ? 'User rule (this card)' : 'User rule (all cards)'
     };
   }
 
-  // Known Merchant Patterns - curated list with exact mappings
+  // ==========================================================================
+  // PRIORITY 3: Known Merchant List (always 100 confidence)
+  // ==========================================================================
   for (const [key, cat] of Object.entries(KNOWN_MERCHANTS)) {
     if (norm.includes(key)) {
       state.merchantCache[cacheKey] = cat;
       return {
         subcategory: cat,
-        confidence: CONFIDENCE_SCORES.KNOWN_MERCHANT,
-        source: 'known',
-        reason: `Matched: "${key}"`
+        confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE,
+        source: 'known-merchant',
+        reason: `Known: "${key}"`
       };
     }
   }
 
   // ==========================================================================
-  // ADDITIVE SCORING - combine multiple signals
+  // STEP 1: Determine Subcategory
+  // If CSV is specific → trust it. If vague/empty → discover via keywords.
   // ==========================================================================
-  let bestSubcategory = null;
-  let totalConfidence = 0;
+  let subcategory = null;
+  let confidence = 0;
+  let source = 'unknown';
   const reasons = [];
 
-  // Check merchant name keywords (SPECIFIC_CATEGORY_KEYWORDS)
-  const keywordMatch = classifyToSpecificCategory(norm);
-  if (keywordMatch) {
-    if (keywordMatch.category === 'skip') {
-      return {
-        subcategory: 'skip',
-        confidence: CONFIDENCE_SCORES.MERCHANT_KEYWORD,
-        source: 'keyword',
-        reason: keywordMatch.reason
-      };
-    }
-    bestSubcategory = keywordMatch.category;
-    totalConfidence += CONFIDENCE_SCORES.MERCHANT_KEYWORD;
-    reasons.push(keywordMatch.reason);
-  }
-
-  // Check CSV category (if not vague)
   if (!isVagueCSV) {
-    const csvMatch = getCSVCategoryMatch(normCSV, norm, cardId);
-    if (csvMatch) {
+    // CSV category is specific - TRUST IT for subcategory
+    const csvSubcategory = mapCSVToSubcategory(normCSV);
+
+    if (csvSubcategory) {
       // Special case: travel needs its own classification
-      if (csvMatch.subcategory === '_travel_') {
-        const travelResult = classifyTravel(norm, cardId);
-        return travelResult;
+      if (csvSubcategory === '_travel_') {
+        return classifyTravel(norm, cardId);
       }
 
-      if (!bestSubcategory) {
-        // CSV is our primary signal
-        bestSubcategory = csvMatch.subcategory;
-        totalConfidence += CONFIDENCE_SCORES.CSV_CATEGORY_SPECIFIC;
-        reasons.push(`CSV: ${monarchCategory}`);
-      } else if (csvCategoryAgrees(csvMatch.subcategory, bestSubcategory)) {
-        // CSV agrees with keyword match - boost confidence
-        totalConfidence += CONFIDENCE_SCORES.CSV_AGREES_WITH_KEYWORD;
-        reasons.push(`CSV confirms: ${monarchCategory}`);
-      }
-      // If CSV disagrees, we trust keyword match but don't add CSV points
+      subcategory = csvSubcategory;
+      confidence = CONFIDENCE_ADJUSTMENTS.BASE_MATCH;
+      source = 'csv-category';
+      reasons.push(`CSV: "${csvCategory}"`);
     }
-  } else if (bestSubcategory) {
-    // Vague CSV doesn't contradict keyword match - add agreement bonus
-    totalConfidence += CONFIDENCE_SCORES.CSV_AGREES_WITH_KEYWORD;
   }
 
-  // If we have a subcategory at this point, return it
-  if (bestSubcategory) {
-    state.merchantCache[cacheKey] = bestSubcategory;
+  // If no subcategory yet (vague CSV or CSV didn't map), try keyword discovery
+  if (!subcategory) {
+    const keywordMatch = classifyToSpecificCategory(norm);
+    if (keywordMatch && keywordMatch.category !== 'skip') {
+      subcategory = keywordMatch.category;
+      confidence = CONFIDENCE_ADJUSTMENTS.BASE_MATCH; // Keywords are trustworthy
+      source = 'keyword';
+      reasons.push(keywordMatch.reason);
+    }
+  }
+
+  // ==========================================================================
+  // STEP 2: Confidence Adjustments (keyword support/conflict)
+  // ==========================================================================
+  if (subcategory) {
+    // Check if merchant keywords support or conflict with the subcategory
+    const keywordCheck = classifyToSpecificCategory(norm);
+    if (keywordCheck && keywordCheck.category !== 'skip') {
+      if (subcategoryAgrees(keywordCheck.category, subcategory)) {
+        if (source === 'csv-category') {
+          // Keywords support CSV category
+          confidence += CONFIDENCE_ADJUSTMENTS.KEYWORD_SUPPORTS;
+          reasons.push(`Keyword confirms: "${keywordCheck.reason}"`);
+        }
+      } else if (source === 'csv-category') {
+        // Keywords conflict with CSV category - reduce confidence
+        confidence += CONFIDENCE_ADJUSTMENTS.KEYWORD_CONFLICTS;
+        reasons.push(`Keyword conflicts: "${keywordCheck.reason}"`);
+      }
+    }
+
+    // Check POS patterns (SQ*, TST*, etc. suggest dining)
+    const posResult = checkPOSPatterns(norm);
+    if (posResult.matched) {
+      if (subcategoryAgrees(posResult.suggestedCategory, subcategory)) {
+        confidence += CONFIDENCE_ADJUSTMENTS.POS_PATTERN_SUPPORTS;
+        reasons.push('POS pattern confirms');
+      } else {
+        confidence += CONFIDENCE_ADJUSTMENTS.POS_PATTERN_CONFLICTS;
+        reasons.push('POS pattern conflicts');
+      }
+    }
+
+    // Cache and return
+    state.merchantCache[cacheKey] = subcategory;
     return {
-      subcategory: bestSubcategory,
-      confidence: totalConfidence,
-      source: keywordMatch ? 'keyword' : 'csv-category',
+      subcategory,
+      confidence: Math.max(0, confidence), // Don't go negative
+      source,
       reason: reasons.join('; ')
     };
   }
 
   // ==========================================================================
-  // WEAK SIGNALS - POS patterns and address detection
+  // FALLBACK: Use POS patterns as last resort
   // ==========================================================================
-
-  // POS system patterns (SQ*, TST*, etc. suggest dining)
-  const posPatterns = ['sq ', 'tst', 'toast', 'clover', 'square '];
-  for (const pattern of posPatterns) {
-    if (norm.includes(pattern)) {
-      totalConfidence += CONFIDENCE_SCORES.POS_PATTERN;
-      bestSubcategory = 'dining';
-      reasons.push('POS pattern suggests restaurant');
-      break;
-    }
-  }
-
-  // Address patterns (weak signal for local business)
-  const addressPattern = /\d{3,5}\s+[a-z]+\s+(st|ave|blvd|rd|way|dr)/i;
-  if (addressPattern.test(merchant)) {
-    totalConfidence += CONFIDENCE_SCORES.ADDRESS_PATTERN;
-    if (!bestSubcategory) bestSubcategory = 'dining'; // Local businesses often dining
-    reasons.push('Address suggests local business');
-  }
-
-  // If we accumulated enough weak signals
-  if (bestSubcategory && totalConfidence > 0) {
+  const posResult = checkPOSPatterns(norm);
+  if (posResult.matched) {
     return {
-      subcategory: bestSubcategory,
-      confidence: totalConfidence,
-      source: 'heuristic',
-      reason: reasons.join('; ')
+      subcategory: posResult.suggestedCategory,
+      confidence: CONFIDENCE_ADJUSTMENTS.POS_PATTERN_SUPPORTS, // Low confidence
+      source: 'pos-pattern',
+      reason: posResult.reason
     };
   }
 
@@ -1657,38 +1636,56 @@ function classifyMerchant(merchant, monarchCategory, cardId = null) {
 }
 
 /**
- * Check if CSV category matches any of our mappings
+ * Map CSV category string to our subcategory
  */
-function getCSVCategoryMatch(normCSV, normalizedMerchant, cardId) {
-  for (const [keyword, subcategory] of Object.entries(CSV_CATEGORY_MAPPINGS)) {
+function mapCSVToSubcategory(normCSV) {
+  for (const [keyword, subcategory] of Object.entries(CSV_TO_SUBCATEGORY)) {
     if (normCSV.includes(keyword)) {
-      // Special handling for transit - check for Lyft specifically
-      if (subcategory === 'transit' && normalizedMerchant.includes('lyft')) {
-        return { subcategory: 'lyft' };
-      }
-      return { subcategory };
+      return subcategory;
     }
   }
   return null;
 }
 
 /**
- * Check if CSV category "agrees" with a keyword-detected subcategory
- * Agreement means they're in the same general family
+ * Check if two subcategories "agree" (same or related via hierarchy)
  */
-function csvCategoryAgrees(csvSubcategory, keywordSubcategory) {
-  if (csvSubcategory === keywordSubcategory) return true;
+function subcategoryAgrees(cat1, cat2) {
+  if (cat1 === cat2) return true;
 
-  // Check if they share a parent in the hierarchy
-  const csvParent = CATEGORY_HIERARCHY[csvSubcategory];
-  const keywordParent = CATEGORY_HIERARCHY[keywordSubcategory];
+  // Check hierarchy - same parent means agreement
+  const parent1 = CATEGORY_HIERARCHY[cat1];
+  const parent2 = CATEGORY_HIERARCHY[cat2];
 
-  // Same parent = agreement
-  if (csvParent && csvParent === keywordParent) return true;
-  // One is parent of the other = agreement
-  if (csvSubcategory === keywordParent || keywordSubcategory === csvParent) return true;
+  if (parent1 && parent1 === parent2) return true;
+  if (cat1 === parent2 || cat2 === parent1) return true;
 
   return false;
+}
+
+/**
+ * Check for POS system patterns that suggest dining
+ */
+function checkPOSPatterns(normalizedMerchant) {
+  const posPatterns = [
+    { pattern: 'sq ', category: 'dining', name: 'Square' },
+    { pattern: 'tst', category: 'dining', name: 'Toast' },
+    { pattern: 'toast', category: 'dining', name: 'Toast' },
+    { pattern: 'clover', category: 'dining', name: 'Clover' },
+    { pattern: 'square ', category: 'dining', name: 'Square' }
+  ];
+
+  for (const { pattern, category, name } of posPatterns) {
+    if (normalizedMerchant.includes(pattern)) {
+      return {
+        matched: true,
+        suggestedCategory: category,
+        reason: `${name} POS suggests ${category}`
+      };
+    }
+  }
+
+  return { matched: false };
 }
 
 // Special handling for travel classification
@@ -1697,20 +1694,20 @@ function classifyTravel(normalizedMerchant, cardId) {
 
   // Check for portal bookings (highest multiplier usually)
   if (norm.includes('chase travel') || norm.includes('cl *chase')) {
-    return { subcategory: 'chase-travel', confidence: CONFIDENCE_SCORES.KNOWN_MERCHANT, source: 'known', reason: 'Chase Travel portal' };
+    return { subcategory: 'chase-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Chase Travel portal' };
   }
   if (norm.includes('amex travel')) {
-    return { subcategory: 'amex-travel', confidence: CONFIDENCE_SCORES.KNOWN_MERCHANT, source: 'known', reason: 'Amex Travel portal' };
+    return { subcategory: 'amex-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Amex Travel portal' };
   }
   if (norm.includes('bilt travel')) {
-    return { subcategory: 'bilt-travel', confidence: CONFIDENCE_SCORES.KNOWN_MERCHANT, source: 'known', reason: 'Bilt Travel portal' };
+    return { subcategory: 'bilt-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Bilt Travel portal' };
   }
 
   // Check for OTAs (usually no bonus)
   const otas = ['expedia', 'booking.com', 'hotels.com', 'priceline', 'kayak', 'orbitz', 'travelocity'];
   for (const ota of otas) {
     if (norm.includes(ota)) {
-      return { subcategory: 'travel-ota', confidence: CONFIDENCE_SCORES.KNOWN_MERCHANT, source: 'known', reason: `OTA: ${ota}` };
+      return { subcategory: 'travel-ota', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: `OTA: ${ota}` };
     }
   }
 
@@ -1718,7 +1715,7 @@ function classifyTravel(normalizedMerchant, cardId) {
   const airlines = ['delta', 'american air', 'united air', 'southwest', 'jetblue', 'alaska air', 'spirit', 'frontier'];
   for (const airline of airlines) {
     if (norm.includes(airline)) {
-      return { subcategory: 'flights-direct', confidence: CONFIDENCE_SCORES.KNOWN_MERCHANT, source: 'known', reason: `Direct airline: ${airline}` };
+      return { subcategory: 'flights-direct', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: `Direct airline: ${airline}` };
     }
   }
 
@@ -1728,20 +1725,19 @@ function classifyTravel(normalizedMerchant, cardId) {
                   'venetian', 'bellagio', 'cosmopolitan'];
   for (const hotel of hotels) {
     if (norm.includes(hotel)) {
-      return { subcategory: 'hotels-direct', confidence: CONFIDENCE_SCORES.KNOWN_MERCHANT, source: 'known', reason: `Direct hotel: ${hotel}` };
+      return { subcategory: 'hotels-direct', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: `Direct hotel: ${hotel}` };
     }
   }
 
   // Check for Airbnb/VRBO
   if (norm.includes('airbnb') || norm.includes('vrbo')) {
-    return { subcategory: 'hotels-direct', confidence: CONFIDENCE_SCORES.MERCHANT_KEYWORD, source: 'known', reason: 'Vacation rental' };
+    return { subcategory: 'hotels-direct', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Vacation rental' };
   }
 
   // Generic travel from CSV - we know it's travel but not which specific type
-  // CSV alone gives us CSV_CATEGORY_SPECIFIC confidence
   return {
     subcategory: 'travel',
-    confidence: CONFIDENCE_SCORES.CSV_CATEGORY_SPECIFIC,
+    confidence: CONFIDENCE_ADJUSTMENTS.BASE_MATCH,
     source: 'csv-category',
     reason: 'Travel - specific type unknown'
   };
@@ -2258,11 +2254,6 @@ function showColumnMapping(csvText) {
     ? { ...detected.mapping, ...savedMapping }  // detected as base, saved as override
     : detected.mapping;
 
-  // DEBUG: Log mapping sources
-  console.log('[Column Mapping Debug] Saved mapping:', savedMapping);
-  console.log('[Column Mapping Debug] Detected mapping:', detected.mapping);
-  console.log('[Column Mapping Debug] Current mapping:', currentMapping);
-  
   // Build the preview UI
   const container = document.getElementById('csvPreview');
   
@@ -2429,31 +2420,15 @@ function applyColumnMappingAndParse() {
   const columnIndices = {};
   const headerMapping = {};
 
-  // DEBUG: Log all select elements and their values
-  console.log('[CSV Debug] ====== COLUMN MAPPING START ======');
-  console.log('[CSV Debug] Number of column selects:', selects.length);
-  console.log('[CSV Debug] Headers:', state.pendingCSVData?.headers);
-
   selects.forEach((sel, idx) => {
     const field = sel.value;
     const colIndex = parseInt(sel.dataset.colIndex);
-    const headerName = state.pendingCSVData?.headers?.[colIndex] || 'unknown';
-    console.log(`[CSV Debug] Column ${colIndex} "${headerName}": mapped to "${field || '(skip)'}" (select index ${idx})`);
     if (field) {
       columnIndices[field] = colIndex;
       headerMapping[field] = state.pendingCSVData.headers[colIndex].toLowerCase().trim();
     }
   });
 
-  // DEBUG: Log final column mapping
-  console.log('[CSV Debug] Final columnIndices:', JSON.stringify(columnIndices));
-  console.log('[CSV Debug] Has category column:', columnIndices.category !== undefined);
-  if (columnIndices.category !== undefined) {
-    console.log('[CSV Debug] Category is column index:', columnIndices.category);
-  } else {
-    console.warn('[CSV Debug] WARNING: No category column mapped! Check dropdown values.');
-  }
-  
   // Get default account if no account column is mapped
   const hasAccountColumn = columnIndices.account !== undefined;
   const defaultAccountInput = document.getElementById('defaultAccountInput');
@@ -2481,11 +2456,6 @@ function applyColumnMappingAndParse() {
     const category = columnIndices.category !== undefined ? (fields[columnIndices.category] || '') : '';
     const original = columnIndices.original !== undefined ? (fields[columnIndices.original] || '') : '';
 
-    // DEBUG: Log first 3 transactions' category extraction
-    if (transactions.length < 3) {
-      console.log(`[CSV Debug] Row ${i}: merchant="${merchant}", category="${category}", fields[${columnIndices.category}]="${fields[columnIndices.category]}"`);
-    }
-
     // Use default last4 if no account column, otherwise extract from account field
     const last4 = hasAccountColumn ? extractLast4(account) : defaultLast4;
 
@@ -2504,12 +2474,6 @@ function applyColumnMappingAndParse() {
       last4
     });
   }
-
-  // DEBUG: Log sample transactions with their categories
-  console.log('[CSV Debug] Sample transactions with monarchCategory:');
-  transactions.slice(0, 5).forEach(t => {
-    console.log(`  - "${t.merchant}" -> monarchCategory: "${t.monarchCategory}"`);
-  });
 
   // Clear pending data
   state.pendingCSVData = null;
@@ -2573,17 +2537,6 @@ function parseCSV(text) {
 async function processTransactions(transactions) {
   const classifications = {};
 
-  // DEBUG: Check if transactions have monarchCategory
-  window._classifyDebugCount = 0; // Reset counter
-  const withCategory = transactions.filter(t => t.monarchCategory && t.monarchCategory.trim());
-  console.log(`[Process Debug] Total transactions: ${transactions.length}, with monarchCategory: ${withCategory.length}`);
-  if (withCategory.length > 0) {
-    console.log('[Process Debug] Sample monarchCategories:', withCategory.slice(0, 5).map(t => `"${t.monarchCategory}"`).join(', '));
-  } else {
-    console.log('[Process Debug] WARNING: No transactions have monarchCategory!');
-    console.log('[Process Debug] Sample transaction:', transactions[0]);
-  }
-
   // Classify all transactions with rules
   for (const txn of transactions) {
     // Check for single-transaction confirmation first (takes precedence like merchant rules)
@@ -2591,7 +2544,7 @@ async function processTransactions(transactions) {
       classifications[txn.id] = {
         subcategory: state.confirmedTransactions[txn.id],
         source: 'confirmed',
-        confidence: CONFIDENCE_SCORES.USER_RULE,
+        confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE,
         reason: 'Manually confirmed'
       };
       continue;
@@ -4947,7 +4900,6 @@ async function processAfterColumnMapping() {
   // Show merge summary
   const addedCount = uniqueNew.length;
   const totalCount = state.transactions.length;
-  console.log(`Added ${addedCount} new transactions. Total: ${totalCount}`);
   
   const allLast4s = [...new Set(state.transactions.map(t => t.last4).filter(Boolean))];
   const unmapped = allLast4s.filter(l4 => !state.cardMappings[l4]);

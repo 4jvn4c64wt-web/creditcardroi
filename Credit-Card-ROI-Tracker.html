@@ -830,7 +830,8 @@ const KNOWN_MERCHANTS = {
   'cvs': 'drugstore', 'walgreens': 'drugstore', 'rite aid': 'drugstore', 'duane reade': 'drugstore',
   
   // Food delivery
-  'doordash': 'dining', 'uber eats': 'dining', 'grubhub': 'dining', 'seamless': 'dining', 'caviar': 'dining',
+  // Note: 'uber eats' and 'ubereats' must be listed here (before 'uber ') to ensure food delivery is dining
+  'doordash': 'dining', 'uber eats': 'dining', 'ubereats': 'dining', 'grubhub': 'dining', 'seamless': 'dining', 'caviar': 'dining',
   'postmates': 'dining', 'slice': 'dining',
   
   // Fast food & chains
@@ -875,7 +876,10 @@ const KNOWN_MERCHANTS = {
   'marathon gas': 'gas', 'phillips 66': 'gas', 'circle k': 'gas', 'sheetz': 'gas',
   
   // Transit & Rideshare
-  'lyft': 'lyft', 'uber ': 'transit', 'uber trip': 'transit',
+  // IMPORTANT: Uber patterns must be checked carefully - uber eats is dining, uber ride is transit
+  // 'uber eats' is listed above in Food delivery section and will be matched first
+  'lyft': 'lyft', 'uber trip': 'transit', 'ubertrip': 'transit', 'uber ride': 'transit',
+  'uber ': 'transit', // Must come after more specific uber patterns
   'mta': 'transit', 'metro': 'transit', 'bart': 'transit', 'amtrak': 'transit',
   'citi bike': 'transit', 'citibike': 'transit', 'lime scooter': 'transit', 'lime ride': 'transit',
   'bird ride': 'transit', 'revel': 'transit', 'via ': 'transit', 'nj transit': 'transit',
@@ -1150,6 +1154,72 @@ const SPECIFIC_CATEGORY_KEYWORDS = {
   'charity': ['charity', 'donation', 'nonprofit', 'red cross', 'united way']
 };
 
+// CSV/Monarch category mappings - maps bank-provided category keywords to our categories
+// This consolidates all CSV category field matching into one place
+// Order matters: more specific matches should come first
+const CSV_CATEGORY_MAPPINGS = {
+  // High confidence mappings (95%+)
+  'food': 'dining',
+  'drink': 'dining',
+  'restaurant': 'dining',
+  'groceries': 'grocery',
+  'supermarket': 'grocery',
+  'gas': 'gas',
+  'fuel': 'gas',
+  'pharmacy': 'drugstore',
+  'drug store': 'drugstore',
+  'fitness': 'fitness',
+  'gym': 'fitness',
+  'subscriptions': 'streaming',
+  'rent': 'rent',
+  'mortgage': 'rent',
+
+  // Travel - return special marker for additional processing
+  'travel': '_travel_',
+  'vacation': '_travel_',
+  'airline': '_travel_',
+  'hotel': '_travel_',
+  'lodging': '_travel_',
+
+  // Transit
+  'taxi': 'transit',
+  'ride share': 'transit',
+  'rideshare': 'transit',
+  'public transit': 'transit',
+  'transportation': 'transit',
+
+  // Medium confidence mappings (75-90%)
+  'entertainment': 'entertainment',
+  'recreation': 'entertainment',
+  'movies': 'movies',
+  'theater': 'theater',
+  'shopping': 'shopping',
+  'retail': 'shopping',
+  'merchandise': 'shopping',
+  'clothing': 'clothing',
+  'electronics': 'electronics',
+  'home improvement': 'home-improvement',
+
+  // Utilities
+  'utilities': 'utilities',
+  'electric': 'electric',
+  'water': 'water',
+  'internet': 'internet',
+  'cable': 'cable',
+  'phone': 'phone',
+  'cell phone': 'cell-phone',
+  'mobile': 'cell-phone',
+
+  // Services
+  'insurance': 'insurance',
+  'education': 'education',
+  'tuition': 'education',
+  'healthcare': 'other',
+  'medical': 'other',
+  'charity': 'charity',
+  'donation': 'charity'
+};
+
 /**
  * Find the effective category for a specific card by walking up the hierarchy.
  * If the card doesn't have a multiplier for the specific category, find the
@@ -1205,6 +1275,52 @@ function classifyToSpecificCategory(merchantName) {
       if (norm.includes(pattern)) {
         return { category, reason: `Matched: "${pattern}"` };
       }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Classify transaction based on CSV/Monarch category field.
+ * Consolidates all CSV category keyword matching into one function.
+ * @param {string} csvCategory - The category from the CSV (e.g., Monarch category)
+ * @param {string} normalizedMerchant - Normalized merchant name for Lyft/context checks
+ * @param {string} cardId - The card ID for travel classification
+ * @returns {object|null} Classification result or null if no match
+ */
+function classifyFromCSVCategory(csvCategory, normalizedMerchant, cardId) {
+  if (!csvCategory) return null;
+
+  const normCSV = csvCategory.toLowerCase();
+
+  // Check each mapping
+  for (const [keyword, category] of Object.entries(CSV_CATEGORY_MAPPINGS)) {
+    if (normCSV.includes(keyword)) {
+      // Special handling for travel - needs context analysis
+      if (category === '_travel_') {
+        return classifyTravel(normalizedMerchant, cardId);
+      }
+
+      // Special handling for transit - check for Lyft specifically
+      if (category === 'transit' && normalizedMerchant.includes('lyft')) {
+        return {
+          category: 'lyft',
+          source: 'csv-category',
+          confidence: CONFIDENCE.CERTAIN,
+          reason: 'Lyft ride'
+        };
+      }
+
+      // Determine confidence based on category type
+      const highConfidence = ['dining', 'grocery', 'gas', 'drugstore', 'fitness', 'streaming', 'rent'].includes(category);
+
+      return {
+        category: category,
+        source: 'csv-category',
+        confidence: highConfidence ? CONFIDENCE.HIGH : CONFIDENCE.MEDIUM,
+        reason: `CSV category: ${csvCategory}`
+      };
     }
   }
 
@@ -1392,10 +1508,11 @@ const CONFIDENCE_REVIEW_THRESHOLD = 80;
 function classifyMerchant(merchant, monarchCategory, cardId = null) {
   const norm = normalize(merchant);
   const cacheKey = norm.substring(0, 50);
-  const normMonarch = normalize(monarchCategory || '');
 
-  // Tier 0: Early skip detection for non-purchase transactions
-  // Check before anything else to filter out transfers, payments, income
+  // ==========================================================================
+  // Tier 0: Skip Detection
+  // Immediately filter out non-purchase transactions (transfers, payments, etc.)
+  // ==========================================================================
   const skipPatterns = SPECIFIC_CATEGORY_KEYWORDS['skip'] || [];
   for (const pattern of skipPatterns) {
     if (norm.includes(pattern)) {
@@ -1408,8 +1525,10 @@ function classifyMerchant(merchant, monarchCategory, cardId = null) {
     }
   }
 
-  // Tier 1: User-defined merchant rules (100% confidence)
-  // Check card-specific rule first, then fall back to legacy global rule
+  // ==========================================================================
+  // Tier 1: User-defined Merchant Rules (100% confidence)
+  // Card-specific rules take precedence over global rules
+  // ==========================================================================
   const cardSpecificKey = cardId ? `${cardId}:${cacheKey}` : null;
   const ruleCategory = (cardSpecificKey && state.merchantRules[cardSpecificKey]) || state.merchantRules[cacheKey];
   if (ruleCategory) {
@@ -1420,94 +1539,43 @@ function classifyMerchant(merchant, monarchCategory, cardId = null) {
       reason: cardSpecificKey && state.merchantRules[cardSpecificKey] ? 'User rule (this card)' : 'User rule (all cards)'
     };
   }
-  
-  // Tier 1: Known merchant exact match (100% confidence)
+
+  // ==========================================================================
+  // Tier 1b: Known Merchant Patterns (100% confidence)
+  // Curated list of merchants with exact category mappings
+  // Order matters: specific patterns before general ones (uber eats before uber)
+  // ==========================================================================
   for (const [key, cat] of Object.entries(KNOWN_MERCHANTS)) {
     if (norm.includes(key)) {
       state.merchantCache[cacheKey] = cat;
-      return { 
-        category: cat, 
-        source: 'known', 
+      return {
+        category: cat,
+        source: 'known',
         confidence: CONFIDENCE.CERTAIN,
         reason: `Matched: "${key}"`
       };
     }
   }
-  
-  // Tier 2: Monarch "Food & Drink" category (95% confidence for dining)
-  if (normMonarch.includes('food') || normMonarch.includes('drink') || normMonarch.includes('restaurant')) {
-    state.merchantCache[cacheKey] = 'dining';
-    return { 
-      category: 'dining', 
-      source: 'monarch', 
-      confidence: CONFIDENCE.HIGH,
-      reason: 'Monarch: Food & Drink'
-    };
-  }
-  
-  // Tier 2: Other high-confidence Monarch categories
-  const highConfidenceMonarch = {
-    'groceries': 'grocery',
-    'gas': 'gas',
-    'pharmacy': 'drugstore',
-    'fitness': 'fitness',
-    'subscriptions': 'streaming',
-    'rent': 'rent'
-  };
-  
-  for (const [key, cat] of Object.entries(highConfidenceMonarch)) {
-    if (normMonarch.includes(key)) {
-      state.merchantCache[cacheKey] = cat;
-      return { 
-        category: cat, 
-        source: 'monarch', 
-        confidence: CONFIDENCE.HIGH,
-        reason: `Monarch: ${monarchCategory}`
-      };
-    }
-  }
-  
-  // Tier 3: Travel - needs context analysis
-  if (normMonarch.includes('travel') || normMonarch.includes('vacation') || 
-      normMonarch.includes('airline') || normMonarch.includes('hotel')) {
-    const travelResult = classifyTravel(norm, cardId);
-    return travelResult;
-  }
-  
-  // Tier 2: Taxi & Ride Shares
-  if (normMonarch.includes('taxi') || normMonarch.includes('ride share')) {
-    // Check if it's Lyft specifically
-    if (norm.includes('lyft')) {
-      return { category: 'lyft', source: 'known', confidence: CONFIDENCE.CERTAIN, reason: 'Lyft ride' };
-    }
-    return { category: 'transit', source: 'monarch', confidence: CONFIDENCE.HIGH, reason: 'Ride share' };
-  }
-  
-  // Tier 2: Entertainment
-  if (normMonarch.includes('entertainment') || normMonarch.includes('recreation')) {
-    return { 
-      category: 'entertainment', 
-      source: 'monarch', 
-      confidence: CONFIDENCE.MEDIUM,
-      reason: `Monarch: ${monarchCategory}`
-    };
-  }
-  
-  // Tier 2: Shopping (lower confidence, could be many things)
-  if (normMonarch.includes('shopping')) {
-    return {
-      category: 'shopping',
-      source: 'monarch',
-      confidence: CONFIDENCE.MEDIUM,
-      reason: 'Monarch: Shopping'
-    };
+
+  // ==========================================================================
+  // Tier 2: CSV Category Keyword Matching (75-95% confidence)
+  // Uses CSV_CATEGORY_MAPPINGS to classify based on bank-provided categories
+  // ==========================================================================
+  const csvResult = classifyFromCSVCategory(monarchCategory, norm, cardId);
+  if (csvResult) {
+    state.merchantCache[cacheKey] = csvResult.category;
+    return csvResult;
   }
 
-  // Tier 3: Specific category keyword matching (hierarchical categories)
-  // This catches more granular categories that will roll up via CATEGORY_HIERARCHY
+  // ==========================================================================
+  // Tier 3: Merchant Name Keyword Heuristics (50-75% confidence)
+  // Uses SPECIFIC_CATEGORY_KEYWORDS for granular merchant name matching
+  // Plus POS patterns and address detection as fallbacks
+  // ==========================================================================
+
+  // 3a: Specific category keyword matching (hierarchical categories)
   const specificMatch = classifyToSpecificCategory(norm);
   if (specificMatch) {
-    // Skip category means this isn't a trackable transaction
     if (specificMatch.category === 'skip') {
       return {
         category: 'skip',
@@ -1525,40 +1593,38 @@ function classifyMerchant(merchant, monarchCategory, cardId = null) {
     };
   }
 
-  // Tier 4: Fallback heuristics when no Monarch category available
-  // These are weak signals used only when we have no better information
-  if (!monarchCategory || normMonarch === '' || normMonarch === 'uncategorized' || normMonarch === 'other') {
-    // Check for common receipt patterns that suggest dining
-    const diningPatterns = ['sq *', 'tst*', 'toast*', 'clover*', 'square *'];
-    for (const pattern of diningPatterns) {
-      if (norm.includes(pattern.replace('*', ''))) {
-        return {
-          category: 'dining',
-          source: 'heuristic',
-          confidence: CONFIDENCE.LOW,
-          reason: 'POS pattern suggests restaurant'
-        };
-      }
-    }
-    
-    // Check for location-based patterns (likely local business = often dining)
-    const locationPatterns = [/\d{3,5}\s+[a-z]+\s+(st|ave|blvd|rd|way|dr)/i];
-    for (const pattern of locationPatterns) {
-      if (pattern.test(merchant)) {
-        return {
-          category: 'dining',
-          source: 'heuristic',
-          confidence: CONFIDENCE.LOW,
-          reason: 'Address in name suggests local business'
-        };
-      }
+  // 3b: POS system patterns (weak signals for dining)
+  const diningPatterns = ['sq *', 'tst*', 'toast*', 'clover*', 'square *'];
+  for (const pattern of diningPatterns) {
+    if (norm.includes(pattern.replace('*', ''))) {
+      return {
+        category: 'dining',
+        source: 'heuristic',
+        confidence: CONFIDENCE.LOW,
+        reason: 'POS pattern suggests restaurant'
+      };
     }
   }
-  
-  // Unknown - will need manual classification
-  return { 
-    category: null, 
-    source: 'unknown', 
+
+  // 3c: Address patterns (weak signal for local business, often dining)
+  const locationPatterns = [/\d{3,5}\s+[a-z]+\s+(st|ave|blvd|rd|way|dr)/i];
+  for (const pattern of locationPatterns) {
+    if (pattern.test(merchant)) {
+      return {
+        category: 'dining',
+        source: 'heuristic',
+        confidence: CONFIDENCE.LOW,
+        reason: 'Address in name suggests local business'
+      };
+    }
+  }
+
+  // ==========================================================================
+  // Tier 4: Unknown - will need manual classification
+  // ==========================================================================
+  return {
+    category: null,
+    source: 'unknown',
     confidence: CONFIDENCE.UNKNOWN,
     reason: 'No match found'
   };

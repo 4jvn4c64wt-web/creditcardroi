@@ -1427,16 +1427,29 @@ function escapeHtml(str) {
 // CLASSIFICATION ENGINE
 // =============================================================================
 
-// PRINCIPLE: Trust the CSV category for subcategory determination.
-// Confidence scoring is used when mapping subcategory → earning category.
+// PRINCIPLE: Confidence scoring is additive - multiple agreeing signals combine.
+// CSV category is the primary signal, but heuristics stack on top when they agree.
 
 const CONFIDENCE_ADJUSTMENTS = {
-  BASE_MATCH: 50,              // Subcategory identified from CSV category
-  KEYWORD_SUPPORTS: 15,        // Merchant name keyword agrees with subcategory
-  KEYWORD_CONFLICTS: -20,      // Merchant name keyword disagrees with subcategory
-  POS_PATTERN_SUPPORTS: 15,    // TST*, SQ* etc. agrees (suggests dining)
-  POS_PATTERN_CONFLICTS: -15,  // POS pattern disagrees with subcategory
-  KNOWN_MERCHANT_OVERRIDE: 100 // Known merchant list always wins
+  // Base scores
+  CSV_BASE: 50,                    // CSV category maps to a specific subcategory
+  KNOWN_MERCHANT_OVERRIDE: 100,    // Known merchant list always wins
+
+  // Heuristic support (when CSV provides base)
+  KEYWORD_SUPPORTS: 10,            // Merchant name keyword agrees with CSV subcategory
+  POS_PATTERN_SUPPORTS: 15,        // TST*, SQ* etc. agrees with subcategory
+  ADDRESS_SUPPORTS: 10,            // Address-like pattern agrees with subcategory
+
+  // Heuristic discovery (when CSV is vague, heuristics are weighted higher)
+  KEYWORD_DISCOVERY: 25,           // Keyword found when CSV is vague
+  POS_PATTERN_DISCOVERY: 25,       // POS pattern found when CSV is vague
+  ADDRESS_DISCOVERY: 25,           // Address pattern found when CSV is vague
+
+  // Bonuses and penalties
+  MULTIPLE_HEURISTICS_BONUS: 10,   // 2+ heuristics agree on same category
+  KEYWORD_CONFLICTS: -15,          // Merchant name keyword disagrees with subcategory
+  POS_PATTERN_CONFLICTS: -10,      // POS pattern disagrees with subcategory
+  ADDRESS_CONFLICTS: -10           // Address pattern disagrees with subcategory
 };
 
 // Vague CSV categories that trigger discovery mode
@@ -1507,7 +1520,7 @@ function classifyMerchant(merchant, csvCategory, cardId = null) {
   const cacheKey = norm.substring(0, 50);
   const normCSV = (csvCategory || '').toLowerCase().trim();
 
-  // Determine if CSV category is vague (triggers discovery mode)
+  // Determine if CSV category is vague (triggers discovery mode with higher heuristic weights)
   const isVagueCSV = !normCSV || VAGUE_CSV_CATEGORIES.some(v => normCSV.includes(v));
 
   // ==========================================================================
@@ -1555,71 +1568,132 @@ function classifyMerchant(merchant, csvCategory, cardId = null) {
   }
 
   // ==========================================================================
-  // STEP 1: Determine Subcategory
-  // If CSV is specific → trust it. If vague/empty → discover via keywords.
+  // STEP 1: Gather ALL signals (CSV category + heuristics)
+  // ==========================================================================
+  let csvSubcategory = null;
+  let keywordResult = null;
+  let posResult = null;
+  let addressResult = null;
+
+  // Get CSV signal
+  if (!isVagueCSV) {
+    csvSubcategory = mapCSVToSubcategory(normCSV);
+    // Special case: travel needs its own classification
+    if (csvSubcategory === '_travel_') {
+      return classifyTravel(norm, cardId);
+    }
+  }
+
+  // Get keyword signal
+  keywordResult = classifyToSpecificCategory(norm);
+  if (keywordResult && keywordResult.category === 'skip') {
+    keywordResult = null;
+  }
+
+  // Get POS pattern signal
+  posResult = checkPOSPatterns(norm);
+
+  // Get address pattern signal
+  addressResult = checkAddressPatterns(norm);
+
+  // ==========================================================================
+  // STEP 2: Determine primary subcategory
+  // CSV is authoritative if specific; otherwise use heuristic consensus
   // ==========================================================================
   let subcategory = null;
   let confidence = 0;
   let source = 'unknown';
   const reasons = [];
 
-  if (!isVagueCSV) {
-    // CSV category is specific - TRUST IT for subcategory
-    const csvSubcategory = mapCSVToSubcategory(normCSV);
-
-    if (csvSubcategory) {
-      // Special case: travel needs its own classification
-      if (csvSubcategory === '_travel_') {
-        return classifyTravel(norm, cardId);
-      }
-
-      subcategory = csvSubcategory;
-      confidence = CONFIDENCE_ADJUSTMENTS.BASE_MATCH;
-      source = 'csv-category';
-      reasons.push(`CSV: "${csvCategory}"`);
+  if (csvSubcategory) {
+    // CSV provides the authoritative subcategory
+    subcategory = csvSubcategory;
+    confidence = CONFIDENCE_ADJUSTMENTS.CSV_BASE;
+    source = 'csv-category';
+    reasons.push(`CSV: "${csvCategory}"`);
+  } else {
+    // Discovery mode: determine subcategory from heuristic consensus
+    // Count votes for each category from heuristics
+    const votes = {};
+    if (keywordResult) {
+      votes[keywordResult.category] = (votes[keywordResult.category] || 0) + 1;
     }
-  }
+    if (posResult.matched) {
+      votes[posResult.suggestedCategory] = (votes[posResult.suggestedCategory] || 0) + 1;
+    }
+    if (addressResult.matched) {
+      votes[addressResult.suggestedCategory] = (votes[addressResult.suggestedCategory] || 0) + 1;
+    }
 
-  // If no subcategory yet (vague CSV or CSV didn't map), try keyword discovery
-  if (!subcategory) {
-    const keywordMatch = classifyToSpecificCategory(norm);
-    if (keywordMatch && keywordMatch.category !== 'skip') {
-      subcategory = keywordMatch.category;
-      confidence = CONFIDENCE_ADJUSTMENTS.BASE_MATCH;
-      source = 'keyword';
-      reasons.push(keywordMatch.reason);
+    // Find the category with most votes
+    let maxVotes = 0;
+    let winningCategory = null;
+    for (const [cat, count] of Object.entries(votes)) {
+      if (count > maxVotes) {
+        maxVotes = count;
+        winningCategory = cat;
+      }
+    }
+
+    if (winningCategory) {
+      subcategory = winningCategory;
+      source = 'heuristics';
     }
   }
 
   // ==========================================================================
-  // STEP 2: Confidence Adjustments (keyword support/conflict)
+  // STEP 3: Apply additive confidence scoring from heuristics
   // ==========================================================================
   if (subcategory) {
-    // Check if merchant keywords support or conflict with the subcategory
-    const keywordCheck = classifyToSpecificCategory(norm);
-    if (keywordCheck && keywordCheck.category !== 'skip') {
-      const agrees = subcategoryAgrees(keywordCheck.category, subcategory);
+    let heuristicsAgreeing = 0;
+
+    // Check keyword heuristic
+    if (keywordResult) {
+      const agrees = subcategoryAgrees(keywordResult.category, subcategory);
       if (agrees) {
-        if (source === 'csv-category') {
-          confidence += CONFIDENCE_ADJUSTMENTS.KEYWORD_SUPPORTS;
-          reasons.push(`Keyword confirms: "${keywordCheck.reason}"`);
-        }
-      } else if (source === 'csv-category') {
+        const points = isVagueCSV ? CONFIDENCE_ADJUSTMENTS.KEYWORD_DISCOVERY : CONFIDENCE_ADJUSTMENTS.KEYWORD_SUPPORTS;
+        confidence += points;
+        heuristicsAgreeing++;
+        reasons.push(`Keyword "${keywordResult.reason}" (+${points})`);
+      } else if (!isVagueCSV) {
+        // Only penalize conflicts when CSV provided the base
         confidence += CONFIDENCE_ADJUSTMENTS.KEYWORD_CONFLICTS;
-        reasons.push(`Keyword conflicts: "${keywordCheck.reason}"`);
+        reasons.push(`Keyword conflicts: "${keywordResult.reason}" (${CONFIDENCE_ADJUSTMENTS.KEYWORD_CONFLICTS})`);
       }
     }
 
-    // Check POS patterns (SQ*, TST*, etc. suggest dining)
-    const posResult = checkPOSPatterns(norm);
+    // Check POS pattern heuristic
     if (posResult.matched) {
-      if (subcategoryAgrees(posResult.suggestedCategory, subcategory)) {
-        confidence += CONFIDENCE_ADJUSTMENTS.POS_PATTERN_SUPPORTS;
-        reasons.push('POS pattern confirms');
-      } else {
+      const agrees = subcategoryAgrees(posResult.suggestedCategory, subcategory);
+      if (agrees) {
+        const points = isVagueCSV ? CONFIDENCE_ADJUSTMENTS.POS_PATTERN_DISCOVERY : CONFIDENCE_ADJUSTMENTS.POS_PATTERN_SUPPORTS;
+        confidence += points;
+        heuristicsAgreeing++;
+        reasons.push(`POS pattern (+${points})`);
+      } else if (!isVagueCSV) {
         confidence += CONFIDENCE_ADJUSTMENTS.POS_PATTERN_CONFLICTS;
-        reasons.push('POS pattern conflicts');
+        reasons.push(`POS pattern conflicts (${CONFIDENCE_ADJUSTMENTS.POS_PATTERN_CONFLICTS})`);
       }
+    }
+
+    // Check address pattern heuristic
+    if (addressResult.matched) {
+      const agrees = subcategoryAgrees(addressResult.suggestedCategory, subcategory);
+      if (agrees) {
+        const points = isVagueCSV ? CONFIDENCE_ADJUSTMENTS.ADDRESS_DISCOVERY : CONFIDENCE_ADJUSTMENTS.ADDRESS_SUPPORTS;
+        confidence += points;
+        heuristicsAgreeing++;
+        reasons.push(`Address pattern (+${points})`);
+      } else if (!isVagueCSV) {
+        confidence += CONFIDENCE_ADJUSTMENTS.ADDRESS_CONFLICTS;
+        reasons.push(`Address conflicts (${CONFIDENCE_ADJUSTMENTS.ADDRESS_CONFLICTS})`);
+      }
+    }
+
+    // Multiple heuristics bonus (2+ agreeing heuristics)
+    if (heuristicsAgreeing >= 2) {
+      confidence += CONFIDENCE_ADJUSTMENTS.MULTIPLE_HEURISTICS_BONUS;
+      reasons.push(`Multiple signals bonus (+${CONFIDENCE_ADJUSTMENTS.MULTIPLE_HEURISTICS_BONUS})`);
     }
 
     // Cache and return
@@ -1633,20 +1707,7 @@ function classifyMerchant(merchant, csvCategory, cardId = null) {
   }
 
   // ==========================================================================
-  // FALLBACK: Use POS patterns as last resort
-  // ==========================================================================
-  const posResult = checkPOSPatterns(norm);
-  if (posResult.matched) {
-    return {
-      subcategory: posResult.suggestedCategory,
-      confidence: CONFIDENCE_ADJUSTMENTS.POS_PATTERN_SUPPORTS,
-      source: 'pos-pattern',
-      reason: posResult.reason
-    };
-  }
-
-  // ==========================================================================
-  // UNKNOWN - needs manual classification
+  // UNKNOWN - no signals found, needs manual classification
   // ==========================================================================
   return {
     subcategory: null,
@@ -1709,6 +1770,30 @@ function checkPOSPatterns(normalizedMerchant) {
   return { matched: false };
 }
 
+/**
+ * Check for address-like patterns that suggest physical location categories
+ * Examples: "123 MAIN ST", "456 ELM AVE", street numbers followed by street names
+ */
+function checkAddressPatterns(normalizedMerchant) {
+  // Common address patterns - street number followed by street name indicators
+  const addressIndicators = [
+    { pattern: /\d+\s+(main|elm|oak|park|broadway|first|second|third|market|church|water)\s*(st|ave|rd|blvd|dr|ln|way|ct)?/i, category: 'dining', reason: 'Street address suggests local business' },
+    { pattern: /\d+\s+\w+\s+(st|street|ave|avenue|rd|road|blvd|boulevard|dr|drive|ln|lane|way|ct|court)\b/i, category: 'dining', reason: 'Street address pattern' }
+  ];
+
+  for (const { pattern, category, reason } of addressIndicators) {
+    if (pattern.test(normalizedMerchant)) {
+      return {
+        matched: true,
+        suggestedCategory: category,
+        reason
+      };
+    }
+  }
+
+  return { matched: false };
+}
+
 // Special handling for travel classification
 function classifyTravel(normalizedMerchant, cardId) {
   const norm = normalizedMerchant;
@@ -1759,7 +1844,7 @@ function classifyTravel(normalizedMerchant, cardId) {
   // Generic travel from CSV - we know it's travel but not which specific type
   return {
     subcategory: 'travel',
-    confidence: CONFIDENCE_ADJUSTMENTS.BASE_MATCH,
+    confidence: CONFIDENCE_ADJUSTMENTS.CSV_BASE,
     source: 'csv-category',
     reason: 'Travel - specific type unknown'
   };

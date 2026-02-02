@@ -903,7 +903,8 @@ const KNOWN_MERCHANTS = {
   'kayak': 'travel-ota', 'orbitz': 'travel-ota', 'travelocity': 'travel-ota', 'hotwire': 'travel-ota',
   
   // Travel portals - expanded patterns to catch more Chase Travel variations
-  'chase travel': 'chase-travel', 'cl *chase travel': 'chase-travel', 'cl *chase': 'chase-travel',
+  // Note: CL* format has asterisk AFTER "CL", e.g., "CL* Chase Travel"
+  'chase travel': 'chase-travel', 'cl* chase': 'chase-travel', 'cl*chase': 'chase-travel',
   'chasetravel': 'chase-travel', 'chase.com/travel': 'chase-travel', 'chasepay': 'chase-travel',
   'cardmember serv': 'chase-travel', 'cardmember ser': 'chase-travel',
   'amex travel': 'amex-travel', 'bilt travel': 'bilt-travel',
@@ -1803,8 +1804,8 @@ function classifyTravel(normalizedMerchant, cardId) {
   const norm = normalizedMerchant;
 
   // Check for portal bookings (highest multiplier usually)
-  // Expanded Chase Travel patterns to catch variations in statement descriptions
-  const chasePatterns = ['chase travel', 'chasetravel', 'cl *chase', 'chasepay', 'chase.com/travel', 'cardmember serv', 'cardmember ser'];
+  // Expanded Chase Travel patterns - note CL* format has asterisk AFTER "CL"
+  const chasePatterns = ['chase travel', 'chasetravel', 'cl* chase', 'cl*chase', 'chasepay', 'chase.com/travel', 'cardmember serv', 'cardmember ser'];
   for (const pattern of chasePatterns) {
     if (norm.includes(pattern)) {
       return { subcategory: 'chase-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Chase Travel portal' };

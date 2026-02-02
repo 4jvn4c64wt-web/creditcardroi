@@ -1502,6 +1502,13 @@ function classifyMerchant(merchant, monarchCategory, cardId = null) {
   const normCSV = (monarchCategory || '').toLowerCase();
   const isVagueCSV = !normCSV || VAGUE_CSV_CATEGORIES.some(v => normCSV.includes(v));
 
+  // DEBUG: Log classification inputs (first 10 only to avoid spam)
+  if (!window._classifyDebugCount) window._classifyDebugCount = 0;
+  if (window._classifyDebugCount < 10) {
+    console.log(`[Classify Debug] "${merchant}" | CSV: "${monarchCategory}" | isVague: ${isVagueCSV}`);
+    window._classifyDebugCount++;
+  }
+
   // ==========================================================================
   // INSTANT CONFIDENCE CASES (100 points - no need to score further)
   // ==========================================================================
@@ -2240,12 +2247,21 @@ function showColumnMapping(csvText) {
   // Check if we have a saved mapping for this CSV shape
   const shapeKey = getCSVShapeKey(headers);
   const savedMapping = state.columnMappings[shapeKey];
-  
+
   // Auto-detect format
   const detected = detectCSVFormat(headers);
-  
-  // Use saved mapping if available, otherwise use detected
-  const currentMapping = savedMapping || detected.mapping;
+
+  // Use saved mapping if available, but MERGE with detected mapping
+  // This ensures that if the saved mapping is missing optional fields (like category),
+  // they get filled in from the detected mapping
+  const currentMapping = savedMapping
+    ? { ...detected.mapping, ...savedMapping }  // detected as base, saved as override
+    : detected.mapping;
+
+  // DEBUG: Log mapping sources
+  console.log('[Column Mapping Debug] Saved mapping:', savedMapping);
+  console.log('[Column Mapping Debug] Detected mapping:', detected.mapping);
+  console.log('[Column Mapping Debug] Current mapping:', currentMapping);
   
   // Build the preview UI
   const container = document.getElementById('csvPreview');
@@ -2412,7 +2428,7 @@ function applyColumnMappingAndParse() {
   const selects = document.querySelectorAll('.column-mapping-select');
   const columnIndices = {};
   const headerMapping = {};
-  
+
   selects.forEach(sel => {
     const field = sel.value;
     const colIndex = parseInt(sel.dataset.colIndex);
@@ -2421,6 +2437,10 @@ function applyColumnMappingAndParse() {
       headerMapping[field] = state.pendingCSVData.headers[colIndex].toLowerCase().trim();
     }
   });
+
+  // DEBUG: Log column mapping
+  console.log('[CSV Debug] Column indices:', columnIndices);
+  console.log('[CSV Debug] Has category column:', columnIndices.category !== undefined);
   
   // Get default account if no account column is mapped
   const hasAccountColumn = columnIndices.account !== undefined;
@@ -2467,10 +2487,16 @@ function applyColumnMappingAndParse() {
       last4
     });
   }
-  
+
+  // DEBUG: Log sample transactions with their categories
+  console.log('[CSV Debug] Sample transactions with monarchCategory:');
+  transactions.slice(0, 5).forEach(t => {
+    console.log(`  - "${t.merchant}" -> monarchCategory: "${t.monarchCategory}"`);
+  });
+
   // Clear pending data
   state.pendingCSVData = null;
-  
+
   return transactions;
 }
 
@@ -2529,7 +2555,18 @@ function parseCSV(text) {
 // =============================================================================
 async function processTransactions(transactions) {
   const classifications = {};
-  
+
+  // DEBUG: Check if transactions have monarchCategory
+  window._classifyDebugCount = 0; // Reset counter
+  const withCategory = transactions.filter(t => t.monarchCategory && t.monarchCategory.trim());
+  console.log(`[Process Debug] Total transactions: ${transactions.length}, with monarchCategory: ${withCategory.length}`);
+  if (withCategory.length > 0) {
+    console.log('[Process Debug] Sample monarchCategories:', withCategory.slice(0, 5).map(t => `"${t.monarchCategory}"`).join(', '));
+  } else {
+    console.log('[Process Debug] WARNING: No transactions have monarchCategory!');
+    console.log('[Process Debug] Sample transaction:', transactions[0]);
+  }
+
   // Classify all transactions with rules
   for (const txn of transactions) {
     // Check for single-transaction confirmation first (takes precedence like merchant rules)

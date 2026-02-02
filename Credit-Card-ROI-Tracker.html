@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:;">
   <title>Credit Card Value Tracker</title>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
@@ -401,6 +402,234 @@
 
 <script>
 // =============================================================================
+// UTILITY FUNCTIONS (Commercial-Grade Infrastructure)
+// =============================================================================
+
+/**
+ * Safely parse JSON with error handling and fallback
+ * Prevents crashes from corrupted localStorage data
+ * @param {string} jsonString - The JSON string to parse
+ * @param {*} fallback - Fallback value if parsing fails (default: null)
+ * @returns {*} Parsed value or fallback
+ */
+function safeJSONParse(jsonString, fallback = null) {
+  if (jsonString == null || jsonString === '') {
+    return fallback;
+  }
+  try {
+    const parsed = JSON.parse(jsonString);
+    return parsed != null ? parsed : fallback;
+  } catch (e) {
+    console.warn('JSON parse error:', e.message, '- using fallback');
+    return fallback;
+  }
+}
+
+/**
+ * Safely store data in localStorage with quota handling
+ * @param {string} key - Storage key
+ * @param {*} value - Value to store (will be JSON stringified)
+ * @returns {boolean} True if successful, false if quota exceeded
+ */
+function safeLocalStorageSet(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch (e) {
+    if (e.name === 'QuotaExceededError' || e.code === 22) {
+      console.error('localStorage quota exceeded for key:', key);
+      // Try to alert user on first quota error
+      if (!window._quotaWarningShown) {
+        window._quotaWarningShown = true;
+        alert('Storage limit reached. Some data may not be saved. Consider exporting your data and clearing old transactions.');
+      }
+    } else {
+      console.error('localStorage error:', e);
+    }
+    return false;
+  }
+}
+
+/**
+ * Safely retrieve and parse data from localStorage
+ * @param {string} key - Storage key
+ * @param {*} fallback - Fallback value if not found or parse fails
+ * @returns {*} Parsed value or fallback
+ */
+function safeLocalStorageGet(key, fallback = null) {
+  try {
+    const item = localStorage.getItem(key);
+    return safeJSONParse(item, fallback);
+  } catch (e) {
+    console.warn('localStorage read error for key:', key, e);
+    return fallback;
+  }
+}
+
+/**
+ * Unified date parsing utility - handles multiple formats consistently
+ * Supported formats: YYYY-MM-DD, MM/DD/YYYY, MM/DD/YY, M/D/YYYY, M/D/YY
+ * @param {string} dateStr - Date string in various formats
+ * @returns {{year: number, month: number, day: number, date: Date}|null} Parsed date components or null
+ */
+function parseDateString(dateStr) {
+  if (!dateStr || typeof dateStr !== 'string') {
+    return null;
+  }
+
+  const trimmed = dateStr.trim();
+  let year, month, day;
+
+  // ISO format: YYYY-MM-DD
+  if (trimmed.includes('-') && trimmed.indexOf('-') === 4) {
+    const parts = trimmed.split('-');
+    if (parts.length >= 3) {
+      year = parseInt(parts[0], 10);
+      month = parseInt(parts[1], 10);
+      day = parseInt(parts[2], 10);
+    }
+  }
+  // US format: MM/DD/YYYY or MM/DD/YY or M/D/YYYY or M/D/YY
+  else if (trimmed.includes('/')) {
+    const parts = trimmed.split('/');
+    if (parts.length >= 3) {
+      month = parseInt(parts[0], 10);
+      day = parseInt(parts[1], 10);
+      const yearPart = parts[2];
+      // Handle 2-digit years (assume 2000s)
+      year = parseInt(yearPart, 10);
+      if (yearPart.length === 2) {
+        year = 2000 + year;
+      }
+    }
+  }
+
+  // Validate parsed values
+  if (!year || !month || !day || isNaN(year) || isNaN(month) || isNaN(day)) {
+    // Fallback: try native Date parsing
+    const fallbackDate = new Date(trimmed);
+    if (!isNaN(fallbackDate.getTime())) {
+      return {
+        year: fallbackDate.getFullYear(),
+        month: fallbackDate.getMonth() + 1,
+        day: fallbackDate.getDate(),
+        date: fallbackDate
+      };
+    }
+    return null;
+  }
+
+  return {
+    year,
+    month,
+    day,
+    date: new Date(year, month - 1, day)
+  };
+}
+
+/**
+ * Get year from date string using unified parsing
+ * @param {string} dateStr - Date string
+ * @returns {number} Year, or current year if parsing fails
+ */
+function getYearFromDateString(dateStr) {
+  const parsed = parseDateString(dateStr);
+  return parsed ? parsed.year : new Date().getFullYear();
+}
+
+/**
+ * Get quarter (Q1-Q4) from date string
+ * @param {string} dateStr - Date string
+ * @returns {string} Quarter string (Q1, Q2, Q3, or Q4)
+ */
+function getQuarterFromDateString(dateStr) {
+  const parsed = parseDateString(dateStr);
+  if (!parsed) {
+    const now = new Date();
+    return `Q${Math.ceil((now.getMonth() + 1) / 3)}`;
+  }
+  return `Q${Math.ceil(parsed.month / 3)}`;
+}
+
+/**
+ * Generate content-based transaction ID for deduplication
+ * Uses content-based hashing for cross-upload deduplication
+ * @param {string} date - Transaction date
+ * @param {string} merchant - Merchant name
+ * @param {number} amount - Transaction amount
+ * @param {string} last4 - Card last 4 digits
+ * @returns {string} Content-based transaction ID (base form)
+ */
+function generateBaseTransactionId(date, merchant, amount, last4) {
+  return `${date}-${(merchant || '').substring(0, 30)}-${Math.abs(amount || 0).toFixed(2)}-${last4 || 'XXXX'}`.replace(/[^a-zA-Z0-9.-]/g, '_');
+}
+
+/**
+ * Generate unique transaction ID with collision handling
+ * Appends sequence number if base ID already exists in provided set
+ * Preserves deduplication behavior while handling same-batch duplicates
+ * @param {string} date - Transaction date
+ * @param {string} merchant - Merchant name
+ * @param {number} amount - Transaction amount
+ * @param {string} last4 - Card last 4 digits
+ * @param {Set<string>} existingIds - Set of already-used IDs in current batch
+ * @returns {string} Unique transaction ID
+ */
+function generateTransactionId(date, merchant, amount, last4, existingIds = new Set()) {
+  const baseId = generateBaseTransactionId(date, merchant, amount, last4);
+
+  // If no collision, use base ID (preserves deduplication)
+  if (!existingIds.has(baseId)) {
+    return baseId;
+  }
+
+  // Collision detected - append sequence number for truly duplicate transactions
+  // This handles legitimate duplicates like two $5 Starbucks purchases on the same day
+  let seq = 2;
+  let uniqueId = `${baseId}-${seq}`;
+  while (existingIds.has(uniqueId)) {
+    seq++;
+    uniqueId = `${baseId}-${seq}`;
+  }
+  return uniqueId;
+}
+
+/**
+ * Debounce function to limit rapid-fire events
+ * @param {Function} func - Function to debounce
+ * @param {number} wait - Milliseconds to wait
+ * @returns {Function} Debounced function
+ */
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
+/**
+ * Throttle function to limit execution frequency
+ * @param {Function} func - Function to throttle
+ * @param {number} limit - Minimum milliseconds between calls
+ * @returns {Function} Throttled function
+ */
+function throttle(func, limit) {
+  let inThrottle;
+  return function executedFunction(...args) {
+    if (!inThrottle) {
+      func(...args);
+      inThrottle = true;
+      setTimeout(() => inThrottle = false, limit);
+    }
+  };
+}
+
+// =============================================================================
 // CARD DEFINITIONS (Single Source of Truth)
 // =============================================================================
 const SKIP_ACCOUNTS = ['checking', 'savings', 'sofi', 'bank', 'venmo'];
@@ -542,6 +771,7 @@ const CARDS = {
     shortName: 'Sapphire Reserve',
     annualFee: 795,
     pointValue: 0.017,
+    // CSR only has bonuses for specific travel categories - no generic 'travel' bonus
     multipliers: { 'chase-travel': 8, 'flights-direct': 4, 'hotels-direct': 4, 'dining': 3, 'lyft': 5 },
     baseRate: 1,
     credits: [
@@ -601,7 +831,8 @@ const KNOWN_MERCHANTS = {
   'cvs': 'drugstore', 'walgreens': 'drugstore', 'rite aid': 'drugstore', 'duane reade': 'drugstore',
   
   // Food delivery
-  'doordash': 'dining', 'uber eats': 'dining', 'grubhub': 'dining', 'seamless': 'dining', 'caviar': 'dining',
+  // Note: 'uber eats' and 'ubereats' must be listed here (before 'uber ') to ensure food delivery is dining
+  'doordash': 'dining', 'uber eats': 'dining', 'ubereats': 'dining', 'grubhub': 'dining', 'seamless': 'dining', 'caviar': 'dining',
   'postmates': 'dining', 'slice': 'dining',
   
   // Fast food & chains
@@ -646,7 +877,10 @@ const KNOWN_MERCHANTS = {
   'marathon gas': 'gas', 'phillips 66': 'gas', 'circle k': 'gas', 'sheetz': 'gas',
   
   // Transit & Rideshare
-  'lyft': 'lyft', 'uber ': 'transit', 'uber trip': 'transit',
+  // IMPORTANT: Uber patterns must be checked carefully - uber eats is dining, uber ride is transit
+  // 'uber eats' is listed above in Food delivery section and will be matched first
+  'lyft': 'lyft', 'uber trip': 'transit', 'ubertrip': 'transit', 'uber ride': 'transit',
+  'uber*': 'transit', 'uber': 'transit', // 'uber' must come after 'uber eats' in the iteration
   'mta': 'transit', 'metro': 'transit', 'bart': 'transit', 'amtrak': 'transit',
   'citi bike': 'transit', 'citibike': 'transit', 'lime scooter': 'transit', 'lime ride': 'transit',
   'bird ride': 'transit', 'revel': 'transit', 'via ': 'transit', 'nj transit': 'transit',
@@ -668,9 +902,17 @@ const KNOWN_MERCHANTS = {
   'expedia': 'travel-ota', 'booking.com': 'travel-ota', 'hotels.com': 'travel-ota', 'priceline': 'travel-ota',
   'kayak': 'travel-ota', 'orbitz': 'travel-ota', 'travelocity': 'travel-ota', 'hotwire': 'travel-ota',
   
-  // Travel portals
-  'chase travel': 'chase-travel', 'cl *chase travel': 'chase-travel',
-  'amex travel': 'amex-travel', 'bilt travel': 'bilt-travel',
+  // Travel portals - expanded patterns to catch more Chase Travel variations
+  // Note: CL* format has asterisk AFTER "CL", e.g., "CL* Chase Travel"
+  'chase travel': 'chase-travel', 'cl* chase': 'chase-travel', 'cl*chase': 'chase-travel',
+  'chasetravel': 'chase-travel', 'chase.com/travel': 'chase-travel', 'chasepay': 'chase-travel',
+  'cardmember serv': 'chase-travel', 'cardmember ser': 'chase-travel',
+  // Amex Travel portal - expanded patterns similar to Chase
+'amex travel': 'amex-travel', 'amextravel': 'amex-travel', 'american express travel': 'amex-travel',
+'amex.com/travel': 'amex-travel', 'aexp travel': 'amex-travel', 'aet*': 'amex-travel',
+'amex trv': 'amex-travel', 'americanexpress.com/travel': 'amex-travel',
+// Bilt Travel portal
+'bilt travel': 'bilt-travel', 'bilttravel': 'bilt-travel', 'bilt.com/travel': 'bilt-travel',
   
   // Groceries - supermarkets (qualify for Amex Gold 4x)
   'trader joe': 'grocery', 'safeway': 'grocery', 'kroger': 'grocery', 'publix': 'grocery',
@@ -685,7 +927,7 @@ const KNOWN_MERCHANTS = {
   'costco': 'wholesale', 'sams club': 'wholesale', "sam's club": 'wholesale', 'bjs': 'wholesale',
   'target': 'retail', 'walmart': 'retail',
   
-  // Streaming
+  // Streaming & Subscriptions
   'netflix': 'streaming', 'spotify': 'streaming', 'disney+': 'streaming', 'hulu': 'streaming',
   'hbo': 'streaming', 'peacock': 'streaming', 'paramount': 'streaming', 'apple tv': 'streaming',
   'youtube premium': 'streaming', 'amazon prime video': 'streaming', 'max ': 'streaming',
@@ -693,6 +935,14 @@ const KNOWN_MERCHANTS = {
   'apple one': 'streaming', 'espn+': 'streaming', 'discovery+': 'streaming', 'sirius': 'streaming',
   'crunchyroll': 'streaming', 'fubo': 'streaming', 'sling tv': 'streaming', 'youtube tv': 'streaming',
   'xfinity stream': 'streaming', 'spectrum': 'streaming', 'optimum': 'streaming',
+  'headspace': 'streaming', 'calm': 'streaming', 'duolingo': 'streaming', 'masterclass': 'streaming',
+  'skillshare': 'streaming', 'brilliant': 'streaming', 'nytimes': 'streaming', 'wsj': 'streaming',
+
+  // Wine & Liquor stores (often miscategorized as Travel by banks)
+  // Note: 'spirits' alone is too broad (matches 'Holy Spirit Church'), use specific patterns
+  'wine & spirits': 'shopping', 'wine and spirits': 'shopping', 'liquor': 'shopping',
+  'wine shop': 'shopping', 'wine store': 'shopping', 'liquor store': 'shopping', 'bevmo': 'shopping',
+  'total wine': 'shopping', 'abc liquor': 'shopping', 'binny': 'shopping', 'spec\'s': 'shopping',
   
   // Utilities (for Cash+ 5%)
   'coned': 'utilities', 'con edison': 'utilities', 'national grid': 'utilities', 'pseg': 'utilities',
@@ -737,23 +987,284 @@ const MONARCH_MAP = {
 };
 
 // =============================================================================
+// CATEGORY HIERARCHY (Child → Parent mapping)
+// Allows transactions to be classified to specific categories, then walk up
+// the hierarchy to find the best matching category a card actually has.
+// =============================================================================
+const CATEGORY_HIERARCHY = {
+  // Dining children
+  'food-truck': 'dining',
+  'cafe': 'dining',
+  'coffee-shop': 'dining',
+  'bar': 'dining',
+  'bakery': 'dining',
+  'fast-food': 'dining',
+  'fine-dining': 'dining',
+  'food-delivery': 'dining',
+
+  // Grocery children
+  'supermarket': 'grocery',
+  'farmers-market': 'grocery',
+  'butcher': 'grocery',
+  'organic-store': 'grocery',
+
+  // Gas/Auto children
+  'car-wash': 'gas',
+  'car-maintenance': 'automotive',
+  'car-repair': 'automotive',
+  'parking': 'automotive',
+  'toll': 'automotive',
+  'automotive': 'other',
+
+  // Travel children
+  'cruise': 'travel',
+  'resort': 'hotels-direct',
+  'vacation-rental': 'travel',
+  'airbnb': 'travel',
+
+  // Transit children
+  'lyft': 'transit',
+  'uber-ride': 'transit',
+  'taxi': 'transit',
+  'subway': 'transit',
+  'bus': 'transit',
+
+  // Shopping children
+  'makeup': 'shopping',
+  'beauty': 'shopping',
+  'clothing': 'shopping',
+  'electronics': 'shopping',
+  'furniture': 'shopping',
+  'home-decor': 'shopping',
+  'sporting-goods': 'shopping',
+  'books': 'shopping',
+  'toys': 'shopping',
+  'retail': 'shopping',
+  'department-stores': 'shopping',
+  'select-clothing': 'shopping',
+
+  // Utilities children
+  'electric': 'utilities',
+  'water': 'utilities',
+  'internet': 'utilities',
+  'cable': 'utilities',
+  'phone': 'utilities',
+  'cell-phone': 'utilities',
+
+  // Entertainment children
+  'movies': 'entertainment',
+  'movie-theaters': 'entertainment',
+  'concerts': 'entertainment',
+  'theater': 'entertainment',
+  'museum': 'entertainment',
+  'amusement-park': 'entertainment',
+  'gaming': 'entertainment',
+
+  // Pet children
+  'pet-food': 'pet',
+  'veterinary': 'pet',
+  'pet-grooming': 'pet',
+  'pet': 'other',
+
+  // Services → other
+  'salon': 'other',
+  'spa': 'other',
+  'laundry': 'other',
+  'dry-cleaning': 'other',
+  'insurance': 'other',
+  'legal': 'other',
+  'tax': 'other',
+  'education': 'other',
+  'charity': 'other',
+
+  // Parent categories (null = top-level, no further rollup)
+  'dining': null,
+  'grocery': null,
+  'gas': null,
+  'drugstore': null,
+  'transit': null,
+  'streaming': null,
+  'utilities': null,
+  'fitness': null,
+  'entertainment': null,
+  'shopping': null,
+  'travel': null,
+  'flights-direct': 'travel',
+  'hotels-direct': 'travel',
+  'rent': null,
+  'ground-transport': 'transit',
+  'other': null
+};
+
+// Specific category keywords for more granular classification
+// Order matters: more specific patterns should be checked first
+const SPECIFIC_CATEGORY_KEYWORDS = {
+  // Skip categories - checked first to filter out non-purchase transactions
+  'skip': ['transfer', 'payment thank you', 'autopay', 'credit card payment', 'paycheck', 'direct deposit', 'income', 'payroll', 'ach credit'],
+
+  // Dining specifics
+  'food-truck': ['food truck'],
+  'cafe': ['cafe', 'caffè', 'caffe'],
+  'coffee-shop': ['coffee', 'starbucks', 'dunkin', 'peets', 'blue bottle', 'philz'],
+  'bakery': ['bakery', 'donut', 'bagel', 'pastry', 'bread'],
+  'bar': ['bar ', ' bar', 'pub', 'brewery', 'tavern', 'lounge', 'taproom', 'wine bar'],
+  'fast-food': ['mcdonalds', 'wendys', 'burger king', 'taco bell', 'chick-fil-a', 'popeyes', 'arbys', 'sonic', 'jack in the box', 'five guys', 'shake shack', 'in-n-out', 'chipotle', 'qdoba', 'panera'],
+  'food-delivery': ['doordash', 'uber eats', 'grubhub', 'seamless', 'caviar', 'postmates', 'instacart'],
+  'fine-dining': ['steakhouse', 'fine dining'],
+
+  // Grocery specifics
+  'supermarket': ['supermarket', 'safeway', 'kroger', 'publix', 'albertsons', 'heb', 'meijer', 'giant', 'stop & shop', 'food lion', 'aldi', 'lidl', 'wegmans', 'whole foods', 'trader joe'],
+  'farmers-market': ['farmers market', 'farm stand'],
+  'organic-store': ['organic', 'natural grocers', 'sprouts'],
+
+  // Auto specifics
+  'car-wash': ['car wash', 'carwash'],
+  'car-maintenance': ['oil change', 'jiffy lube', 'valvoline', 'firestone', 'goodyear', 'discount tire', 'tire', 'auto repair', 'mechanic'],
+  'parking': ['parking', 'spothero', 'parkwhiz', 'parkme'],
+  'toll': ['toll', 'ezpass', 'fastrak', 'sunpass'],
+
+  // Travel specifics
+  'cruise': ['cruise', 'carnival', 'royal caribbean', 'norwegian cruise'],
+  'resort': ['resort'],
+  'airbnb': ['airbnb', 'vrbo', 'vacation rental', 'homeaway'],
+
+  // Transit specifics
+  'lyft': ['lyft'],
+  'uber-ride': ['uber trip', 'uber ride'],
+  'taxi': ['taxi', 'cab ', 'yellow cab'],
+  'subway': ['subway', 'metro', 'mta', 'wmata', 'bart', 'cta'],
+  'bus': ['bus', 'greyhound', 'megabus', 'flixbus'],
+
+  // Shopping specifics
+  'makeup': ['makeup', 'cosmetic', 'sephora', 'ulta', 'mac cosmetics'],
+  'beauty': ['beauty', 'salon', 'day spa', 'nail salon', 'nails ', ' nails', 'manicure', 'pedicure', 'massage'],
+  'clothing': ['clothing', 'apparel', 'fashion', 'shoes', 'nike', 'adidas', 'gap', 'old navy', 'h&m', 'zara', 'uniqlo', 'nordstrom', 'macys', 'kohls'],
+  'electronics': ['best buy', 'apple store', 'micro center', 'newegg', 'b&h photo'],
+  'furniture': ['furniture', 'ikea', 'wayfair', 'pottery barn', 'crate & barrel', 'west elm'],
+  'home-decor': ['home decor', 'bed bath', 'homegoods', 'pier 1'],
+  'books': ['books', 'barnes & noble', 'bookstore'],
+  'toys': ['toys', 'toy store', 'lego store', 'gamestop'],
+
+  // Entertainment specifics
+  'movies': ['movie', 'cinema', 'amc', 'regal', 'cinemark', 'fandango'],
+  'concerts': ['concert', 'live music', 'ticketmaster', 'stubhub', 'live nation'],
+  'museum': ['museum', 'gallery', 'exhibit'],
+  'amusement-park': ['disney', 'universal', 'six flags', 'amusement', 'theme park', 'legoland', 'seaworld'],
+  'gaming': ['steam', 'playstation', 'xbox', 'nintendo', 'epic games'],
+
+  // Pet specifics
+  'pet-food': ['pet food', 'dog food', 'cat food', 'chewy'],
+  'veterinary': ['veterinary', 'vet ', 'animal hospital', 'banfield'],
+  'pet-grooming': ['pet grooming', 'dog grooming', 'groomer'],
+
+  // Utilities specifics
+  'electric': ['electric', 'power company', 'energy'],
+  'water': ['water utility', 'water company', 'water bill'],
+  'internet': ['comcast', 'xfinity', 'spectrum', 'verizon fios', 'att internet', 'cox'],
+  'cable': ['cable tv', 'directv', 'dish network'],
+
+  // Services
+  'salon': ['salon', 'hair', 'barber', 'supercuts', 'great clips'],
+  'laundry': ['laundry', 'dry clean', 'cleaners'],
+  'insurance': ['insurance', 'geico', 'progressive', 'state farm', 'allstate'],
+  'education': ['tuition', 'school', 'university', 'college', 'coursera', 'udemy'],
+  'charity': ['charity', 'donation', 'nonprofit', 'red cross', 'united way']
+};
+
+// Keyword exclusions: if merchant contains any of these, don't match the category
+// This prevents false positives like "HK Best Barbers" matching 'bar' → dining
+const KEYWORD_EXCLUSIONS = {
+  'bar': ['barber', 'chocolate bar', 'candy bar', 'granola bar', 'protein bar', 'snack bar', 'handlebar', 'sidebar', 'crossbar', 'toolbar']
+};
+
+
+/**
+ * Find the effective category for a specific card by walking up the hierarchy.
+ * If the card doesn't have a multiplier for the specific category, find the
+ * nearest parent category it does have.
+ * @param {string} specificCategory - The most specific category classification
+ * @param {string} cardId - The card ID to check
+ * @returns {string} The effective category to use for this card
+ */
+function getEffectiveCategory(specificCategory, cardId) {
+  const card = CARDS[cardId];
+  if (!card) return specificCategory;
+
+  let current = specificCategory;
+
+  // Walk up hierarchy until we find a category the card has, or hit null
+  while (current) {
+    // Check if card has multiplier for this category
+    if (card.multipliers && card.multipliers[current] !== undefined) {
+      return current;
+    }
+    // Check if it's in the card's base categories
+    if (card.categories?.includes(current)) {
+      return current;
+    }
+    // Walk up to parent
+    current = CATEGORY_HIERARCHY[current];
+  }
+
+  // No match found, return 'other'
+  return 'other';
+}
+
+/**
+ * Classify to most specific category using keyword matching
+ * Returns null if no specific match found (fall through to other classification)
+ * @param {string} merchantName - Normalized merchant name
+ * @returns {{category: string, reason: string}|null}
+ */
+function classifyToSpecificCategory(merchantName) {
+  const norm = merchantName.toLowerCase();
+
+  // Check skip patterns first
+  for (const pattern of SPECIFIC_CATEGORY_KEYWORDS['skip']) {
+    if (norm.includes(pattern)) {
+      return { category: 'skip', reason: `Matched skip pattern: "${pattern}"` };
+    }
+  }
+
+  // Check specific categories (skip 'skip' since we already checked it)
+  for (const [category, patterns] of Object.entries(SPECIFIC_CATEGORY_KEYWORDS)) {
+    if (category === 'skip') continue;
+    for (const pattern of patterns) {
+      if (norm.includes(pattern)) {
+        // Check for exclusions (e.g., 'barber' should not match 'bar' category)
+        const exclusions = KEYWORD_EXCLUSIONS[category];
+        if (exclusions && exclusions.some(excl => norm.includes(excl))) {
+          continue; // Skip this pattern due to exclusion
+        }
+        return { category, reason: `Matched: "${pattern}"` };
+      }
+    }
+  }
+
+  return null;
+}
+
+// =============================================================================
 // STATE
 // =============================================================================
 let state = {
-  cardMappings: JSON.parse(localStorage.getItem('ccTracker_cardMappings') || '{}'),
-  merchantCache: JSON.parse(localStorage.getItem('ccTracker_merchantCache') || '{}'),
-  customPointValues: JSON.parse(localStorage.getItem('ccTracker_pointValues') || '{}'),
-  creditOverrides: JSON.parse(localStorage.getItem('ccTracker_creditOverrides') || '{}'),
-  disabledCredits: JSON.parse(localStorage.getItem('ccTracker_disabledCredits') || '{}'),
-  monthlyCredits: JSON.parse(localStorage.getItem('ccTracker_monthlyCredits') || '{}'),
-  merchantRules: JSON.parse(localStorage.getItem('ccTracker_merchantRules') || '{}'),
-  confirmedTransactions: JSON.parse(localStorage.getItem('ccTracker_confirmedTxns') || '{}'), // txnId -> category (single-txn confirmations)
-  cashPlusCategories: JSON.parse(localStorage.getItem('ccTracker_cashPlusCategories') || '{}'),
-  cffCategories: JSON.parse(localStorage.getItem('ccTracker_cffCategories') || '{}'),
-  biltConfig: JSON.parse(localStorage.getItem('ccTracker_biltConfig') || '{}'),
-  columnMappings: JSON.parse(localStorage.getItem('ccTracker_columnMappings') || '{}'), // Remembers mappings by CSV shape
+  // Persistent state (loaded from localStorage with safe parsing)
+  cardMappings: safeLocalStorageGet('ccTracker_cardMappings', {}),
+  merchantCache: safeLocalStorageGet('ccTracker_merchantCache', {}),
+  customPointValues: safeLocalStorageGet('ccTracker_pointValues', {}),
+  creditOverrides: safeLocalStorageGet('ccTracker_creditOverrides', {}),
+  disabledCredits: safeLocalStorageGet('ccTracker_disabledCredits', {}),
+  monthlyCredits: safeLocalStorageGet('ccTracker_monthlyCredits', {}),
+  merchantRules: safeLocalStorageGet('ccTracker_merchantRules', {}),
+  confirmedTransactions: safeLocalStorageGet('ccTracker_confirmedTxns', {}), // txnId -> category (single-txn confirmations)
+  cashPlusCategories: safeLocalStorageGet('ccTracker_cashPlusCategories', {}),
+  cffCategories: safeLocalStorageGet('ccTracker_cffCategories', {}),
+  biltConfig: safeLocalStorageGet('ccTracker_biltConfig', {}),
+  columnMappings: safeLocalStorageGet('ccTracker_columnMappings', {}), // Remembers mappings by CSV shape
   pendingCSVData: null, // Temporarily holds CSV data during column mapping
-  savedTransactions: JSON.parse(localStorage.getItem('ccTracker_transactions') || '[]'),
+  savedTransactions: safeLocalStorageGet('ccTracker_transactions', []),
+
+  // Session state (not persisted)
   transactions: [],
   results: null,
   activeView: 'summary',
@@ -763,11 +1274,12 @@ let state = {
   selectedCFFYear: null, // For CFF quarterly category year selection
   availableYears: [],
   summarySortState: { column: 'cardName', direction: 'asc' }, // For summary table sorting
+
   // Tour state
   tourComplete: localStorage.getItem('ccTracker_tourComplete') === 'true',
-  tourStep: parseInt(localStorage.getItem('ccTracker_tourStep') || '0'),
+  tourStep: parseInt(localStorage.getItem('ccTracker_tourStep') || '0', 10),
   tourActive: false,
-  featureEducation: JSON.parse(localStorage.getItem('ccTracker_featureEducation') || '{}') // tracks which feature tutorials have been shown
+  featureEducation: safeLocalStorageGet('ccTracker_featureEducation', {}) // tracks which feature tutorials have been shown
 };
 
 // =============================================================================
@@ -825,13 +1337,17 @@ function mapToCardCategory(genericCategory, cardId, txnDate = null) {
   
   // Category mapping rules (generic -> card-specific)
   const mappings = {
-    // Travel mappings
-    'flights-direct': ['flights-direct', 'amex-travel', 'travel', 'chase-travel'],
-    'hotels-direct': ['hotels-direct', 'amex-travel', 'travel', 'chase-travel'],
-    'chase-travel': ['chase-travel', 'travel'],
-    'amex-travel': ['amex-travel', 'travel'],
-    'travel-ota': ['travel', 'other'],
-    'travel': ['travel', 'chase-travel', 'amex-travel', 'other'],
+    // Travel mappings - portal categories should ONLY come from actual portal purchases
+    // Generic travel does NOT get portal bonuses (chase-travel, amex-travel, etc.)
+    'flights-direct': ['flights-direct', 'travel', 'other'],
+    'hotels-direct': ['hotels-direct', 'travel', 'other'],
+    'chase-travel': ['chase-travel', 'travel', 'other'],
+    'amex-travel': ['amex-travel', 'travel', 'other'],
+    'bilt-travel': ['bilt-travel', 'travel', 'other'],
+    'travel-ota': ['travel-ota', 'travel', 'other'],
+    'travel': ['travel', 'other'], // Generic travel NEVER maps to card-specific portals
+    'car-rental': ['car-rental', 'travel', 'other'],
+    'cruise': ['cruise', 'travel', 'other'],
     'transit': ['transit', 'travel', 'ground-transport', 'other'],
     'lyft': ['lyft', 'transit', 'travel', 'ground-transport', 'other'],
     
@@ -882,6 +1398,30 @@ function formatNumber(val) {
   return val.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
+/**
+ * Format category for debugging display in transactions table.
+ * Shows: subcategory → category (confidence) or category (confidence) if same
+ * Examples:
+ *   salon → other (45)    - subcategory 'salon' rolled up to 'other', confidence 45
+ *   dining (85)           - subcategory 'dining', card has dining bonus, confidence 85
+ *   coffee-shop → dining (70) - specific subcategory rolled up to parent
+ */
+function formatCategoryDebug(txn) {
+  const sub = txn.subcategory || 'unknown';
+  const cat = txn.category || 'other';
+  const conf = txn.confidence || 0;
+  const isUserSet = txn.categorySource === 'rule' || txn.categorySource === 'confirmed';
+  const checkmark = isUserSet ? ' ✓' : '';
+
+  if (sub === cat) {
+    // Subcategory matches earning category - simple display
+    return `${escapeHtml(cat)} (${conf})${checkmark}`;
+  } else {
+    // Subcategory rolled up to different category via hierarchy
+    return `<span style="color:#6b7280;">${escapeHtml(sub)}</span> → ${escapeHtml(cat)} (${conf})${checkmark}`;
+  }
+}
+
 // HTML escape function to prevent XSS attacks from user-controlled data
 function escapeHtml(str) {
   if (str == null) return '';
@@ -894,210 +1434,457 @@ function escapeHtml(str) {
 }
 
 // =============================================================================
-// CLASSIFICATION ENGINE WITH CONFIDENCE SCORING
+// CLASSIFICATION ENGINE
 // =============================================================================
 
-// Confidence levels
-const CONFIDENCE = {
-  CERTAIN: 100,      // Merchant match (Lyft, Chipotle, etc.)
-  HIGH: 95,          // Monarch category + keyword validation
-  MEDIUM: 80,        // Monarch category alone (non-travel)
-  TRAVEL_NEEDS_CONTEXT: 60, // Travel - needs merchant + card analysis
-  LOW: 40,           // Weak signals
-  UNKNOWN: 0         // No match
+// PRINCIPLE: Confidence scoring is additive - multiple agreeing signals combine.
+// CSV category is the primary signal, but heuristics stack on top when they agree.
+
+const CONFIDENCE_ADJUSTMENTS = {
+  // Base scores
+  CSV_BASE: 50,                    // CSV category maps to a specific subcategory
+  KNOWN_MERCHANT_OVERRIDE: 100,    // Known merchant list always wins
+
+  // Heuristic support (when CSV provides base)
+  KEYWORD_SUPPORTS: 10,            // Merchant name keyword agrees with CSV subcategory
+  POS_PATTERN_SUPPORTS: 15,        // TST*, SQ* etc. agrees with subcategory
+  ADDRESS_SUPPORTS: 10,            // Address-like pattern agrees with subcategory
+
+  // Heuristic discovery (when CSV is vague, heuristics are weighted higher)
+  KEYWORD_DISCOVERY: 25,           // Keyword found when CSV is vague
+  POS_PATTERN_DISCOVERY: 25,       // POS pattern found when CSV is vague
+  ADDRESS_DISCOVERY: 25,           // Address pattern found when CSV is vague
+
+  // Bonuses and penalties
+  MULTIPLE_HEURISTICS_BONUS: 10,   // 2+ heuristics agree on same category
+  KEYWORD_CONFLICTS: -15,          // Merchant name keyword disagrees with subcategory
+  POS_PATTERN_CONFLICTS: -10,      // POS pattern disagrees with subcategory
+  ADDRESS_CONFLICTS: -10           // Address pattern disagrees with subcategory
 };
 
-// Transactions below this threshold are flagged for review
-const CONFIDENCE_REVIEW_THRESHOLD = 80;
+// Vague CSV categories that trigger discovery mode
+// These should NOT be trusted - fall back to keyword/pattern matching
+const VAGUE_CSV_CATEGORIES = [
+  'other', 'unknown', 'personal', 'miscellaneous', 'misc',
+  'general', 'uncategorized', 'family', 'business'
+];
 
-function classifyMerchant(merchant, monarchCategory, cardId = null) {
+// Transactions below this threshold are flagged for review
+const CONFIDENCE_THRESHOLD = 50;
+
+// Map CSV category keywords to our subcategories
+const CSV_TO_SUBCATEGORY = {
+  // High confidence mappings
+  'food': 'dining',
+  'drink': 'dining',
+  'restaurant': 'dining',
+  'dining': 'dining',
+  'groceries': 'grocery',
+  'grocery': 'grocery',
+  'supermarket': 'grocery',
+  'gas': 'gas',
+  'fuel': 'gas',
+  'pharmacy': 'drugstore',
+  'drug store': 'drugstore',
+  'fitness': 'fitness',
+  'gym': 'fitness',
+  'subscriptions': 'streaming',
+  'streaming': 'streaming',
+  'rent': 'rent',
+  'mortgage': 'rent',
+
+  // Transit
+  'taxi': 'transit',
+  'ride share': 'transit',
+  'rideshare': 'transit',
+  'transportation': 'transit',
+  'transit': 'transit',
+
+  // Travel - return special marker for additional processing
+  'travel': '_travel_',
+  'vacation': '_travel_',
+  'airline': '_travel_',
+  'hotel': '_travel_',
+  'lodging': '_travel_',
+
+  // Entertainment
+  'entertainment': 'entertainment',
+  'recreation': 'entertainment',
+  'movies': 'entertainment',
+
+  // Shopping
+  'shopping': 'shopping',
+  'retail': 'shopping',
+  'merchandise': 'shopping',
+  'clothing': 'shopping',
+
+  // Utilities
+  'utilities': 'utilities',
+  'electric': 'utilities',
+  'internet': 'utilities',
+  'phone': 'utilities'
+};
+
+function classifyMerchant(merchant, csvCategory, cardId = null) {
   const norm = normalize(merchant);
   const cacheKey = norm.substring(0, 50);
-  const normMonarch = normalize(monarchCategory || '');
-  
-  // Tier 1: User-defined merchant rules (100% confidence)
-  if (state.merchantRules[cacheKey]) {
-    return { 
-      category: state.merchantRules[cacheKey], 
-      source: 'rule', 
-      confidence: CONFIDENCE.CERTAIN,
-      reason: 'User-defined rule'
+  const normCSV = (csvCategory || '').toLowerCase().trim();
+
+  // Determine if CSV category is vague (triggers discovery mode with higher heuristic weights)
+  const isVagueCSV = !normCSV || VAGUE_CSV_CATEGORIES.some(v => normCSV.includes(v));
+
+  // ==========================================================================
+  // PRIORITY 1: Skip Detection
+  // ==========================================================================
+  const skipPatterns = SPECIFIC_CATEGORY_KEYWORDS['skip'] || [];
+  for (const pattern of skipPatterns) {
+    if (norm.includes(pattern)) {
+      return {
+        subcategory: 'skip',
+        confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE,
+        source: 'skip-pattern',
+        reason: `Skipped: "${pattern}"`
+      };
+    }
+  }
+
+  // ==========================================================================
+  // PRIORITY 2: User-defined Merchant Rules (always 100 confidence)
+  // ==========================================================================
+  const cardSpecificKey = cardId ? `${cardId}:${cacheKey}` : null;
+  const ruleCategory = (cardSpecificKey && state.merchantRules[cardSpecificKey]) || state.merchantRules[cacheKey];
+  if (ruleCategory) {
+    return {
+      subcategory: ruleCategory,
+      confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE,
+      source: 'user-rule',
+      reason: cardSpecificKey && state.merchantRules[cardSpecificKey] ? 'User rule (this card)' : 'User rule (all cards)'
     };
   }
-  
-  // Tier 1: Known merchant exact match (100% confidence)
+
+  // ==========================================================================
+  // PRIORITY 3: Known Merchant List (always 100 confidence)
+  // ==========================================================================
   for (const [key, cat] of Object.entries(KNOWN_MERCHANTS)) {
     if (norm.includes(key)) {
       state.merchantCache[cacheKey] = cat;
-      return { 
-        category: cat, 
-        source: 'known', 
-        confidence: CONFIDENCE.CERTAIN,
-        reason: `Matched: "${key}"`
+      return {
+        subcategory: cat,
+        confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE,
+        source: 'known-merchant',
+        reason: `Known: "${key}"`
       };
     }
   }
-  
-  // Tier 2: Monarch "Food & Drink" category (95% confidence for dining)
-  if (normMonarch.includes('food') || normMonarch.includes('drink') || normMonarch.includes('restaurant')) {
-    state.merchantCache[cacheKey] = 'dining';
-    return { 
-      category: 'dining', 
-      source: 'monarch', 
-      confidence: CONFIDENCE.HIGH,
-      reason: 'Monarch: Food & Drink'
-    };
-  }
-  
-  // Tier 2: Other high-confidence Monarch categories
-  const highConfidenceMonarch = {
-    'groceries': 'grocery',
-    'gas': 'gas',
-    'pharmacy': 'drugstore',
-    'fitness': 'fitness',
-    'subscriptions': 'streaming',
-    'rent': 'rent'
-  };
-  
-  for (const [key, cat] of Object.entries(highConfidenceMonarch)) {
-    if (normMonarch.includes(key)) {
-      state.merchantCache[cacheKey] = cat;
-      return { 
-        category: cat, 
-        source: 'monarch', 
-        confidence: CONFIDENCE.HIGH,
-        reason: `Monarch: ${monarchCategory}`
-      };
+
+  // ==========================================================================
+  // STEP 1: Gather ALL signals (CSV category + heuristics)
+  // ==========================================================================
+  let csvSubcategory = null;
+  let keywordResult = null;
+  let posResult = null;
+  let addressResult = null;
+
+  // Get CSV signal
+  if (!isVagueCSV) {
+    csvSubcategory = mapCSVToSubcategory(normCSV);
+    // Special case: travel needs its own classification
+    if (csvSubcategory === '_travel_') {
+      return classifyTravel(norm, cardId);
     }
   }
-  
-  // Tier 3: Travel - needs context analysis
-  if (normMonarch.includes('travel') || normMonarch.includes('vacation') || 
-      normMonarch.includes('airline') || normMonarch.includes('hotel')) {
-    const travelResult = classifyTravel(norm, cardId);
-    return travelResult;
+
+  // Get keyword signal
+  keywordResult = classifyToSpecificCategory(norm);
+  if (keywordResult && keywordResult.category === 'skip') {
+    keywordResult = null;
   }
-  
-  // Tier 2: Taxi & Ride Shares
-  if (normMonarch.includes('taxi') || normMonarch.includes('ride share')) {
-    // Check if it's Lyft specifically
-    if (norm.includes('lyft')) {
-      return { category: 'lyft', source: 'known', confidence: CONFIDENCE.CERTAIN, reason: 'Lyft ride' };
+
+  // Get POS pattern signal
+  posResult = checkPOSPatterns(norm);
+
+  // Get address pattern signal
+  addressResult = checkAddressPatterns(norm);
+
+  // ==========================================================================
+  // STEP 2: Determine primary subcategory
+  // CSV is authoritative if specific; otherwise use heuristic consensus
+  // ==========================================================================
+  let subcategory = null;
+  let confidence = 0;
+  let source = 'unknown';
+  const reasons = [];
+
+  if (csvSubcategory) {
+    // CSV provides the authoritative subcategory
+    subcategory = csvSubcategory;
+    confidence = CONFIDENCE_ADJUSTMENTS.CSV_BASE;
+    source = 'csv-category';
+    reasons.push(`CSV: "${csvCategory}"`);
+  } else {
+    // Discovery mode: determine subcategory from heuristic consensus
+    // Count votes for each category from heuristics
+    const votes = {};
+    if (keywordResult) {
+      votes[keywordResult.category] = (votes[keywordResult.category] || 0) + 1;
     }
-    return { category: 'transit', source: 'monarch', confidence: CONFIDENCE.HIGH, reason: 'Ride share' };
-  }
-  
-  // Tier 2: Entertainment
-  if (normMonarch.includes('entertainment') || normMonarch.includes('recreation')) {
-    return { 
-      category: 'entertainment', 
-      source: 'monarch', 
-      confidence: CONFIDENCE.MEDIUM,
-      reason: `Monarch: ${monarchCategory}`
-    };
-  }
-  
-  // Tier 2: Shopping (lower confidence, could be many things)
-  if (normMonarch.includes('shopping')) {
-    return { 
-      category: 'shopping', 
-      source: 'monarch', 
-      confidence: CONFIDENCE.MEDIUM,
-      reason: 'Monarch: Shopping'
-    };
-  }
-  
-  // Tier 3: Fallback heuristics when no Monarch category available
-  // These are weak signals used only when we have no better information
-  if (!monarchCategory || normMonarch === '' || normMonarch === 'uncategorized' || normMonarch === 'other') {
-    // Check for common receipt patterns that suggest dining
-    const diningPatterns = ['sq *', 'tst*', 'toast*', 'clover*', 'square *'];
-    for (const pattern of diningPatterns) {
-      if (norm.includes(pattern.replace('*', ''))) {
-        return {
-          category: 'dining',
-          source: 'heuristic',
-          confidence: CONFIDENCE.LOW,
-          reason: 'POS pattern suggests restaurant'
-        };
+    if (posResult.matched) {
+      votes[posResult.suggestedCategory] = (votes[posResult.suggestedCategory] || 0) + 1;
+    }
+    if (addressResult.matched) {
+      votes[addressResult.suggestedCategory] = (votes[addressResult.suggestedCategory] || 0) + 1;
+    }
+
+    // Find the category with most votes
+    let maxVotes = 0;
+    let winningCategory = null;
+    for (const [cat, count] of Object.entries(votes)) {
+      if (count > maxVotes) {
+        maxVotes = count;
+        winningCategory = cat;
       }
     }
-    
-    // Check for location-based patterns (likely local business = often dining)
-    const locationPatterns = [/\d{3,5}\s+[a-z]+\s+(st|ave|blvd|rd|way|dr)/i];
-    for (const pattern of locationPatterns) {
-      if (pattern.test(merchant)) {
-        return {
-          category: 'dining',
-          source: 'heuristic',
-          confidence: CONFIDENCE.LOW,
-          reason: 'Address in name suggests local business'
-        };
-      }
+
+    if (winningCategory) {
+      subcategory = winningCategory;
+      source = 'heuristics';
     }
   }
-  
-  // Unknown - will need manual classification
-  return { 
-    category: null, 
-    source: 'unknown', 
-    confidence: CONFIDENCE.UNKNOWN,
+
+  // ==========================================================================
+  // STEP 3: Apply additive confidence scoring from heuristics
+  // ==========================================================================
+  if (subcategory) {
+    let heuristicsAgreeing = 0;
+
+    // Check keyword heuristic
+    if (keywordResult) {
+      const agrees = subcategoryAgrees(keywordResult.category, subcategory);
+      if (agrees) {
+        const points = isVagueCSV ? CONFIDENCE_ADJUSTMENTS.KEYWORD_DISCOVERY : CONFIDENCE_ADJUSTMENTS.KEYWORD_SUPPORTS;
+        confidence += points;
+        heuristicsAgreeing++;
+        reasons.push(`Keyword "${keywordResult.reason}" (+${points})`);
+      } else if (!isVagueCSV) {
+        // Only penalize conflicts when CSV provided the base
+        confidence += CONFIDENCE_ADJUSTMENTS.KEYWORD_CONFLICTS;
+        reasons.push(`Keyword conflicts: "${keywordResult.reason}" (${CONFIDENCE_ADJUSTMENTS.KEYWORD_CONFLICTS})`);
+      }
+    }
+
+    // Check POS pattern heuristic
+    if (posResult.matched) {
+      const agrees = subcategoryAgrees(posResult.suggestedCategory, subcategory);
+      if (agrees) {
+        const points = isVagueCSV ? CONFIDENCE_ADJUSTMENTS.POS_PATTERN_DISCOVERY : CONFIDENCE_ADJUSTMENTS.POS_PATTERN_SUPPORTS;
+        confidence += points;
+        heuristicsAgreeing++;
+        reasons.push(`POS pattern (+${points})`);
+      } else if (!isVagueCSV) {
+        confidence += CONFIDENCE_ADJUSTMENTS.POS_PATTERN_CONFLICTS;
+        reasons.push(`POS pattern conflicts (${CONFIDENCE_ADJUSTMENTS.POS_PATTERN_CONFLICTS})`);
+      }
+    }
+
+    // Check address pattern heuristic
+    if (addressResult.matched) {
+      const agrees = subcategoryAgrees(addressResult.suggestedCategory, subcategory);
+      if (agrees) {
+        const points = isVagueCSV ? CONFIDENCE_ADJUSTMENTS.ADDRESS_DISCOVERY : CONFIDENCE_ADJUSTMENTS.ADDRESS_SUPPORTS;
+        confidence += points;
+        heuristicsAgreeing++;
+        reasons.push(`Address pattern (+${points})`);
+      } else if (!isVagueCSV) {
+        confidence += CONFIDENCE_ADJUSTMENTS.ADDRESS_CONFLICTS;
+        reasons.push(`Address conflicts (${CONFIDENCE_ADJUSTMENTS.ADDRESS_CONFLICTS})`);
+      }
+    }
+
+    // Multiple heuristics bonus (2+ agreeing heuristics)
+    if (heuristicsAgreeing >= 2) {
+      confidence += CONFIDENCE_ADJUSTMENTS.MULTIPLE_HEURISTICS_BONUS;
+      reasons.push(`Multiple signals bonus (+${CONFIDENCE_ADJUSTMENTS.MULTIPLE_HEURISTICS_BONUS})`);
+    }
+
+    // Cache and return
+    state.merchantCache[cacheKey] = subcategory;
+    return {
+      subcategory,
+      confidence: Math.max(0, confidence),
+      source,
+      reason: reasons.join('; ')
+    };
+  }
+
+  // ==========================================================================
+  // UNKNOWN - no signals found, needs manual classification
+  // ==========================================================================
+  return {
+    subcategory: null,
+    confidence: 0,
+    source: 'unknown',
     reason: 'No match found'
   };
+}
+
+/**
+ * Map CSV category string to our subcategory
+ */
+function mapCSVToSubcategory(normCSV) {
+  for (const [keyword, subcategory] of Object.entries(CSV_TO_SUBCATEGORY)) {
+    if (normCSV.includes(keyword)) {
+      return subcategory;
+    }
+  }
+  return null;
+}
+
+/**
+ * Check if two subcategories "agree" (same or related via hierarchy)
+ */
+function subcategoryAgrees(cat1, cat2) {
+  if (cat1 === cat2) return true;
+
+  // Check hierarchy - same parent means agreement
+  const parent1 = CATEGORY_HIERARCHY[cat1];
+  const parent2 = CATEGORY_HIERARCHY[cat2];
+
+  if (parent1 && parent1 === parent2) return true;
+  if (cat1 === parent2 || cat2 === parent1) return true;
+
+  return false;
+}
+
+/**
+ * Check for POS system patterns that suggest dining
+ */
+function checkPOSPatterns(normalizedMerchant) {
+  const posPatterns = [
+    { pattern: 'sq ', category: 'dining', name: 'Square' },
+    { pattern: 'tst', category: 'dining', name: 'Toast' },
+    { pattern: 'toast', category: 'dining', name: 'Toast' },
+    { pattern: 'clover', category: 'dining', name: 'Clover' },
+    { pattern: 'square ', category: 'dining', name: 'Square' }
+  ];
+
+  for (const { pattern, category, name } of posPatterns) {
+    if (normalizedMerchant.includes(pattern)) {
+      return {
+        matched: true,
+        suggestedCategory: category,
+        reason: `${name} POS suggests ${category}`
+      };
+    }
+  }
+
+  return { matched: false };
+}
+
+/**
+ * Check for address-like patterns that suggest physical location categories
+ * Examples: "123 MAIN ST", "456 ELM AVE", street numbers followed by street names
+ */
+function checkAddressPatterns(normalizedMerchant) {
+  // Common address patterns - street number followed by street name indicators
+  const addressIndicators = [
+    { pattern: /\d+\s+(main|elm|oak|park|broadway|first|second|third|market|church|water)\s*(st|ave|rd|blvd|dr|ln|way|ct)?/i, category: 'dining', reason: 'Street address suggests local business' },
+    { pattern: /\d+\s+\w+\s+(st|street|ave|avenue|rd|road|blvd|boulevard|dr|drive|ln|lane|way|ct|court)\b/i, category: 'dining', reason: 'Street address pattern' }
+  ];
+
+  for (const { pattern, category, reason } of addressIndicators) {
+    if (pattern.test(normalizedMerchant)) {
+      return {
+        matched: true,
+        suggestedCategory: category,
+        reason
+      };
+    }
+  }
+
+  return { matched: false };
 }
 
 // Special handling for travel classification
 function classifyTravel(normalizedMerchant, cardId) {
   const norm = normalizedMerchant;
-  
+
   // Check for portal bookings (highest multiplier usually)
-  if (norm.includes('chase travel') || norm.includes('cl *chase')) {
-    return { category: 'chase-travel', source: 'known', confidence: CONFIDENCE.CERTAIN, reason: 'Chase Travel portal' };
+  // Expanded Chase Travel patterns - note CL* format has asterisk AFTER "CL"
+  const chasePatterns = ['chase travel', 'chasetravel', 'cl* chase', 'cl*chase', 'chasepay', 'chase.com/travel', 'cardmember serv', 'cardmember ser'];
+  for (const pattern of chasePatterns) {
+    if (norm.includes(pattern)) {
+      return { subcategory: 'chase-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Chase Travel portal' };
+    }
   }
-  if (norm.includes('amex travel')) {
-    return { category: 'amex-travel', source: 'known', confidence: CONFIDENCE.CERTAIN, reason: 'Amex Travel portal' };
+  // Expanded Amex Travel patterns
+  const amexPatterns = ['amex travel', 'amextravel', 'american express travel', 'amex.com/travel', 'aexp travel', 'aet*', 'amex trv', 'americanexpress.com/travel'];
+  for (const pattern of amexPatterns) {
+    if (norm.includes(pattern)) {
+      return { subcategory: 'amex-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Amex Travel portal' };
+    }
   }
-  if (norm.includes('bilt travel')) {
-    return { category: 'bilt-travel', source: 'known', confidence: CONFIDENCE.CERTAIN, reason: 'Bilt Travel portal' };
+  // Bilt Travel patterns
+  const biltPatterns = ['bilt travel', 'bilttravel', 'bilt.com/travel'];
+  for (const pattern of biltPatterns) {
+    if (norm.includes(pattern)) {
+      return { subcategory: 'bilt-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Bilt Travel portal' };
+    }
   }
-  
+
   // Check for OTAs (usually no bonus)
   const otas = ['expedia', 'booking.com', 'hotels.com', 'priceline', 'kayak', 'orbitz', 'travelocity'];
   for (const ota of otas) {
     if (norm.includes(ota)) {
-      return { category: 'travel-ota', source: 'known', confidence: CONFIDENCE.CERTAIN, reason: `OTA: ${ota}` };
+      return { subcategory: 'travel-ota', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: `OTA: ${ota}` };
     }
   }
-  
+
   // Check for direct airline bookings
-  const airlines = ['delta', 'american air', 'united air', 'southwest', 'jetblue', 'alaska air', 'spirit', 'frontier'];
+  // Note: 'spirit' alone is too broad (could match 'Holy Spirit'), use 'spirit air'
+  const airlines = ['delta', 'american air', 'united air', 'southwest', 'jetblue', 'alaska air', 'spirit air', 'frontier air', 'allegiant'];
   for (const airline of airlines) {
     if (norm.includes(airline)) {
-      return { category: 'flights-direct', source: 'known', confidence: CONFIDENCE.CERTAIN, reason: `Direct airline: ${airline}` };
+      return { subcategory: 'flights-direct', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: `Direct airline: ${airline}` };
     }
   }
-  
+
   // Check for direct hotel bookings
   const hotels = ['marriott', 'hilton', 'hyatt', 'ihg', 'wyndham', 'best western', 'radisson',
                   'sheraton', 'westin', 'ritz', 'four seasons', 'mgm', 'caesars', 'flamingo',
                   'venetian', 'bellagio', 'cosmopolitan'];
   for (const hotel of hotels) {
     if (norm.includes(hotel)) {
-      return { category: 'hotels-direct', source: 'known', confidence: CONFIDENCE.CERTAIN, reason: `Direct hotel: ${hotel}` };
+      return { subcategory: 'hotels-direct', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: `Direct hotel: ${hotel}` };
     }
   }
-  
+
   // Check for Airbnb/VRBO
   if (norm.includes('airbnb') || norm.includes('vrbo')) {
-    return { category: 'hotels-direct', source: 'known', confidence: CONFIDENCE.HIGH, reason: 'Vacation rental' };
+    return { subcategory: 'hotels-direct', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Vacation rental' };
   }
-  
-  // Generic travel - needs manual review
-  return { 
-    category: 'travel', 
-    source: 'monarch', 
-    confidence: CONFIDENCE.TRAVEL_NEEDS_CONTEXT,
-    reason: 'Travel - may need review'
+
+  // Check for car rentals (often show vendor name, not portal)
+  const carRentals = ['hertz', 'enterprise', 'avis', 'budget', 'national car', 'alamo', 'dollar rent', 'thrifty', 'sixt'];
+  for (const rental of carRentals) {
+    if (norm.includes(rental)) {
+      return { subcategory: 'car-rental', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: `Car rental: ${rental}` };
+    }
+  }
+
+  // Check for cruises
+  const cruises = ['carnival', 'royal caribbean', 'norwegian cruise', 'princess cruise', 'disney cruise', 'msc cruise'];
+  for (const cruise of cruises) {
+    if (norm.includes(cruise)) {
+      return { subcategory: 'cruise', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: `Cruise: ${cruise}` };
+    }
+  }
+
+  // Generic travel from CSV - we know it's travel but not which specific type
+  return {
+    subcategory: 'travel',
+    confidence: CONFIDENCE_ADJUSTMENTS.CSV_BASE,
+    source: 'csv-category',
+    reason: 'Travel - specific type unknown'
   };
 }
 
@@ -1228,18 +2015,33 @@ function getMultiplier(cardId, category, txnDate = null) {
     const quarter = txnDate ? getQuarterForDate(txnDate) : getCurrentQuarter();
     const year = getYearFromDate(txnDate);
     const yearQuarterKey = `${year}-${quarter}`;
-    
+
     // Try year-specific key first, then fall back to quarter-only key for legacy data
     const quarterCats = state.cashPlusCategories[yearQuarterKey] || state.cashPlusCategories[quarter];
-    
+
     if (quarterCats) {
-      // Check 5% categories
-      if (quarterCats.fivePercent?.includes(category)) {
-        return { rate: 5, reason: `5% ${category} (${year} ${quarter} selection)` };
+      // Walk up hierarchy to check if this category or any parent matches 5% selection
+      let checkCat = category;
+      while (checkCat) {
+        if (quarterCats.fivePercent?.includes(checkCat)) {
+          const reason = checkCat !== category
+            ? `5% ${checkCat} (from ${category}, ${year} ${quarter})`
+            : `5% ${category} (${year} ${quarter} selection)`;
+          return { rate: 5, reason };
+        }
+        checkCat = CATEGORY_HIERARCHY[checkCat];
       }
-      // Check 2% category
-      if (quarterCats.twoPercent === category) {
-        return { rate: 2, reason: `2% ${category} (${year} ${quarter} selection)` };
+
+      // Walk up hierarchy to check if this category or any parent matches 2% selection
+      checkCat = category;
+      while (checkCat) {
+        if (quarterCats.twoPercent === checkCat) {
+          const reason = checkCat !== category
+            ? `2% ${checkCat} (from ${category}, ${year} ${quarter})`
+            : `2% ${category} (${year} ${quarter} selection)`;
+          return { rate: 2, reason };
+        }
+        checkCat = CATEGORY_HIERARCHY[checkCat];
       }
     }
     // Cash+ base rate is 1%
@@ -1251,20 +2053,32 @@ function getMultiplier(cardId, category, txnDate = null) {
     const quarter = txnDate ? getQuarterForDate(txnDate) : getCurrentQuarter();
     const year = getYearFromDate(txnDate);
     const yearQuarterKey = `${year}-${quarter}`;
-    
+
     // Try year-specific key first, then fall back to quarter-only key for legacy data
     const selectedCats = state.cffCategories[yearQuarterKey] || state.cffCategories[quarter] || [];
-    
-    // Check if this category is a selected 5% category for this quarter
-    if (selectedCats.includes(category)) {
-      return { rate: 5, reason: `5% ${category} (${year} ${quarter} bonus)` };
+
+    // Walk up hierarchy to check if this category or any parent is a selected 5% category
+    let checkCat = category;
+    while (checkCat) {
+      if (selectedCats.includes(checkCat)) {
+        const reason = checkCat !== category
+          ? `5% ${checkCat} (from ${category}, ${year} ${quarter})`
+          : `5% ${category} (${year} ${quarter} bonus)`;
+        return { rate: 5, reason };
+      }
+      checkCat = CATEGORY_HIERARCHY[checkCat];
     }
-    
-    // Check static multipliers (chase-travel 5x, dining 3x, drugstore 3x)
-    if (card.multipliers[category]) {
-      return { rate: card.multipliers[category], reason: `${card.multipliers[category]}x ${category}` };
+
+    // Check static multipliers with hierarchy (chase-travel 5x, dining 3x, drugstore 3x)
+    const effectiveCat = getEffectiveCategory(category, cardId);
+    if (card.multipliers[effectiveCat]) {
+      const rate = card.multipliers[effectiveCat];
+      if (effectiveCat !== category) {
+        return { rate, reason: `${rate}x ${effectiveCat} (from ${category})` };
+      }
+      return { rate, reason: `${rate}x ${effectiveCat}` };
     }
-    
+
     return { rate: card.baseRate, reason: `${card.baseRate}x base rate` };
   }
   
@@ -1348,49 +2162,52 @@ function getMultiplier(cardId, category, txnDate = null) {
     return { rate: card.baseRate, reason: `${card.baseRate}x base rate` };
   }
   
-  if (card.multipliers[category]) {
-    return { rate: card.multipliers[category], reason: `${card.multipliers[category]}x ${category}` };
+  // Use hierarchy to find the best matching category for this card
+  const effectiveCat = getEffectiveCategory(category, cardId);
+
+  if (card.multipliers[effectiveCat]) {
+    const rate = card.multipliers[effectiveCat];
+    // Show both specific and effective category if they differ
+    if (effectiveCat !== category && category !== 'other') {
+      return { rate, reason: `${rate}x ${effectiveCat} (from ${category})` };
+    }
+    return { rate, reason: `${rate}x ${effectiveCat}` };
   }
-  
-  // Handle travel-ota as general travel
-  if ((category === 'travel-ota' || category === 'travel') && card.multipliers['travel']) {
-    return { rate: card.multipliers['travel'], reason: `${card.multipliers['travel']}x travel (OTA)` };
-  }
-  
-  // Lyft fallback to transit
-  if (category === 'lyft' && card.multipliers['transit']) {
-    return { rate: card.multipliers['transit'], reason: `${card.multipliers['transit']}x transit (Lyft)` };
-  }
-  
+
   return { rate: card.baseRate, reason: `${card.baseRate}x base rate` };
 }
 
 // Determine badge color based on whether this is the optimal choice
 // Green = best/tied for best option, Yellow = good but better exists, Red = suboptimal
 function getCategoryBadgeStyle(txn, returnTooltip = false) {
+  // Build debug tooltip suffix showing classification details
+  const debugInfo = txn.subcategory
+    ? `\n\nClassification: ${txn.subcategory}${txn.subcategory !== txn.category ? ' → ' + txn.category : ''}\nConfidence: ${txn.confidence || 0}\nSource: ${txn.categorySource || 'unknown'}`
+    : '';
+
   if (txn.isPayment) {
     const style = 'background:#f3f4f6;color:#6b7280;'; // Gray for payments
-    return returnTooltip ? { style, tooltip: 'Payment — not counted' } : style;
+    return returnTooltip ? { style, tooltip: 'Payment — not counted' + debugInfo } : style;
   }
   if (txn.isCredit && !txn.isRefund) {
     const style = 'background:#e0f2fe;color:#0369a1;'; // Blue for credits
-    return returnTooltip ? { style, tooltip: 'Statement credit' } : style;
+    return returnTooltip ? { style, tooltip: 'Statement credit' + debugInfo } : style;
   }
   if (txn.isRefund) {
     const style = 'background:#fce7f3;color:#9d174d;'; // Pink for refunds
-    return returnTooltip ? { style, tooltip: 'Refund — points deducted' } : style;
+    return returnTooltip ? { style, tooltip: 'Refund — points deducted' + debugInfo } : style;
   }
-  
+
   const category = txn.category;
   const cardId = txn.cardId;
   const currentRate = txn.multiplier;
   const txnDate = txn.date;
-  
+
   // Find the best possible rate for this category across all mapped cards
   const mappedCardIds = [...new Set(Object.values(state.cardMappings))].filter(id => id && id !== 'skip');
   let bestRate = currentRate;
   let bestCard = cardId;
-  
+
   for (const cid of mappedCardIds) {
     const testResult = getMultiplier(cid, category, txnDate);
     if (testResult.rate > bestRate) {
@@ -1398,22 +2215,22 @@ function getCategoryBadgeStyle(txn, returnTooltip = false) {
       bestCard = cid;
     }
   }
-  
+
   // Determine color and tooltip
   if (currentRate >= bestRate) {
     // This is optimal (or tied for best)
     const style = 'background:#dcfce7;color:#166534;'; // Green
-    return returnTooltip ? { style, tooltip: 'Optimal card for this category' } : style;
+    return returnTooltip ? { style, tooltip: 'Optimal card for this category' + debugInfo } : style;
   } else if (currentRate >= bestRate * 0.6) {
     // Within 60% of best - yellow
     const style = 'background:#fef9c3;color:#854d0e;'; // Yellow
     const bestCardName = CARDS[bestCard]?.shortName || bestCard;
-    return returnTooltip ? { style, tooltip: `Good, but ${bestCardName} earns ${bestRate}x` } : style;
+    return returnTooltip ? { style, tooltip: `Good, but ${bestCardName} earns ${bestRate}x` + debugInfo } : style;
   } else {
     // Less than 60% of best - red/orange
     const style = 'background:#fee2e2;color:#991b1b;'; // Light red
     const bestCardName = CARDS[bestCard]?.shortName || bestCard;
-    return returnTooltip ? { style, tooltip: `${bestCardName} would earn ${bestRate}x` } : style;
+    return returnTooltip ? { style, tooltip: `${bestCardName} would earn ${bestRate}x` + debugInfo } : style;
   }
 }
 
@@ -1571,13 +2388,17 @@ function showColumnMapping(csvText) {
   // Check if we have a saved mapping for this CSV shape
   const shapeKey = getCSVShapeKey(headers);
   const savedMapping = state.columnMappings[shapeKey];
-  
+
   // Auto-detect format
   const detected = detectCSVFormat(headers);
-  
-  // Use saved mapping if available, otherwise use detected
-  const currentMapping = savedMapping || detected.mapping;
-  
+
+  // Use saved mapping if available, but MERGE with detected mapping
+  // This ensures that if the saved mapping is missing optional fields (like category),
+  // they get filled in from the detected mapping
+  const currentMapping = savedMapping
+    ? { ...detected.mapping, ...savedMapping }  // detected as base, saved as override
+    : detected.mapping;
+
   // Build the preview UI
   const container = document.getElementById('csvPreview');
   
@@ -1743,8 +2564,8 @@ function applyColumnMappingAndParse() {
   const selects = document.querySelectorAll('.column-mapping-select');
   const columnIndices = {};
   const headerMapping = {};
-  
-  selects.forEach(sel => {
+
+  selects.forEach((sel, idx) => {
     const field = sel.value;
     const colIndex = parseInt(sel.dataset.colIndex);
     if (field) {
@@ -1752,7 +2573,7 @@ function applyColumnMappingAndParse() {
       headerMapping[field] = state.pendingCSVData.headers[colIndex].toLowerCase().trim();
     }
   });
-  
+
   // Get default account if no account column is mapped
   const hasAccountColumn = columnIndices.account !== undefined;
   const defaultAccountInput = document.getElementById('defaultAccountInput');
@@ -1761,7 +2582,7 @@ function applyColumnMappingAndParse() {
   // Save this mapping for future use
   const shapeKey = getCSVShapeKey(state.pendingCSVData.headers);
   state.columnMappings[shapeKey] = headerMapping;
-  localStorage.setItem('ccTracker_columnMappings', JSON.stringify(state.columnMappings));
+  safeLocalStorageSet('ccTracker_columnMappings', state.columnMappings);
   
   // Parse the CSV using the mapping
   const transactions = [];
@@ -1779,13 +2600,14 @@ function applyColumnMappingAndParse() {
     const account = hasAccountColumn ? (fields[columnIndices.account] || '') : `Card (...${defaultLast4})`;
     const category = columnIndices.category !== undefined ? (fields[columnIndices.category] || '') : '';
     const original = columnIndices.original !== undefined ? (fields[columnIndices.original] || '') : '';
-    
+
     // Use default last4 if no account column, otherwise extract from account field
     const last4 = hasAccountColumn ? extractLast4(account) : defaultLast4;
-    
-    // Create unique ID from transaction content
-    const uniqueId = `${date}-${merchant.substring(0, 30)}-${amount.toFixed(2)}-${last4}`.replace(/[^a-zA-Z0-9.-]/g, '_');
-    
+
+    // Create unique ID with collision handling for same-batch duplicates
+    const usedIds = new Set(transactions.map(t => t.id));
+    const uniqueId = generateTransactionId(date, merchant, amount, last4, usedIds);
+
     transactions.push({
       id: uniqueId,
       date,
@@ -1797,10 +2619,10 @@ function applyColumnMappingAndParse() {
       last4
     });
   }
-  
+
   // Clear pending data
   state.pendingCSVData = null;
-  
+
   return transactions;
 }
 
@@ -1833,11 +2655,12 @@ function parseCSV(text) {
     const account = fields[idx.account] || '';
     const original = fields[idx.original] || '';
     
-    // Create unique ID from transaction content (date + merchant + amount + last4)
-    // This ensures proper deduplication across uploads
+    // Create unique ID with collision handling for same-batch duplicates
+    // Content-based IDs ensure proper deduplication across uploads
     const last4 = extractLast4(account);
-    const uniqueId = `${date}-${merchant.substring(0, 30)}-${amount.toFixed(2)}-${last4}`.replace(/[^a-zA-Z0-9.-]/g, '_');
-    
+    const usedIds = new Set(transactions.map(t => t.id));
+    const uniqueId = generateTransactionId(date, merchant, amount, last4, usedIds);
+
     transactions.push({
       id: uniqueId,
       date,
@@ -1858,36 +2681,40 @@ function parseCSV(text) {
 // =============================================================================
 async function processTransactions(transactions) {
   const classifications = {};
-  
+
   // Classify all transactions with rules
   for (const txn of transactions) {
     // Check for single-transaction confirmation first (takes precedence like merchant rules)
     if (state.confirmedTransactions[txn.id]) {
       classifications[txn.id] = {
-        category: state.confirmedTransactions[txn.id],
+        subcategory: state.confirmedTransactions[txn.id],
         source: 'confirmed',
-        confidence: CONFIDENCE.CERTAIN,
+        confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE,
         reason: 'Manually confirmed'
       };
       continue;
     }
-    
-    const result = classifyMerchant(txn.merchant, txn.monarchCategory);
-    if (result.category) {
+
+    // Look up cardId for card-specific rule matching
+    const cardId = state.cardMappings[txn.last4];
+    const effectiveCardId = (cardId && cardId !== 'skip') ? cardId : null;
+
+    const result = classifyMerchant(txn.merchant, txn.monarchCategory, effectiveCardId);
+    if (result.subcategory) {
       classifications[txn.id] = result;
     } else {
       // Unknown merchant - default to 'other' with low confidence for review
       classifications[txn.id] = {
-        category: 'other',
+        subcategory: 'other',
         source: 'fallback',
-        confidence: CONFIDENCE.LOW,
+        confidence: 0,
         reason: 'Unknown merchant - please review'
       };
     }
   }
   
   // Save cache
-  localStorage.setItem('ccTracker_merchantCache', JSON.stringify(state.merchantCache));
+  safeLocalStorageSet('ccTracker_merchantCache', state.merchantCache);
   
   // Process each transaction (skip bank accounts and "skip" cards)
   const processed = transactions
@@ -1897,10 +2724,13 @@ async function processTransactions(transactions) {
       if (SKIP_ACCOUNTS.some(skip => acctLower.includes(skip))) return false;
       // Filter out skipped cards
       if (state.cardMappings[txn.last4] === 'skip') return false;
+      // Filter out transactions classified as 'skip' (transfers, payments, income)
+      const cls = classifications[txn.id];
+      if (cls && cls.subcategory === 'skip') return false;
       return true;
     })
     .map(txn => {
-    const cls = classifications[txn.id] || { category: 'other', source: 'fallback' };
+    const cls = classifications[txn.id] || { subcategory: 'other', source: 'fallback', confidence: 0 };
     const cardId = state.cardMappings[txn.last4];
     const card = CARDS[cardId];
     const isCredit = txn.amount > 0;
@@ -1915,9 +2745,9 @@ async function processTransactions(transactions) {
       txn.monarchCategory?.toLowerCase().includes('credit card payment')
     );
     
-    // Map the generic category to a card-specific category
+    // Map the subcategory to a card-effective category via hierarchy
     // BUT: If source is 'rule', user explicitly chose this category - don't remap
-    const cardCategory = (cls.source === 'rule' || !card) ? cls.category : mapToCardCategory(cls.category, cardId, txn.date);
+    const cardCategory = (cls.source === 'rule' || !card) ? cls.subcategory : mapToCardCategory(cls.subcategory, cardId, txn.date);
     
     let multiplier = { rate: 1, reason: 'Card not mapped' };
     let creditMatch = null;
@@ -1962,9 +2792,10 @@ async function processTransactions(transactions) {
       ...txn,
       cardId,
       cardName: card?.shortName || 'Unknown',
-      category: cardCategory,
+      subcategory: cls.subcategory,  // Original classification before hierarchy rollup
+      category: cardCategory,         // After hierarchy rollup for this card
       categorySource: cls.source,
-      confidence: cls.confidence || CONFIDENCE.MEDIUM,
+      confidence: cls.confidence || 0,
       multiplier: multiplier.rate,
       reason: multiplier.reason,
       points,
@@ -2062,7 +2893,7 @@ function showMapping(allLast4s) {
       const l4 = e.target.dataset.last4;
       if (e.target.value) state.cardMappings[l4] = e.target.value;
       else delete state.cardMappings[l4];
-      localStorage.setItem('ccTracker_cardMappings', JSON.stringify(state.cardMappings));
+      safeLocalStorageSet('ccTracker_cardMappings', state.cardMappings);
       showMapping(allLast4s);
     });
   });
@@ -2475,7 +3306,7 @@ function showCardConfigEditor(preselectedCardId = null) {
               </div>
               <div>
                 <label style="font-size:10px;display:block;margin-bottom:2px;">Merchant keyword (optional, e.g. "BILT" or your landlord name):</label>
-                <input type="text" class="bilt-rent-keyword form-input" data-card="${cardId}" value="${cfg.rentMerchantKeyword || ''}" placeholder="Leave blank to use amount+date" style="width:100%;padding:4px;font-size:11px;">
+                <input type="text" class="bilt-rent-keyword form-input" data-card="${cardId}" value="${escapeHtml(cfg.rentMerchantKeyword || '')}" placeholder="Leave blank to use amount+date" style="width:100%;padding:4px;font-size:11px;">
               </div>
             </div>
           </div>
@@ -2703,12 +3534,21 @@ function showCardConfigEditor(preselectedCardId = null) {
           document.getElementById(`biltCalcModal-${cid}`).style.display = 'none';
         });
       });
-      // Calculator rent input - recalculate on change
+      // Calculator rent input - recalculate on change (debounced for storage, immediate for UI)
       document.querySelectorAll('.bilt-calc-rent').forEach(input => {
+        // Debounced save to prevent excessive localStorage writes
+        const debouncedSave = debounce((cid, rentVal) => {
+          if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
+          state.biltConfig[cid].manualRentAmount = rentVal;
+          safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
+        }, 300);
+
         input.addEventListener('input', () => {
           const cid = input.dataset.card;
           const rentVal = parseFloat(input.value) || 0;
           const cashFor100 = (rentVal / 100) * 3;
+
+          // Immediate UI update for responsiveness
           const results = document.querySelector(`.bilt-calc-results[data-card="${cid}"]`);
           if (results) {
             results.querySelector('.calc-100').textContent = cashFor100.toFixed(2);
@@ -2716,10 +3556,9 @@ function showCardConfigEditor(preselectedCardId = null) {
             results.querySelector('.calc-50').textContent = (cashFor100 * 0.50).toFixed(2);
             results.querySelector('.calc-25').textContent = (cashFor100 * 0.25).toFixed(2);
           }
-          // Also save to config for future reference
-          if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
-          state.biltConfig[cid].manualRentAmount = rentVal;
-          localStorage.setItem('ccTracker_biltConfig', JSON.stringify(state.biltConfig));
+
+          // Debounced storage save
+          debouncedSave(cid, rentVal);
         });
       });
       // Bilt Cash as credit checkbox
@@ -2728,7 +3567,7 @@ function showCardConfigEditor(preselectedCardId = null) {
           const cid = checkbox.dataset.card;
           if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
           state.biltConfig[cid].countBiltCashAsCredit = checkbox.checked;
-          localStorage.setItem('ccTracker_biltConfig', JSON.stringify(state.biltConfig));
+          safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
         });
       });
       // Monthly Bilt Cash redemption for rent
@@ -2737,7 +3576,7 @@ function showCardConfigEditor(preselectedCardId = null) {
           const cid = input.dataset.card;
           if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
           state.biltConfig[cid].monthlyBiltCashRedemption = parseFloat(input.value) || 0;
-          localStorage.setItem('ccTracker_biltConfig', JSON.stringify(state.biltConfig));
+          safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
         });
       });
       // Reward option
@@ -2746,7 +3585,7 @@ function showCardConfigEditor(preselectedCardId = null) {
           const cid = radio.dataset.card;
           if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
           state.biltConfig[cid].rewardOption = radio.value;
-          localStorage.setItem('ccTracker_biltConfig', JSON.stringify(state.biltConfig));
+          safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
           document.getElementById(`biltFlexibleSection-${cid}`).style.display = radio.value === 'flexible' ? '' : 'none';
           document.getElementById(`biltHousingSection-${cid}`).style.display = radio.value === 'housing-only' ? '' : 'none';
           // Update radio label backgrounds
@@ -2761,7 +3600,7 @@ function showCardConfigEditor(preselectedCardId = null) {
           const cid = radio.dataset.card;
           if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
           state.biltConfig[cid].rentDetection = radio.value;
-          localStorage.setItem('ccTracker_biltConfig', JSON.stringify(state.biltConfig));
+          safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
           document.getElementById(`biltManualRent-${cid}`).style.display = radio.value === 'manual' ? '' : 'none';
         });
       });
@@ -2771,7 +3610,7 @@ function showCardConfigEditor(preselectedCardId = null) {
           const cid = input.dataset.card;
           if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
           state.biltConfig[cid].manualRentAmount = parseFloat(input.value) || 2000;
-          localStorage.setItem('ccTracker_biltConfig', JSON.stringify(state.biltConfig));
+          safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
           renderCardConfig(); // Re-render to update helper text
         });
       });
@@ -2781,7 +3620,7 @@ function showCardConfigEditor(preselectedCardId = null) {
           const cid = sel.dataset.card;
           if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
           state.biltConfig[cid].manualRentDay = parseInt(sel.value);
-          localStorage.setItem('ccTracker_biltConfig', JSON.stringify(state.biltConfig));
+          safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
         });
       });
       // Rent merchant keyword
@@ -2790,7 +3629,7 @@ function showCardConfigEditor(preselectedCardId = null) {
           const cid = input.dataset.card;
           if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
           state.biltConfig[cid].rentMerchantKeyword = input.value.trim();
-          localStorage.setItem('ccTracker_biltConfig', JSON.stringify(state.biltConfig));
+          safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
         });
       });
       // Bonus category (Obsidian)
@@ -2799,7 +3638,7 @@ function showCardConfigEditor(preselectedCardId = null) {
           const cid = radio.dataset.card;
           if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
           state.biltConfig[cid].bonusCategory = radio.value;
-          localStorage.setItem('ccTracker_biltConfig', JSON.stringify(state.biltConfig));
+          safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
         });
       });
     }
@@ -2876,7 +3715,7 @@ function showResults(results, isNewUpload = false) {
   
   // Count low-confidence transactions (exclude payments which are always 0 confidence)
   const lowConfidenceCount = results.processed.filter(txn => 
-    !txn.isPayment && txn.confidence < CONFIDENCE_REVIEW_THRESHOLD
+    !txn.isPayment && txn.confidence < CONFIDENCE_THRESHOLD
   ).length;
   
   // Stats footer - include low-confidence count
@@ -3305,7 +4144,7 @@ function renderView(view) {
         
         ${(() => {
           // Count low-confidence transactions
-          const lowConfCount = r.processed.filter(t => !t.isPayment && t.confidence < CONFIDENCE_REVIEW_THRESHOLD).length;
+          const lowConfCount = r.processed.filter(t => !t.isPayment && t.confidence < CONFIDENCE_THRESHOLD).length;
           const needsReviewBadge = lowConfCount > 0 ? `<span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:10px;font-size:11px;font-weight:600;margin-left:4px;">${lowConfCount}</span>` : '';
           return `
         <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
@@ -3413,7 +4252,7 @@ function renderView(view) {
       if (cardFilter) txns = txns.filter(t => t.cardName === cardFilter);
       if (catFilter) txns = txns.filter(t => t.category === catFilter);
       if (creditsOnly) txns = txns.filter(t => t.isCredit);
-      if (needsReview) txns = txns.filter(t => !t.isPayment && t.confidence < CONFIDENCE_REVIEW_THRESHOLD);
+      if (needsReview) txns = txns.filter(t => !t.isPayment && t.confidence < CONFIDENCE_THRESHOLD);
       
       // Update top metrics based on filtered transactions
       const filteredTotals = txns.reduce((acc, t) => {
@@ -3562,14 +4401,14 @@ function renderView(view) {
           <span class="badge category-badge"
                 data-txn-id="${escapeHtml(t.id)}" data-merchant="${escapeHtml(t.merchant)}" data-current-cat="${escapeHtml(t.category)}" data-card-id="${escapeHtml(t.cardId)}"
                 style="cursor:pointer;${badgeInfo.style}" title="${escapeHtml(badgeInfo.tooltip)} — Click to change">
-            ${escapeHtml(t.category)}${(t.categorySource === 'rule' || t.categorySource === 'confirmed') ? ' ✓' : ''}
+            ${formatCategoryDebug(t)}
           </span>
         </td>
         <td class="text-right mono" style="color:${amountColor};font-weight:${amountWeight};">${t.isCredit ? '+' : '-'}${formatCurrencyPrecise(Math.abs(t.amount))}</td>
         <td class="text-right mono">${multiDisplay}</td>
         <td class="text-right mono" style="color:${pointsColor};">${pointsDisplay}</td>
         <td style="font-size:11px;color:#78716c;max-width:180px;">
-          ${!t.isPayment && t.confidence < CONFIDENCE_REVIEW_THRESHOLD ? '<span title="Low confidence - may need review" style="color:#b45309;">⚠️ </span>' : ''}${t.isCredit && !t.isPayment ? `
+          ${!t.isPayment && t.confidence < CONFIDENCE_THRESHOLD ? '<span title="Low confidence - may need review" style="color:#b45309;">⚠️ </span>' : ''}${t.isCredit && !t.isPayment ? `
             <span class="credit-toggle" data-txn-id="${escapeHtml(t.id)}" data-card-id="${escapeHtml(t.cardId)}"
                   style="cursor:pointer;text-decoration:underline;color:#2563eb;">
               ${escapeHtml(t.reason)}
@@ -3707,7 +4546,7 @@ function showCreditModal(txnId, cardId) {
     const selected = document.querySelector('input[name="creditType"]:checked')?.value;
     if (selected) {
       state.creditOverrides[txnId] = selected;
-      localStorage.setItem('ccTracker_creditOverrides', JSON.stringify(state.creditOverrides));
+      safeLocalStorageSet('ccTracker_creditOverrides', state.creditOverrides);
       modal.classList.add('hidden');
       // Reprocess to update totals
       await runProcessing();
@@ -3725,7 +4564,12 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
   const modal = document.getElementById('creditModal');
   const content = document.getElementById('creditModalContent');
   const norm = normalize(merchant).substring(0, 50);
-  const hasRule = state.merchantRules[norm];
+  // Card-specific rule key takes precedence over global rule
+  const cardSpecificKey = `${cardId}:${norm}`;
+  const hasCardRule = state.merchantRules[cardSpecificKey];
+  const hasGlobalRule = state.merchantRules[norm];
+  const hasRule = hasCardRule || hasGlobalRule;
+  const activeRuleKey = hasCardRule ? cardSpecificKey : (hasGlobalRule ? norm : null);
   const hasConfirmed = state.confirmedTransactions[txnId];
   
   // Get only the valid categories for this card
@@ -3783,7 +4627,7 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
   }
   
   // Check if this is a low-confidence transaction
-  const isLowConfidence = txn && txn.confidence < CONFIDENCE_REVIEW_THRESHOLD;
+  const isLowConfidence = txn && txn.confidence < CONFIDENCE_THRESHOLD;
   
   // For Freedom Flex, filter to only show base + selected quarterly categories for this transaction's quarter
   if (cardId === 'chase-freedom-flex') {
@@ -3837,7 +4681,7 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
 
     <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer;">
       <input type="checkbox" id="saveAsRule" ${hasRule ? 'checked' : ''}>
-      <span style="font-size:13px;">Apply to all "${escapeHtml(merchant.substring(0, 25))}${merchant.length > 25 ? '...' : ''}" transactions</span>
+      <span style="font-size:13px;">Apply to all "${escapeHtml(merchant.substring(0, 25))}${merchant.length > 25 ? '...' : ''}" on ${escapeHtml(card?.shortName || 'this card')}</span>
     </label>
     ${(isLowConfidence || hasConfirmed) && !hasRule ? '<div style="font-size:11px;color:#78716c;margin-bottom:16px;margin-left:24px;">Uncheck to confirm only this transaction</div>' : '<div style="margin-bottom:16px;"></div>'}
     
@@ -3857,16 +4701,16 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
     
     if (newCategory) {
       if (saveAsRule) {
-        // Save as merchant rule (applies to all transactions with this merchant)
-        state.merchantRules[norm] = newCategory;
-        localStorage.setItem('ccTracker_merchantRules', JSON.stringify(state.merchantRules));
+        // Save as card-specific merchant rule (applies to this merchant on this card only)
+        state.merchantRules[cardSpecificKey] = newCategory;
+        safeLocalStorageSet('ccTracker_merchantRules', state.merchantRules);
         // Remove any single-txn confirmation since rule takes precedence
         delete state.confirmedTransactions[txnId];
-        localStorage.setItem('ccTracker_confirmedTxns', JSON.stringify(state.confirmedTransactions));
+        safeLocalStorageSet('ccTracker_confirmedTxns', state.confirmedTransactions);
       } else {
         // Save as single-transaction confirmation only
         state.confirmedTransactions[txnId] = newCategory;
-        localStorage.setItem('ccTracker_confirmedTxns', JSON.stringify(state.confirmedTransactions));
+        safeLocalStorageSet('ccTracker_confirmedTxns', state.confirmedTransactions);
       }
     }
     
@@ -3908,9 +4752,12 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
       
       // Store filter state globally so renderView can use it
       state.pendingFilterRestore = filterState;
-      
-      delete state.merchantRules[norm];
-      localStorage.setItem('ccTracker_merchantRules', JSON.stringify(state.merchantRules));
+
+      // Delete the active rule (card-specific or global)
+      if (activeRuleKey) {
+        delete state.merchantRules[activeRuleKey];
+        safeLocalStorageSet('ccTracker_merchantRules', state.merchantRules);
+      }
       modal.classList.add('hidden');
       await runProcessing();
       renderView('transactions');
@@ -3934,7 +4781,7 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
       state.pendingFilterRestore = filterState;
       
       delete state.confirmedTransactions[txnId];
-      localStorage.setItem('ccTracker_confirmedTxns', JSON.stringify(state.confirmedTransactions));
+      safeLocalStorageSet('ccTracker_confirmedTxns', state.confirmedTransactions);
       modal.classList.add('hidden');
       await runProcessing();
       renderView('transactions');
@@ -4065,14 +4912,48 @@ async function handleFile(file) {
     try {
       const text = await file.text();
       const backup = JSON.parse(text);
-      
+
       // Validate it's a backup file
       if (!backup.version || !backup.exportedAt) {
         showLoading(false);
         alert('This doesn\'t appear to be a valid backup file. Please use a JSON file exported from this app.');
         return;
       }
-      
+
+      // Validate backup data structure to prevent malicious imports
+      const validationErrors = [];
+      if (backup.transactions && !Array.isArray(backup.transactions)) {
+        validationErrors.push('transactions must be an array');
+      }
+      if (backup.transactions) {
+        for (let i = 0; i < Math.min(backup.transactions.length, 10); i++) {
+          const txn = backup.transactions[i];
+          if (typeof txn !== 'object' || txn === null) {
+            validationErrors.push(`transaction[${i}] is not an object`);
+            break;
+          }
+          if (txn.amount !== undefined && typeof txn.amount !== 'number') {
+            validationErrors.push(`transaction[${i}].amount must be a number`);
+            break;
+          }
+        }
+      }
+      // Validate object types for settings
+      const objectFields = ['cardMappings', 'customPointValues', 'creditOverrides',
+                           'disabledCredits', 'monthlyCredits', 'merchantRules',
+                           'confirmedTransactions', 'cashPlusCategories', 'cffCategories',
+                           'biltConfig', 'columnMappings'];
+      for (const field of objectFields) {
+        if (backup[field] && (typeof backup[field] !== 'object' || Array.isArray(backup[field]))) {
+          validationErrors.push(`${field} must be an object`);
+        }
+      }
+      if (validationErrors.length > 0) {
+        showLoading(false);
+        alert('Invalid backup file structure:\\n' + validationErrors.slice(0, 3).join('\\n'));
+        return;
+      }
+
       // Confirm restore
       const txnCount = backup.transactions?.length || 0;
       if (!confirm(`This will restore ${txnCount} transactions and all settings from your backup.\n\nThis will REPLACE your current data. Continue?`)) {
@@ -4080,63 +4961,63 @@ async function handleFile(file) {
         return;
       }
       
-      // Restore all state
+      // Restore all state using safe localStorage operations
       if (backup.transactions) {
         state.savedTransactions = backup.transactions;
         state.transactions = backup.transactions;
-        localStorage.setItem('ccTracker_transactions', JSON.stringify(backup.transactions));
+        safeLocalStorageSet('ccTracker_transactions', backup.transactions);
       }
       if (backup.cardMappings) {
         state.cardMappings = backup.cardMappings;
-        localStorage.setItem('ccTracker_cardMappings', JSON.stringify(backup.cardMappings));
+        safeLocalStorageSet('ccTracker_cardMappings', backup.cardMappings);
       }
       if (backup.customPointValues) {
         state.customPointValues = backup.customPointValues;
-        localStorage.setItem('ccTracker_customPointValues', JSON.stringify(backup.customPointValues));
+        safeLocalStorageSet('ccTracker_customPointValues', backup.customPointValues);
       }
       if (backup.creditOverrides) {
         state.creditOverrides = backup.creditOverrides;
-        localStorage.setItem('ccTracker_creditOverrides', JSON.stringify(backup.creditOverrides));
+        safeLocalStorageSet('ccTracker_creditOverrides', backup.creditOverrides);
       }
       if (backup.disabledCredits) {
         state.disabledCredits = backup.disabledCredits;
-        localStorage.setItem('ccTracker_disabledCredits', JSON.stringify(backup.disabledCredits));
+        safeLocalStorageSet('ccTracker_disabledCredits', backup.disabledCredits);
       }
       if (backup.monthlyCredits) {
         state.monthlyCredits = backup.monthlyCredits;
-        localStorage.setItem('ccTracker_monthlyCredits', JSON.stringify(backup.monthlyCredits));
+        safeLocalStorageSet('ccTracker_monthlyCredits', backup.monthlyCredits);
       }
       if (backup.merchantRules) {
         state.merchantRules = backup.merchantRules;
-        localStorage.setItem('ccTracker_merchantRules', JSON.stringify(backup.merchantRules));
+        safeLocalStorageSet('ccTracker_merchantRules', backup.merchantRules);
       }
       if (backup.confirmedTransactions) {
         state.confirmedTransactions = backup.confirmedTransactions;
-        localStorage.setItem('ccTracker_confirmedTransactions', JSON.stringify(backup.confirmedTransactions));
+        safeLocalStorageSet('ccTracker_confirmedTransactions', backup.confirmedTransactions);
       }
       if (backup.cashPlusCategories) {
         state.cashPlusCategories = backup.cashPlusCategories;
-        localStorage.setItem('ccTracker_cashPlusCategories', JSON.stringify(backup.cashPlusCategories));
+        safeLocalStorageSet('ccTracker_cashPlusCategories', backup.cashPlusCategories);
       }
       if (backup.cffCategories) {
         state.cffCategories = backup.cffCategories;
-        localStorage.setItem('ccTracker_cffCategories', JSON.stringify(backup.cffCategories));
+        safeLocalStorageSet('ccTracker_cffCategories', backup.cffCategories);
       }
       if (backup.biltConfig) {
         state.biltConfig = backup.biltConfig;
-        localStorage.setItem('ccTracker_biltConfig', JSON.stringify(backup.biltConfig));
+        safeLocalStorageSet('ccTracker_biltConfig', backup.biltConfig);
       }
       if (backup.columnMappings) {
         state.columnMappings = backup.columnMappings;
-        localStorage.setItem('ccTracker_columnMappings', JSON.stringify(backup.columnMappings));
+        safeLocalStorageSet('ccTracker_columnMappings', backup.columnMappings);
       }
-      
+
       showLoading(false);
       updateStoredTxnCount();
-      
+
       // Mark tour as complete since this is a returning user
       state.tourComplete = true;
-      localStorage.setItem('ccTracker_tourComplete', 'true');
+      safeLocalStorageSet('ccTracker_tourComplete', true);
       
       alert(`Backup restored successfully!\n\n${txnCount} transactions and all settings have been restored.`);
       
@@ -4171,8 +5052,8 @@ async function processAfterColumnMapping() {
   // This ensures proper deduplication with the new content-based IDs
   state.savedTransactions = state.savedTransactions.map(t => {
     if (t.id && t.id.startsWith('txn-')) {
-      // Regenerate ID using same logic as parseCSV
-      const newId = `${t.date}-${(t.merchant || '').substring(0, 30)}-${(t.amount || 0).toFixed(2)}-${t.last4 || ''}`.replace(/[^a-zA-Z0-9.-]/g, '_');
+      // Regenerate ID using unified ID generation
+      const newId = generateBaseTransactionId(t.date, t.merchant, t.amount, t.last4);
       return { ...t, id: newId };
     }
     return t;
@@ -4190,7 +5071,7 @@ async function processAfterColumnMapping() {
   
   // Save merged transactions to localStorage
   state.savedTransactions = state.transactions;
-  localStorage.setItem('ccTracker_transactions', JSON.stringify(state.transactions));
+  safeLocalStorageSet('ccTracker_transactions', state.transactions);
   
   // Update the stored count display
   if (typeof updateStoredTxnCount === 'function') updateStoredTxnCount();
@@ -4198,7 +5079,6 @@ async function processAfterColumnMapping() {
   // Show merge summary
   const addedCount = uniqueNew.length;
   const totalCount = state.transactions.length;
-  console.log(`Added ${addedCount} new transactions. Total: ${totalCount}`);
   
   const allLast4s = [...new Set(state.transactions.map(t => t.last4).filter(Boolean))];
   const unmapped = allLast4s.filter(l4 => !state.cardMappings[l4]);
@@ -4332,11 +5212,11 @@ const HELP_CONTENT = {
 };
 
 // Guidance banner dismissal tracking
-const dismissedGuidance = JSON.parse(localStorage.getItem('ccTracker_dismissedGuidance') || '{}');
+const dismissedGuidance = safeJSONParse(localStorage.getItem('ccTracker_dismissedGuidance'), {});
 
 function dismissGuidance(sectionId) {
   dismissedGuidance[sectionId] = true;
-  localStorage.setItem('ccTracker_dismissedGuidance', JSON.stringify(dismissedGuidance));
+  safeLocalStorageSet('ccTracker_dismissedGuidance', dismissedGuidance);
   const banner = document.getElementById('guidance' + sectionId.charAt(0).toUpperCase() + sectionId.slice(1));
   if (banner) banner.style.display = 'none';
 }
@@ -4654,7 +5534,7 @@ function renderTourStep() {
   }
   
   // Save progress
-  localStorage.setItem('ccTracker_tourStep', state.tourStep.toString());
+  safeLocalStorageSet('ccTracker_tourStep', state.tourStep);
   
   // Handle different step types
   if (step.type === 'modal') {
@@ -4766,14 +5646,38 @@ function showTourSpotlight(step) {
   overlay.classList.remove('hidden');
   spotlight.classList.remove('hidden');
   tooltip.classList.remove('hidden');
-  
+
   // Make spotlight clickable if required (set this before positioning)
-  if (step.clickRequired) {
+  // Exception: for 'select-card' action, keep spotlight non-blocking so users can click the dropdown
+  if (step.clickRequired && step.clickAction !== 'select-card') {
     spotlight.classList.add('tour-spotlight-clickable');
     spotlight.onclick = () => handleSpotlightClick(step);
   } else {
     spotlight.classList.remove('tour-spotlight-clickable');
     spotlight.onclick = null;
+
+    // For select-card, set up the change listener immediately since clicks pass through
+    if (step.clickAction === 'select-card') {
+      const select = document.getElementById('configCardSelect');
+      if (select) {
+        const handler = () => {
+          select.removeEventListener('change', handler);
+          setTimeout(() => {
+            state.tourStep++;
+            renderTourStep();
+          }, 300);
+        };
+        select.addEventListener('change', handler);
+        // Auto-advance after timeout if user doesn't interact
+        setTimeout(() => {
+          select.removeEventListener('change', handler);
+          if (state.tourActive && TOUR_STEPS[state.tourStep]?.clickAction === 'select-card') {
+            state.tourStep++;
+            renderTourStep();
+          }
+        }, 5000);
+      }
+    }
   }
   
   // Set content first
@@ -4943,7 +5847,7 @@ function endTour() {
   state.tourActive = false;
   state.tourComplete = true;
   state.tourStep = 0;
-  localStorage.setItem('ccTracker_tourComplete', 'true');
+  safeLocalStorageSet('ccTracker_tourComplete', true);
   localStorage.removeItem('ccTracker_tourStep');
   hideTourUI();
   document.getElementById('tourSkipConfirm').classList.add('hidden');
@@ -5014,29 +5918,57 @@ function showFeatureEducation(feature) {
   
   // Mark as shown
   state.featureEducation[feature] = true;
-  localStorage.setItem('ccTracker_featureEducation', JSON.stringify(state.featureEducation));
-  
-  // Show a simple tooltip
-  const tooltip = document.createElement('div');
-  tooltip.className = 'tour-tooltip';
-  tooltip.style.cssText = 'position:fixed;z-index:10000;';
-  tooltip.innerHTML = `
-    <div class="tour-tooltip-title">${info.title}</div>
-    <div class="tour-tooltip-content">${info.text}</div>
-    <div style="text-align:right;margin-top:12px;">
-      <button class="btn btn-primary" onclick="this.closest('.tour-tooltip').remove()">Got it!</button>
-    </div>
-  `;
-  
-  document.body.appendChild(tooltip);
-  
-  // Position near target
-  const rect = target.getBoundingClientRect();
-  tooltip.style.top = (rect.bottom + 10) + 'px';
-  tooltip.style.left = Math.max(20, rect.left) + 'px';
-  
-  // Scroll into view
+  safeLocalStorageSet('ccTracker_featureEducation', state.featureEducation);
+
+  // Scroll target into view first, then position tooltip after scroll completes
   target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+  // Wait for scroll to complete before positioning tooltip
+  setTimeout(() => {
+    // Show a simple tooltip
+    const tooltip = document.createElement('div');
+    tooltip.className = 'tour-tooltip';
+    tooltip.style.cssText = 'position:fixed;z-index:10000;max-width:360px;';
+    tooltip.innerHTML = `
+      <div class="tour-tooltip-title">${info.title}</div>
+      <div class="tour-tooltip-content">${info.text}</div>
+      <div style="text-align:right;margin-top:12px;">
+        <button class="btn btn-primary" onclick="this.closest('.tour-tooltip').remove()">Got it!</button>
+      </div>
+    `;
+
+    document.body.appendChild(tooltip);
+
+    // Position near target, ensuring it stays within viewport
+    const rect = target.getBoundingClientRect();
+    const tooltipHeight = tooltip.offsetHeight;
+    const viewportHeight = window.innerHeight;
+
+    // Calculate positions
+    let tooltipTop;
+    const spaceBelow = viewportHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    // Prefer positioning below, but move above if not enough space
+    if (spaceBelow >= tooltipHeight + 20) {
+      tooltipTop = rect.bottom + 10;
+    } else if (spaceAbove >= tooltipHeight + 20) {
+      tooltipTop = rect.top - tooltipHeight - 10;
+    } else {
+      // Not enough space either way - center in viewport
+      tooltipTop = Math.max(20, (viewportHeight - tooltipHeight) / 2);
+    }
+
+    // Ensure horizontal position stays in viewport
+    const tooltipWidth = tooltip.offsetWidth;
+    let tooltipLeft = Math.max(20, rect.left);
+    if (tooltipLeft + tooltipWidth > window.innerWidth - 20) {
+      tooltipLeft = window.innerWidth - tooltipWidth - 20;
+    }
+
+    tooltip.style.top = tooltipTop + 'px';
+    tooltip.style.left = tooltipLeft + 'px';
+  }, 400); // Wait for scroll animation
 }
 
 // =============================================================================
@@ -5159,7 +6091,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         return txnYear !== year;
       });
       state.transactions = state.savedTransactions;
-      localStorage.setItem('ccTracker_transactions', JSON.stringify(state.savedTransactions));
+      safeLocalStorageSet('ccTracker_transactions', state.savedTransactions);
       
       const deleted = beforeCount - state.savedTransactions.length;
       alert(`Deleted ${deleted} transactions from ${year}.`);
@@ -5390,7 +6322,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const pointVal = parseFloat(document.getElementById('configPointValue')?.value) / 100;
     if (!isNaN(pointVal) && pointVal > 0) {
       state.customPointValues[cardId] = pointVal;
-      localStorage.setItem('ccTracker_pointValues', JSON.stringify(state.customPointValues));
+      safeLocalStorageSet('ccTracker_pointValues', state.customPointValues);
     }
     
     // Save disabled credits
@@ -5401,7 +6333,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     });
     state.disabledCredits[cardId] = disabledList;
-    localStorage.setItem('ccTracker_disabledCredits', JSON.stringify(state.disabledCredits));
+    safeLocalStorageSet('ccTracker_disabledCredits', state.disabledCredits);
     
     // Save monthly credit claims - NOW YEAR-SPECIFIC
     const selectedYear = state.selectedCreditYear || new Date().getFullYear();
@@ -5431,11 +6363,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         state.monthlyCredits[cardId][creditName][selectedYear] = yearMonths.filter(m => m !== month);
       }
     });
-    localStorage.setItem('ccTracker_monthlyCredits', JSON.stringify(state.monthlyCredits));
+    safeLocalStorageSet('ccTracker_monthlyCredits', state.monthlyCredits);
     
     // Save Cash+ quarterly categories for selected year
+    // Use consistent fallback: most recent transaction year, or current year if no transactions
     if (cardId === 'us-bank-cash-plus') {
-      const cashPlusYear = state.selectedCashPlusYear || new Date().getFullYear();
+      const defaultYear = state.availableYears.length > 0 ? state.availableYears[0] : new Date().getFullYear();
+      const cashPlusYear = state.selectedCashPlusYear || defaultYear;
       ['Q1', 'Q2', 'Q3', 'Q4'].forEach(quarterKey => {
         const yearQuarterKey = `${cashPlusYear}-${quarterKey}`;
         const fivePercent = [];
@@ -5444,15 +6378,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
         const twoPercentCb = document.querySelector(`.cash-plus-2[data-quarter="${quarterKey}"]:checked`);
         const twoPercent = twoPercentCb ? twoPercentCb.dataset.category : '';
-        
+
         state.cashPlusCategories[yearQuarterKey] = { fivePercent, twoPercent };
       });
-      localStorage.setItem('ccTracker_cashPlusCategories', JSON.stringify(state.cashPlusCategories));
+      safeLocalStorageSet('ccTracker_cashPlusCategories', state.cashPlusCategories);
     }
-    
+
     // Save CFF quarterly categories for selected year
+    // Use consistent fallback: most recent transaction year, or current year if no transactions
     if (cardId === 'chase-freedom-flex') {
-      const cffYear = state.selectedCFFYear || new Date().getFullYear();
+      const defaultYear = state.availableYears.length > 0 ? state.availableYears[0] : new Date().getFullYear();
+      const cffYear = state.selectedCFFYear || defaultYear;
       ['Q1', 'Q2', 'Q3', 'Q4'].forEach(quarterKey => {
         const yearQuarterKey = `${cffYear}-${quarterKey}`;
         const selectedCats = [];
@@ -5461,7 +6397,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
         state.cffCategories[yearQuarterKey] = selectedCats;
       });
-      localStorage.setItem('ccTracker_cffCategories', JSON.stringify(state.cffCategories));
+      safeLocalStorageSet('ccTracker_cffCategories', state.cffCategories);
     }
     
     // Stay on config page, just reprocess in background

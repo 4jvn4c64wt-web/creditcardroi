@@ -5282,28 +5282,56 @@ function showFeatureEducation(feature) {
   // Mark as shown
   state.featureEducation[feature] = true;
   safeLocalStorageSet('ccTracker_featureEducation', state.featureEducation);
-  
-  // Show a simple tooltip
-  const tooltip = document.createElement('div');
-  tooltip.className = 'tour-tooltip';
-  tooltip.style.cssText = 'position:fixed;z-index:10000;';
-  tooltip.innerHTML = `
-    <div class="tour-tooltip-title">${info.title}</div>
-    <div class="tour-tooltip-content">${info.text}</div>
-    <div style="text-align:right;margin-top:12px;">
-      <button class="btn btn-primary" onclick="this.closest('.tour-tooltip').remove()">Got it!</button>
-    </div>
-  `;
-  
-  document.body.appendChild(tooltip);
-  
-  // Position near target
-  const rect = target.getBoundingClientRect();
-  tooltip.style.top = (rect.bottom + 10) + 'px';
-  tooltip.style.left = Math.max(20, rect.left) + 'px';
-  
-  // Scroll into view
+
+  // Scroll target into view first, then position tooltip after scroll completes
   target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+  // Wait for scroll to complete before positioning tooltip
+  setTimeout(() => {
+    // Show a simple tooltip
+    const tooltip = document.createElement('div');
+    tooltip.className = 'tour-tooltip';
+    tooltip.style.cssText = 'position:fixed;z-index:10000;max-width:360px;';
+    tooltip.innerHTML = `
+      <div class="tour-tooltip-title">${info.title}</div>
+      <div class="tour-tooltip-content">${info.text}</div>
+      <div style="text-align:right;margin-top:12px;">
+        <button class="btn btn-primary" onclick="this.closest('.tour-tooltip').remove()">Got it!</button>
+      </div>
+    `;
+
+    document.body.appendChild(tooltip);
+
+    // Position near target, ensuring it stays within viewport
+    const rect = target.getBoundingClientRect();
+    const tooltipHeight = tooltip.offsetHeight;
+    const viewportHeight = window.innerHeight;
+
+    // Calculate positions
+    let tooltipTop;
+    const spaceBelow = viewportHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    // Prefer positioning below, but move above if not enough space
+    if (spaceBelow >= tooltipHeight + 20) {
+      tooltipTop = rect.bottom + 10;
+    } else if (spaceAbove >= tooltipHeight + 20) {
+      tooltipTop = rect.top - tooltipHeight - 10;
+    } else {
+      // Not enough space either way - center in viewport
+      tooltipTop = Math.max(20, (viewportHeight - tooltipHeight) / 2);
+    }
+
+    // Ensure horizontal position stays in viewport
+    const tooltipWidth = tooltip.offsetWidth;
+    let tooltipLeft = Math.max(20, rect.left);
+    if (tooltipLeft + tooltipWidth > window.innerWidth - 20) {
+      tooltipLeft = window.innerWidth - tooltipWidth - 20;
+    }
+
+    tooltip.style.top = tooltipTop + 'px';
+    tooltip.style.left = tooltipLeft + 'px';
+  }, 400); // Wait for scroll animation
 }
 
 // =============================================================================

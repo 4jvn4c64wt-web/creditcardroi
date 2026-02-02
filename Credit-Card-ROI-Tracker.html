@@ -771,8 +771,8 @@ const CARDS = {
     shortName: 'Sapphire Reserve',
     annualFee: 795,
     pointValue: 0.017,
-    // chase-travel: Portal purchases only. travel: Generic travel (flights/hotels booked direct, etc.)
-    multipliers: { 'chase-travel': 8, 'flights-direct': 4, 'hotels-direct': 4, 'travel': 3, 'dining': 3, 'lyft': 5 },
+    // CSR only has bonuses for specific travel categories - no generic 'travel' bonus
+    multipliers: { 'chase-travel': 8, 'flights-direct': 4, 'hotels-direct': 4, 'dining': 3, 'lyft': 5 },
     baseRate: 1,
     credits: [
       { name: 'Travel Credit', amount: 300, keywords: ['TRAVEL CREDIT'], manual: false },
@@ -786,7 +786,7 @@ const CARDS = {
       { name: 'Peloton', amount: 120, keywords: ['PELOTON'], manual: false },
       { name: 'Apple Music/TV+', amount: 288, keywords: [], manual: true },
     ],
-    categories: ['chase-travel', 'flights-direct', 'hotels-direct', 'travel', 'dining', 'lyft', 'other']
+    categories: ['chase-travel', 'flights-direct', 'hotels-direct', 'dining', 'lyft', 'other']
   },
   'chase-sapphire-preferred': {
     name: 'Chase Sapphire Preferred',

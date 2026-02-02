@@ -1147,14 +1147,17 @@ function classifyMerchant(merchant, monarchCategory, cardId = null) {
   const norm = normalize(merchant);
   const cacheKey = norm.substring(0, 50);
   const normMonarch = normalize(monarchCategory || '');
-  
+
   // Tier 1: User-defined merchant rules (100% confidence)
-  if (state.merchantRules[cacheKey]) {
-    return { 
-      category: state.merchantRules[cacheKey], 
-      source: 'rule', 
+  // Check card-specific rule first, then fall back to legacy global rule
+  const cardSpecificKey = cardId ? `${cardId}:${cacheKey}` : null;
+  const ruleCategory = (cardSpecificKey && state.merchantRules[cardSpecificKey]) || state.merchantRules[cacheKey];
+  if (ruleCategory) {
+    return {
+      category: ruleCategory,
+      source: 'rule',
       confidence: CONFIDENCE.CERTAIN,
-      reason: 'User-defined rule'
+      reason: cardSpecificKey && state.merchantRules[cardSpecificKey] ? 'User rule (this card)' : 'User rule (all cards)'
     };
   }
   
@@ -2106,8 +2109,12 @@ async function processTransactions(transactions) {
       };
       continue;
     }
-    
-    const result = classifyMerchant(txn.merchant, txn.monarchCategory);
+
+    // Look up cardId for card-specific rule matching
+    const cardId = state.cardMappings[txn.last4];
+    const effectiveCardId = (cardId && cardId !== 'skip') ? cardId : null;
+
+    const result = classifyMerchant(txn.merchant, txn.monarchCategory, effectiveCardId);
     if (result.category) {
       classifications[txn.id] = result;
     } else {
@@ -3968,7 +3975,12 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
   const modal = document.getElementById('creditModal');
   const content = document.getElementById('creditModalContent');
   const norm = normalize(merchant).substring(0, 50);
-  const hasRule = state.merchantRules[norm];
+  // Card-specific rule key takes precedence over global rule
+  const cardSpecificKey = `${cardId}:${norm}`;
+  const hasCardRule = state.merchantRules[cardSpecificKey];
+  const hasGlobalRule = state.merchantRules[norm];
+  const hasRule = hasCardRule || hasGlobalRule;
+  const activeRuleKey = hasCardRule ? cardSpecificKey : (hasGlobalRule ? norm : null);
   const hasConfirmed = state.confirmedTransactions[txnId];
   
   // Get only the valid categories for this card
@@ -4080,7 +4092,7 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
 
     <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer;">
       <input type="checkbox" id="saveAsRule" ${hasRule ? 'checked' : ''}>
-      <span style="font-size:13px;">Apply to all "${escapeHtml(merchant.substring(0, 25))}${merchant.length > 25 ? '...' : ''}" transactions</span>
+      <span style="font-size:13px;">Apply to all "${escapeHtml(merchant.substring(0, 25))}${merchant.length > 25 ? '...' : ''}" on ${escapeHtml(card?.shortName || 'this card')}</span>
     </label>
     ${(isLowConfidence || hasConfirmed) && !hasRule ? '<div style="font-size:11px;color:#78716c;margin-bottom:16px;margin-left:24px;">Uncheck to confirm only this transaction</div>' : '<div style="margin-bottom:16px;"></div>'}
     
@@ -4100,8 +4112,8 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
     
     if (newCategory) {
       if (saveAsRule) {
-        // Save as merchant rule (applies to all transactions with this merchant)
-        state.merchantRules[norm] = newCategory;
+        // Save as card-specific merchant rule (applies to this merchant on this card only)
+        state.merchantRules[cardSpecificKey] = newCategory;
         safeLocalStorageSet('ccTracker_merchantRules', state.merchantRules);
         // Remove any single-txn confirmation since rule takes precedence
         delete state.confirmedTransactions[txnId];
@@ -4151,9 +4163,12 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
       
       // Store filter state globally so renderView can use it
       state.pendingFilterRestore = filterState;
-      
-      delete state.merchantRules[norm];
-      safeLocalStorageSet('ccTracker_merchantRules', state.merchantRules);
+
+      // Delete the active rule (card-specific or global)
+      if (activeRuleKey) {
+        delete state.merchantRules[activeRuleKey];
+        safeLocalStorageSet('ccTracker_merchantRules', state.merchantRules);
+      }
       modal.classList.add('hidden');
       await runProcessing();
       renderView('transactions');

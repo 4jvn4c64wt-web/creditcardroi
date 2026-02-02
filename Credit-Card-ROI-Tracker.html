@@ -879,7 +879,7 @@ const KNOWN_MERCHANTS = {
   // IMPORTANT: Uber patterns must be checked carefully - uber eats is dining, uber ride is transit
   // 'uber eats' is listed above in Food delivery section and will be matched first
   'lyft': 'lyft', 'uber trip': 'transit', 'ubertrip': 'transit', 'uber ride': 'transit',
-  'uber ': 'transit', // Must come after more specific uber patterns
+  'uber*': 'transit', 'uber': 'transit', // 'uber' must come after 'uber eats' in the iteration
   'mta': 'transit', 'metro': 'transit', 'bart': 'transit', 'amtrak': 'transit',
   'citi bike': 'transit', 'citibike': 'transit', 'lime scooter': 'transit', 'lime ride': 'transit',
   'bird ride': 'transit', 'revel': 'transit', 'via ': 'transit', 'nj transit': 'transit',
@@ -1154,6 +1154,12 @@ const SPECIFIC_CATEGORY_KEYWORDS = {
   'charity': ['charity', 'donation', 'nonprofit', 'red cross', 'united way']
 };
 
+// Keyword exclusions: if merchant contains any of these, don't match the category
+// This prevents false positives like "HK Best Barbers" matching 'bar' → dining
+const KEYWORD_EXCLUSIONS = {
+  'bar': ['barber', 'chocolate bar', 'candy bar', 'granola bar', 'protein bar', 'snack bar', 'handlebar', 'sidebar', 'crossbar', 'toolbar']
+};
+
 
 /**
  * Find the effective category for a specific card by walking up the hierarchy.
@@ -1208,6 +1214,11 @@ function classifyToSpecificCategory(merchantName) {
     if (category === 'skip') continue;
     for (const pattern of patterns) {
       if (norm.includes(pattern)) {
+        // Check for exclusions (e.g., 'barber' should not match 'bar' category)
+        const exclusions = KEYWORD_EXCLUSIONS[category];
+        if (exclusions && exclusions.some(excl => norm.includes(excl))) {
+          continue; // Skip this pattern due to exclusion
+        }
         return { category, reason: `Matched: "${pattern}"` };
       }
     }
@@ -1485,8 +1496,20 @@ function classifyMerchant(merchant, csvCategory, cardId = null) {
   const cacheKey = norm.substring(0, 50);
   const normCSV = (csvCategory || '').toLowerCase().trim();
 
+  // DEBUG: Trace specific merchants to diagnose classification issues
+  const DEBUG_MERCHANTS = ['promenade', 'headspace', 'wine'];
+  const isDebug = DEBUG_MERCHANTS.some(d => norm.includes(d));
+  if (isDebug) {
+    console.log(`[CLASSIFY DEBUG] ========================================`);
+    console.log(`[CLASSIFY DEBUG] Merchant: "${merchant}" → normalized: "${norm}"`);
+    console.log(`[CLASSIFY DEBUG] CSV Category: "${csvCategory}" → normalized: "${normCSV}"`);
+  }
+
   // Determine if CSV category is vague (triggers discovery mode)
   const isVagueCSV = !normCSV || VAGUE_CSV_CATEGORIES.some(v => normCSV.includes(v));
+  if (isDebug) {
+    console.log(`[CLASSIFY DEBUG] Is CSV vague? ${isVagueCSV} (VAGUE_CSV_CATEGORIES check)`);
+  }
 
   // ==========================================================================
   // PRIORITY 1: Skip Detection
@@ -1522,6 +1545,7 @@ function classifyMerchant(merchant, csvCategory, cardId = null) {
   // ==========================================================================
   for (const [key, cat] of Object.entries(KNOWN_MERCHANTS)) {
     if (norm.includes(key)) {
+      if (isDebug) console.log(`[CLASSIFY DEBUG] KNOWN MERCHANT MATCH: "${key}" → ${cat} (confidence: 100)`);
       state.merchantCache[cacheKey] = cat;
       return {
         subcategory: cat,
@@ -1531,6 +1555,7 @@ function classifyMerchant(merchant, csvCategory, cardId = null) {
       };
     }
   }
+  if (isDebug) console.log(`[CLASSIFY DEBUG] No known merchant match found`);
 
   // ==========================================================================
   // STEP 1: Determine Subcategory
@@ -1544,10 +1569,12 @@ function classifyMerchant(merchant, csvCategory, cardId = null) {
   if (!isVagueCSV) {
     // CSV category is specific - TRUST IT for subcategory
     const csvSubcategory = mapCSVToSubcategory(normCSV);
+    if (isDebug) console.log(`[CLASSIFY DEBUG] mapCSVToSubcategory("${normCSV}") → "${csvSubcategory}"`);
 
     if (csvSubcategory) {
       // Special case: travel needs its own classification
       if (csvSubcategory === '_travel_') {
+        if (isDebug) console.log(`[CLASSIFY DEBUG] Travel category detected, calling classifyTravel()`);
         return classifyTravel(norm, cardId);
       }
 
@@ -1555,17 +1582,20 @@ function classifyMerchant(merchant, csvCategory, cardId = null) {
       confidence = CONFIDENCE_ADJUSTMENTS.BASE_MATCH;
       source = 'csv-category';
       reasons.push(`CSV: "${csvCategory}"`);
+      if (isDebug) console.log(`[CLASSIFY DEBUG] CSV → subcategory: "${subcategory}", confidence: ${confidence}`);
     }
   }
 
   // If no subcategory yet (vague CSV or CSV didn't map), try keyword discovery
   if (!subcategory) {
     const keywordMatch = classifyToSpecificCategory(norm);
+    if (isDebug) console.log(`[CLASSIFY DEBUG] Keyword discovery: ${keywordMatch ? JSON.stringify(keywordMatch) : 'null'}`);
     if (keywordMatch && keywordMatch.category !== 'skip') {
       subcategory = keywordMatch.category;
       confidence = CONFIDENCE_ADJUSTMENTS.BASE_MATCH; // Keywords are trustworthy
       source = 'keyword';
       reasons.push(keywordMatch.reason);
+      if (isDebug) console.log(`[CLASSIFY DEBUG] Keyword → subcategory: "${subcategory}", confidence: ${confidence}`);
     }
   }
 
@@ -1575,17 +1605,22 @@ function classifyMerchant(merchant, csvCategory, cardId = null) {
   if (subcategory) {
     // Check if merchant keywords support or conflict with the subcategory
     const keywordCheck = classifyToSpecificCategory(norm);
+    if (isDebug) console.log(`[CLASSIFY DEBUG] Keyword check for conflicts: ${keywordCheck ? JSON.stringify(keywordCheck) : 'null'}`);
     if (keywordCheck && keywordCheck.category !== 'skip') {
-      if (subcategoryAgrees(keywordCheck.category, subcategory)) {
+      const agrees = subcategoryAgrees(keywordCheck.category, subcategory);
+      if (isDebug) console.log(`[CLASSIFY DEBUG] subcategoryAgrees("${keywordCheck.category}", "${subcategory}") = ${agrees}`);
+      if (agrees) {
         if (source === 'csv-category') {
           // Keywords support CSV category
           confidence += CONFIDENCE_ADJUSTMENTS.KEYWORD_SUPPORTS;
           reasons.push(`Keyword confirms: "${keywordCheck.reason}"`);
+          if (isDebug) console.log(`[CLASSIFY DEBUG] Keyword SUPPORTS CSV (+${CONFIDENCE_ADJUSTMENTS.KEYWORD_SUPPORTS}) → confidence: ${confidence}`);
         }
       } else if (source === 'csv-category') {
         // Keywords conflict with CSV category - reduce confidence
         confidence += CONFIDENCE_ADJUSTMENTS.KEYWORD_CONFLICTS;
         reasons.push(`Keyword conflicts: "${keywordCheck.reason}"`);
+        if (isDebug) console.log(`[CLASSIFY DEBUG] Keyword CONFLICTS with CSV (${CONFIDENCE_ADJUSTMENTS.KEYWORD_CONFLICTS}) → confidence: ${confidence}`);
       }
     }
 
@@ -1595,20 +1630,24 @@ function classifyMerchant(merchant, csvCategory, cardId = null) {
       if (subcategoryAgrees(posResult.suggestedCategory, subcategory)) {
         confidence += CONFIDENCE_ADJUSTMENTS.POS_PATTERN_SUPPORTS;
         reasons.push('POS pattern confirms');
+        if (isDebug) console.log(`[CLASSIFY DEBUG] POS pattern SUPPORTS (+${CONFIDENCE_ADJUSTMENTS.POS_PATTERN_SUPPORTS}) → confidence: ${confidence}`);
       } else {
         confidence += CONFIDENCE_ADJUSTMENTS.POS_PATTERN_CONFLICTS;
         reasons.push('POS pattern conflicts');
+        if (isDebug) console.log(`[CLASSIFY DEBUG] POS pattern CONFLICTS (${CONFIDENCE_ADJUSTMENTS.POS_PATTERN_CONFLICTS}) → confidence: ${confidence}`);
       }
     }
 
     // Cache and return
     state.merchantCache[cacheKey] = subcategory;
-    return {
+    const finalResult = {
       subcategory,
       confidence: Math.max(0, confidence), // Don't go negative
       source,
       reason: reasons.join('; ')
     };
+    if (isDebug) console.log(`[CLASSIFY DEBUG] FINAL RESULT: ${JSON.stringify(finalResult)}`);
+    return finalResult;
   }
 
   // ==========================================================================
@@ -1616,6 +1655,7 @@ function classifyMerchant(merchant, csvCategory, cardId = null) {
   // ==========================================================================
   const posResult = checkPOSPatterns(norm);
   if (posResult.matched) {
+    if (isDebug) console.log(`[CLASSIFY DEBUG] POS pattern fallback: ${posResult.suggestedCategory}`);
     return {
       subcategory: posResult.suggestedCategory,
       confidence: CONFIDENCE_ADJUSTMENTS.POS_PATTERN_SUPPORTS, // Low confidence
@@ -1627,6 +1667,7 @@ function classifyMerchant(merchant, csvCategory, cardId = null) {
   // ==========================================================================
   // UNKNOWN - needs manual classification
   // ==========================================================================
+  if (isDebug) console.log(`[CLASSIFY DEBUG] UNKNOWN - no classification found`);
   return {
     subcategory: null,
     confidence: 0,

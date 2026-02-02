@@ -966,6 +966,252 @@ const MONARCH_MAP = {
 };
 
 // =============================================================================
+// CATEGORY HIERARCHY (Child → Parent mapping)
+// Allows transactions to be classified to specific categories, then walk up
+// the hierarchy to find the best matching category a card actually has.
+// =============================================================================
+const CATEGORY_HIERARCHY = {
+  // Dining children
+  'food-truck': 'dining',
+  'cafe': 'dining',
+  'coffee-shop': 'dining',
+  'bar': 'dining',
+  'bakery': 'dining',
+  'fast-food': 'dining',
+  'fine-dining': 'dining',
+  'food-delivery': 'dining',
+
+  // Grocery children
+  'supermarket': 'grocery',
+  'farmers-market': 'grocery',
+  'butcher': 'grocery',
+  'organic-store': 'grocery',
+
+  // Gas/Auto children
+  'car-wash': 'gas',
+  'car-maintenance': 'automotive',
+  'car-repair': 'automotive',
+  'parking': 'automotive',
+  'toll': 'automotive',
+  'automotive': 'other',
+
+  // Travel children
+  'cruise': 'travel',
+  'resort': 'hotels-direct',
+  'vacation-rental': 'travel',
+  'airbnb': 'travel',
+
+  // Transit children
+  'lyft': 'transit',
+  'uber-ride': 'transit',
+  'taxi': 'transit',
+  'subway': 'transit',
+  'bus': 'transit',
+
+  // Shopping children
+  'makeup': 'shopping',
+  'beauty': 'shopping',
+  'clothing': 'shopping',
+  'electronics': 'shopping',
+  'furniture': 'shopping',
+  'home-decor': 'shopping',
+  'sporting-goods': 'shopping',
+  'books': 'shopping',
+  'toys': 'shopping',
+  'retail': 'shopping',
+  'department-stores': 'shopping',
+  'select-clothing': 'shopping',
+
+  // Utilities children
+  'electric': 'utilities',
+  'water': 'utilities',
+  'internet': 'utilities',
+  'cable': 'utilities',
+  'phone': 'utilities',
+  'cell-phone': 'utilities',
+
+  // Entertainment children
+  'movies': 'entertainment',
+  'movie-theaters': 'entertainment',
+  'concerts': 'entertainment',
+  'theater': 'entertainment',
+  'museum': 'entertainment',
+  'amusement-park': 'entertainment',
+  'gaming': 'entertainment',
+
+  // Pet children
+  'pet-food': 'pet',
+  'veterinary': 'pet',
+  'pet-grooming': 'pet',
+  'pet': 'other',
+
+  // Services → other
+  'salon': 'other',
+  'spa': 'other',
+  'laundry': 'other',
+  'dry-cleaning': 'other',
+  'insurance': 'other',
+  'legal': 'other',
+  'tax': 'other',
+  'education': 'other',
+  'charity': 'other',
+
+  // Parent categories (null = top-level, no further rollup)
+  'dining': null,
+  'grocery': null,
+  'gas': null,
+  'drugstore': null,
+  'transit': null,
+  'streaming': null,
+  'utilities': null,
+  'fitness': null,
+  'entertainment': null,
+  'shopping': null,
+  'travel': null,
+  'flights-direct': 'travel',
+  'hotels-direct': 'travel',
+  'rent': null,
+  'ground-transport': 'transit',
+  'other': null
+};
+
+// Specific category keywords for more granular classification
+// Order matters: more specific patterns should be checked first
+const SPECIFIC_CATEGORY_KEYWORDS = {
+  // Skip categories - checked first to filter out non-purchase transactions
+  'skip': ['transfer', 'payment thank you', 'autopay', 'credit card payment', 'paycheck', 'direct deposit', 'income', 'payroll', 'ach credit'],
+
+  // Dining specifics
+  'food-truck': ['food truck'],
+  'cafe': ['cafe', 'caffè', 'caffe'],
+  'coffee-shop': ['coffee', 'starbucks', 'dunkin', 'peets', 'blue bottle', 'philz'],
+  'bakery': ['bakery', 'donut', 'bagel', 'pastry', 'bread'],
+  'bar': ['bar ', ' bar', 'pub', 'brewery', 'tavern', 'lounge', 'taproom', 'wine bar'],
+  'fast-food': ['mcdonalds', 'wendys', 'burger king', 'taco bell', 'chick-fil-a', 'popeyes', 'arbys', 'sonic', 'jack in the box', 'five guys', 'shake shack', 'in-n-out', 'chipotle', 'qdoba', 'panera'],
+  'food-delivery': ['doordash', 'uber eats', 'grubhub', 'seamless', 'caviar', 'postmates', 'instacart'],
+  'fine-dining': ['steakhouse', 'fine dining'],
+
+  // Grocery specifics
+  'supermarket': ['supermarket', 'safeway', 'kroger', 'publix', 'albertsons', 'heb', 'meijer', 'giant', 'stop & shop', 'food lion', 'aldi', 'lidl', 'wegmans', 'whole foods', 'trader joe'],
+  'farmers-market': ['farmers market', 'farm stand'],
+  'organic-store': ['organic', 'natural grocers', 'sprouts'],
+
+  // Auto specifics
+  'car-wash': ['car wash', 'carwash'],
+  'car-maintenance': ['oil change', 'jiffy lube', 'valvoline', 'firestone', 'goodyear', 'discount tire', 'tire', 'auto repair', 'mechanic'],
+  'parking': ['parking', 'spothero', 'parkwhiz', 'parkme'],
+  'toll': ['toll', 'ezpass', 'fastrak', 'sunpass'],
+
+  // Travel specifics
+  'cruise': ['cruise', 'carnival', 'royal caribbean', 'norwegian cruise'],
+  'resort': ['resort'],
+  'airbnb': ['airbnb', 'vrbo', 'vacation rental', 'homeaway'],
+
+  // Transit specifics
+  'lyft': ['lyft'],
+  'uber-ride': ['uber trip', 'uber ride'],
+  'taxi': ['taxi', 'cab ', 'yellow cab'],
+  'subway': ['subway', 'metro', 'mta', 'wmata', 'bart', 'cta'],
+  'bus': ['bus', 'greyhound', 'megabus', 'flixbus'],
+
+  // Shopping specifics
+  'makeup': ['makeup', 'cosmetic', 'sephora', 'ulta', 'mac cosmetics'],
+  'beauty': ['beauty', 'salon', 'spa', 'nail'],
+  'clothing': ['clothing', 'apparel', 'fashion', 'shoes', 'nike', 'adidas', 'gap', 'old navy', 'h&m', 'zara', 'uniqlo', 'nordstrom', 'macys', 'kohls'],
+  'electronics': ['best buy', 'apple store', 'micro center', 'newegg', 'b&h photo'],
+  'furniture': ['furniture', 'ikea', 'wayfair', 'pottery barn', 'crate & barrel', 'west elm'],
+  'home-decor': ['home decor', 'bed bath', 'homegoods', 'pier 1'],
+  'books': ['books', 'barnes & noble', 'bookstore'],
+  'toys': ['toys', 'toy store', 'lego store', 'gamestop'],
+
+  // Entertainment specifics
+  'movies': ['movie', 'cinema', 'amc', 'regal', 'cinemark', 'fandango'],
+  'concerts': ['concert', 'live music', 'ticketmaster', 'stubhub', 'live nation'],
+  'museum': ['museum', 'gallery', 'exhibit'],
+  'amusement-park': ['disney', 'universal', 'six flags', 'amusement', 'theme park', 'legoland', 'seaworld'],
+  'gaming': ['steam', 'playstation', 'xbox', 'nintendo', 'epic games'],
+
+  // Pet specifics
+  'pet-food': ['pet food', 'dog food', 'cat food', 'chewy'],
+  'veterinary': ['veterinary', 'vet ', 'animal hospital', 'banfield'],
+  'pet-grooming': ['pet grooming', 'dog grooming', 'groomer'],
+
+  // Utilities specifics
+  'electric': ['electric', 'power company', 'energy'],
+  'water': ['water utility', 'water company', 'water bill'],
+  'internet': ['comcast', 'xfinity', 'spectrum', 'verizon fios', 'att internet', 'cox'],
+  'cable': ['cable tv', 'directv', 'dish network'],
+
+  // Services
+  'salon': ['salon', 'hair', 'barber', 'supercuts', 'great clips'],
+  'laundry': ['laundry', 'dry clean', 'cleaners'],
+  'insurance': ['insurance', 'geico', 'progressive', 'state farm', 'allstate'],
+  'education': ['tuition', 'school', 'university', 'college', 'coursera', 'udemy'],
+  'charity': ['charity', 'donation', 'nonprofit', 'red cross', 'united way']
+};
+
+/**
+ * Find the effective category for a specific card by walking up the hierarchy.
+ * If the card doesn't have a multiplier for the specific category, find the
+ * nearest parent category it does have.
+ * @param {string} specificCategory - The most specific category classification
+ * @param {string} cardId - The card ID to check
+ * @returns {string} The effective category to use for this card
+ */
+function getEffectiveCategory(specificCategory, cardId) {
+  const card = CARDS[cardId];
+  if (!card) return specificCategory;
+
+  let current = specificCategory;
+
+  // Walk up hierarchy until we find a category the card has, or hit null
+  while (current) {
+    // Check if card has multiplier for this category
+    if (card.multipliers && card.multipliers[current] !== undefined) {
+      return current;
+    }
+    // Check if it's in the card's base categories
+    if (card.categories?.includes(current)) {
+      return current;
+    }
+    // Walk up to parent
+    current = CATEGORY_HIERARCHY[current];
+  }
+
+  // No match found, return 'other'
+  return 'other';
+}
+
+/**
+ * Classify to most specific category using keyword matching
+ * Returns null if no specific match found (fall through to other classification)
+ * @param {string} merchantName - Normalized merchant name
+ * @returns {{category: string, reason: string}|null}
+ */
+function classifyToSpecificCategory(merchantName) {
+  const norm = merchantName.toLowerCase();
+
+  // Check skip patterns first
+  for (const pattern of SPECIFIC_CATEGORY_KEYWORDS['skip']) {
+    if (norm.includes(pattern)) {
+      return { category: 'skip', reason: `Matched skip pattern: "${pattern}"` };
+    }
+  }
+
+  // Check specific categories (skip 'skip' since we already checked it)
+  for (const [category, patterns] of Object.entries(SPECIFIC_CATEGORY_KEYWORDS)) {
+    if (category === 'skip') continue;
+    for (const pattern of patterns) {
+      if (norm.includes(pattern)) {
+        return { category, reason: `Matched: "${pattern}"` };
+      }
+    }
+  }
+
+  return null;
+}
+
+// =============================================================================
 // STATE
 // =============================================================================
 let state = {
@@ -1148,6 +1394,20 @@ function classifyMerchant(merchant, monarchCategory, cardId = null) {
   const cacheKey = norm.substring(0, 50);
   const normMonarch = normalize(monarchCategory || '');
 
+  // Tier 0: Early skip detection for non-purchase transactions
+  // Check before anything else to filter out transfers, payments, income
+  const skipPatterns = SPECIFIC_CATEGORY_KEYWORDS['skip'] || [];
+  for (const pattern of skipPatterns) {
+    if (norm.includes(pattern)) {
+      return {
+        category: 'skip',
+        source: 'pattern',
+        confidence: CONFIDENCE.CERTAIN,
+        reason: `Skipped: "${pattern}"`
+      };
+    }
+  }
+
   // Tier 1: User-defined merchant rules (100% confidence)
   // Check card-specific rule first, then fall back to legacy global rule
   const cardSpecificKey = cardId ? `${cardId}:${cacheKey}` : null;
@@ -1235,15 +1495,37 @@ function classifyMerchant(merchant, monarchCategory, cardId = null) {
   
   // Tier 2: Shopping (lower confidence, could be many things)
   if (normMonarch.includes('shopping')) {
-    return { 
-      category: 'shopping', 
-      source: 'monarch', 
+    return {
+      category: 'shopping',
+      source: 'monarch',
       confidence: CONFIDENCE.MEDIUM,
       reason: 'Monarch: Shopping'
     };
   }
-  
-  // Tier 3: Fallback heuristics when no Monarch category available
+
+  // Tier 3: Specific category keyword matching (hierarchical categories)
+  // This catches more granular categories that will roll up via CATEGORY_HIERARCHY
+  const specificMatch = classifyToSpecificCategory(norm);
+  if (specificMatch) {
+    // Skip category means this isn't a trackable transaction
+    if (specificMatch.category === 'skip') {
+      return {
+        category: 'skip',
+        source: 'pattern',
+        confidence: CONFIDENCE.HIGH,
+        reason: specificMatch.reason
+      };
+    }
+    state.merchantCache[cacheKey] = specificMatch.category;
+    return {
+      category: specificMatch.category,
+      source: 'keyword',
+      confidence: CONFIDENCE.MEDIUM,
+      reason: specificMatch.reason
+    };
+  }
+
+  // Tier 4: Fallback heuristics when no Monarch category available
   // These are weak signals used only when we have no better information
   if (!monarchCategory || normMonarch === '' || normMonarch === 'uncategorized' || normMonarch === 'other') {
     // Check for common receipt patterns that suggest dining
@@ -1464,18 +1746,33 @@ function getMultiplier(cardId, category, txnDate = null) {
     const quarter = txnDate ? getQuarterForDate(txnDate) : getCurrentQuarter();
     const year = getYearFromDate(txnDate);
     const yearQuarterKey = `${year}-${quarter}`;
-    
+
     // Try year-specific key first, then fall back to quarter-only key for legacy data
     const quarterCats = state.cashPlusCategories[yearQuarterKey] || state.cashPlusCategories[quarter];
-    
+
     if (quarterCats) {
-      // Check 5% categories
-      if (quarterCats.fivePercent?.includes(category)) {
-        return { rate: 5, reason: `5% ${category} (${year} ${quarter} selection)` };
+      // Walk up hierarchy to check if this category or any parent matches 5% selection
+      let checkCat = category;
+      while (checkCat) {
+        if (quarterCats.fivePercent?.includes(checkCat)) {
+          const reason = checkCat !== category
+            ? `5% ${checkCat} (from ${category}, ${year} ${quarter})`
+            : `5% ${category} (${year} ${quarter} selection)`;
+          return { rate: 5, reason };
+        }
+        checkCat = CATEGORY_HIERARCHY[checkCat];
       }
-      // Check 2% category
-      if (quarterCats.twoPercent === category) {
-        return { rate: 2, reason: `2% ${category} (${year} ${quarter} selection)` };
+
+      // Walk up hierarchy to check if this category or any parent matches 2% selection
+      checkCat = category;
+      while (checkCat) {
+        if (quarterCats.twoPercent === checkCat) {
+          const reason = checkCat !== category
+            ? `2% ${checkCat} (from ${category}, ${year} ${quarter})`
+            : `2% ${category} (${year} ${quarter} selection)`;
+          return { rate: 2, reason };
+        }
+        checkCat = CATEGORY_HIERARCHY[checkCat];
       }
     }
     // Cash+ base rate is 1%
@@ -1487,20 +1784,32 @@ function getMultiplier(cardId, category, txnDate = null) {
     const quarter = txnDate ? getQuarterForDate(txnDate) : getCurrentQuarter();
     const year = getYearFromDate(txnDate);
     const yearQuarterKey = `${year}-${quarter}`;
-    
+
     // Try year-specific key first, then fall back to quarter-only key for legacy data
     const selectedCats = state.cffCategories[yearQuarterKey] || state.cffCategories[quarter] || [];
-    
-    // Check if this category is a selected 5% category for this quarter
-    if (selectedCats.includes(category)) {
-      return { rate: 5, reason: `5% ${category} (${year} ${quarter} bonus)` };
+
+    // Walk up hierarchy to check if this category or any parent is a selected 5% category
+    let checkCat = category;
+    while (checkCat) {
+      if (selectedCats.includes(checkCat)) {
+        const reason = checkCat !== category
+          ? `5% ${checkCat} (from ${category}, ${year} ${quarter})`
+          : `5% ${category} (${year} ${quarter} bonus)`;
+        return { rate: 5, reason };
+      }
+      checkCat = CATEGORY_HIERARCHY[checkCat];
     }
-    
-    // Check static multipliers (chase-travel 5x, dining 3x, drugstore 3x)
-    if (card.multipliers[category]) {
-      return { rate: card.multipliers[category], reason: `${card.multipliers[category]}x ${category}` };
+
+    // Check static multipliers with hierarchy (chase-travel 5x, dining 3x, drugstore 3x)
+    const effectiveCat = getEffectiveCategory(category, cardId);
+    if (card.multipliers[effectiveCat]) {
+      const rate = card.multipliers[effectiveCat];
+      if (effectiveCat !== category) {
+        return { rate, reason: `${rate}x ${effectiveCat} (from ${category})` };
+      }
+      return { rate, reason: `${rate}x ${effectiveCat}` };
     }
-    
+
     return { rate: card.baseRate, reason: `${card.baseRate}x base rate` };
   }
   
@@ -1584,20 +1893,18 @@ function getMultiplier(cardId, category, txnDate = null) {
     return { rate: card.baseRate, reason: `${card.baseRate}x base rate` };
   }
   
-  if (card.multipliers[category]) {
-    return { rate: card.multipliers[category], reason: `${card.multipliers[category]}x ${category}` };
+  // Use hierarchy to find the best matching category for this card
+  const effectiveCat = getEffectiveCategory(category, cardId);
+
+  if (card.multipliers[effectiveCat]) {
+    const rate = card.multipliers[effectiveCat];
+    // Show both specific and effective category if they differ
+    if (effectiveCat !== category && category !== 'other') {
+      return { rate, reason: `${rate}x ${effectiveCat} (from ${category})` };
+    }
+    return { rate, reason: `${rate}x ${effectiveCat}` };
   }
-  
-  // Handle travel-ota as general travel
-  if ((category === 'travel-ota' || category === 'travel') && card.multipliers['travel']) {
-    return { rate: card.multipliers['travel'], reason: `${card.multipliers['travel']}x travel (OTA)` };
-  }
-  
-  // Lyft fallback to transit
-  if (category === 'lyft' && card.multipliers['transit']) {
-    return { rate: card.multipliers['transit'], reason: `${card.multipliers['transit']}x transit (Lyft)` };
-  }
-  
+
   return { rate: card.baseRate, reason: `${card.baseRate}x base rate` };
 }
 
@@ -2139,6 +2446,9 @@ async function processTransactions(transactions) {
       if (SKIP_ACCOUNTS.some(skip => acctLower.includes(skip))) return false;
       // Filter out skipped cards
       if (state.cardMappings[txn.last4] === 'skip') return false;
+      // Filter out transactions classified as 'skip' (transfers, payments, income)
+      const cls = classifications[txn.id];
+      if (cls && cls.category === 'skip') return false;
       return true;
     })
     .map(txn => {

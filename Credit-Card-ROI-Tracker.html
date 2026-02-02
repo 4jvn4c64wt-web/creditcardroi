@@ -907,7 +907,12 @@ const KNOWN_MERCHANTS = {
   'chase travel': 'chase-travel', 'cl* chase': 'chase-travel', 'cl*chase': 'chase-travel',
   'chasetravel': 'chase-travel', 'chase.com/travel': 'chase-travel', 'chasepay': 'chase-travel',
   'cardmember serv': 'chase-travel', 'cardmember ser': 'chase-travel',
-  'amex travel': 'amex-travel', 'bilt travel': 'bilt-travel',
+  // Amex Travel portal - expanded patterns similar to Chase
+'amex travel': 'amex-travel', 'amextravel': 'amex-travel', 'american express travel': 'amex-travel',
+'amex.com/travel': 'amex-travel', 'aexp travel': 'amex-travel', 'aet*': 'amex-travel',
+'amex trv': 'amex-travel', 'americanexpress.com/travel': 'amex-travel',
+// Bilt Travel portal
+'bilt travel': 'bilt-travel', 'bilttravel': 'bilt-travel', 'bilt.com/travel': 'bilt-travel',
   
   // Groceries - supermarkets (qualify for Amex Gold 4x)
   'trader joe': 'grocery', 'safeway': 'grocery', 'kroger': 'grocery', 'publix': 'grocery',
@@ -1811,11 +1816,19 @@ function classifyTravel(normalizedMerchant, cardId) {
       return { subcategory: 'chase-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Chase Travel portal' };
     }
   }
-  if (norm.includes('amex travel')) {
-    return { subcategory: 'amex-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Amex Travel portal' };
+  // Expanded Amex Travel patterns
+  const amexPatterns = ['amex travel', 'amextravel', 'american express travel', 'amex.com/travel', 'aexp travel', 'aet*', 'amex trv', 'americanexpress.com/travel'];
+  for (const pattern of amexPatterns) {
+    if (norm.includes(pattern)) {
+      return { subcategory: 'amex-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Amex Travel portal' };
+    }
   }
-  if (norm.includes('bilt travel')) {
-    return { subcategory: 'bilt-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Bilt Travel portal' };
+  // Bilt Travel patterns
+  const biltPatterns = ['bilt travel', 'bilttravel', 'bilt.com/travel'];
+  for (const pattern of biltPatterns) {
+    if (norm.includes(pattern)) {
+      return { subcategory: 'bilt-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Bilt Travel portal' };
+    }
   }
 
   // Check for OTAs (usually no bonus)

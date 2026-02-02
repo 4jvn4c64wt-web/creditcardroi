@@ -771,7 +771,8 @@ const CARDS = {
     shortName: 'Sapphire Reserve',
     annualFee: 795,
     pointValue: 0.017,
-    multipliers: { 'chase-travel': 8, 'flights-direct': 4, 'hotels-direct': 4, 'dining': 3, 'lyft': 5 },
+    // chase-travel: Portal purchases only. travel: Generic travel (flights/hotels booked direct, etc.)
+    multipliers: { 'chase-travel': 8, 'flights-direct': 4, 'hotels-direct': 4, 'travel': 3, 'dining': 3, 'lyft': 5 },
     baseRate: 1,
     credits: [
       { name: 'Travel Credit', amount: 300, keywords: ['TRAVEL CREDIT'], manual: false },
@@ -785,7 +786,7 @@ const CARDS = {
       { name: 'Peloton', amount: 120, keywords: ['PELOTON'], manual: false },
       { name: 'Apple Music/TV+', amount: 288, keywords: [], manual: true },
     ],
-    categories: ['chase-travel', 'flights-direct', 'hotels-direct', 'dining', 'lyft', 'other']
+    categories: ['chase-travel', 'flights-direct', 'hotels-direct', 'travel', 'dining', 'lyft', 'other']
   },
   'chase-sapphire-preferred': {
     name: 'Chase Sapphire Preferred',
@@ -1327,13 +1328,15 @@ function mapToCardCategory(genericCategory, cardId, txnDate = null) {
   
   // Category mapping rules (generic -> card-specific)
   const mappings = {
-    // Travel mappings
-    'flights-direct': ['flights-direct', 'amex-travel', 'travel', 'chase-travel'],
-    'hotels-direct': ['hotels-direct', 'amex-travel', 'travel', 'chase-travel'],
-    'chase-travel': ['chase-travel', 'travel'],
-    'amex-travel': ['amex-travel', 'travel'],
-    'travel-ota': ['travel', 'other'],
-    'travel': ['travel', 'chase-travel', 'amex-travel', 'other'],
+    // Travel mappings - portal categories should ONLY come from actual portal purchases
+    // Generic travel does NOT get portal bonuses (chase-travel, amex-travel, etc.)
+    'flights-direct': ['flights-direct', 'travel', 'other'],
+    'hotels-direct': ['hotels-direct', 'travel', 'other'],
+    'chase-travel': ['chase-travel', 'travel', 'other'],
+    'amex-travel': ['amex-travel', 'travel', 'other'],
+    'bilt-travel': ['bilt-travel', 'travel', 'other'],
+    'travel-ota': ['travel-ota', 'travel', 'other'],
+    'travel': ['travel', 'other'], // Generic travel NEVER maps to card-specific portals
     'transit': ['transit', 'travel', 'ground-transport', 'other'],
     'lyft': ['lyft', 'transit', 'travel', 'ground-transport', 'other'],
     

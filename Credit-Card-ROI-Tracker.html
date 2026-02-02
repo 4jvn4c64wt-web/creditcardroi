@@ -1431,6 +1431,30 @@ function formatNumber(val) {
   return val.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
+/**
+ * Format category for debugging display in transactions table.
+ * Shows: subcategory → category (confidence) or category (confidence) if same
+ * Examples:
+ *   salon → other (45)    - subcategory 'salon' rolled up to 'other', confidence 45
+ *   dining (85)           - subcategory 'dining', card has dining bonus, confidence 85
+ *   coffee-shop → dining (70) - specific subcategory rolled up to parent
+ */
+function formatCategoryDebug(txn) {
+  const sub = txn.subcategory || 'unknown';
+  const cat = txn.category || 'other';
+  const conf = txn.confidence || 0;
+  const isUserSet = txn.categorySource === 'rule' || txn.categorySource === 'confirmed';
+  const checkmark = isUserSet ? ' ✓' : '';
+
+  if (sub === cat) {
+    // Subcategory matches earning category - simple display
+    return `${escapeHtml(cat)} (${conf})${checkmark}`;
+  } else {
+    // Subcategory rolled up to different category via hierarchy
+    return `<span style="color:#6b7280;">${escapeHtml(sub)}</span> → ${escapeHtml(cat)} (${conf})${checkmark}`;
+  }
+}
+
 // HTML escape function to prevent XSS attacks from user-controlled data
 function escapeHtml(str) {
   if (str == null) return '';
@@ -2008,29 +2032,34 @@ function getMultiplier(cardId, category, txnDate = null) {
 // Determine badge color based on whether this is the optimal choice
 // Green = best/tied for best option, Yellow = good but better exists, Red = suboptimal
 function getCategoryBadgeStyle(txn, returnTooltip = false) {
+  // Build debug tooltip suffix showing classification details
+  const debugInfo = txn.subcategory
+    ? `\n\nClassification: ${txn.subcategory}${txn.subcategory !== txn.category ? ' → ' + txn.category : ''}\nConfidence: ${txn.confidence || 0}\nSource: ${txn.categorySource || 'unknown'}`
+    : '';
+
   if (txn.isPayment) {
     const style = 'background:#f3f4f6;color:#6b7280;'; // Gray for payments
-    return returnTooltip ? { style, tooltip: 'Payment — not counted' } : style;
+    return returnTooltip ? { style, tooltip: 'Payment — not counted' + debugInfo } : style;
   }
   if (txn.isCredit && !txn.isRefund) {
     const style = 'background:#e0f2fe;color:#0369a1;'; // Blue for credits
-    return returnTooltip ? { style, tooltip: 'Statement credit' } : style;
+    return returnTooltip ? { style, tooltip: 'Statement credit' + debugInfo } : style;
   }
   if (txn.isRefund) {
     const style = 'background:#fce7f3;color:#9d174d;'; // Pink for refunds
-    return returnTooltip ? { style, tooltip: 'Refund — points deducted' } : style;
+    return returnTooltip ? { style, tooltip: 'Refund — points deducted' + debugInfo } : style;
   }
-  
+
   const category = txn.category;
   const cardId = txn.cardId;
   const currentRate = txn.multiplier;
   const txnDate = txn.date;
-  
+
   // Find the best possible rate for this category across all mapped cards
   const mappedCardIds = [...new Set(Object.values(state.cardMappings))].filter(id => id && id !== 'skip');
   let bestRate = currentRate;
   let bestCard = cardId;
-  
+
   for (const cid of mappedCardIds) {
     const testResult = getMultiplier(cid, category, txnDate);
     if (testResult.rate > bestRate) {
@@ -2038,22 +2067,22 @@ function getCategoryBadgeStyle(txn, returnTooltip = false) {
       bestCard = cid;
     }
   }
-  
+
   // Determine color and tooltip
   if (currentRate >= bestRate) {
     // This is optimal (or tied for best)
     const style = 'background:#dcfce7;color:#166534;'; // Green
-    return returnTooltip ? { style, tooltip: 'Optimal card for this category' } : style;
+    return returnTooltip ? { style, tooltip: 'Optimal card for this category' + debugInfo } : style;
   } else if (currentRate >= bestRate * 0.6) {
     // Within 60% of best - yellow
     const style = 'background:#fef9c3;color:#854d0e;'; // Yellow
     const bestCardName = CARDS[bestCard]?.shortName || bestCard;
-    return returnTooltip ? { style, tooltip: `Good, but ${bestCardName} earns ${bestRate}x` } : style;
+    return returnTooltip ? { style, tooltip: `Good, but ${bestCardName} earns ${bestRate}x` + debugInfo } : style;
   } else {
     // Less than 60% of best - red/orange
     const style = 'background:#fee2e2;color:#991b1b;'; // Light red
     const bestCardName = CARDS[bestCard]?.shortName || bestCard;
-    return returnTooltip ? { style, tooltip: `${bestCardName} would earn ${bestRate}x` } : style;
+    return returnTooltip ? { style, tooltip: `${bestCardName} would earn ${bestRate}x` + debugInfo } : style;
   }
 }
 
@@ -2611,7 +2640,8 @@ async function processTransactions(transactions) {
       ...txn,
       cardId,
       cardName: card?.shortName || 'Unknown',
-      category: cardCategory,
+      subcategory: cls.subcategory,  // Original classification before hierarchy rollup
+      category: cardCategory,         // After hierarchy rollup for this card
       categorySource: cls.source,
       confidence: cls.confidence || 0,
       multiplier: multiplier.rate,
@@ -4219,7 +4249,7 @@ function renderView(view) {
           <span class="badge category-badge"
                 data-txn-id="${escapeHtml(t.id)}" data-merchant="${escapeHtml(t.merchant)}" data-current-cat="${escapeHtml(t.category)}" data-card-id="${escapeHtml(t.cardId)}"
                 style="cursor:pointer;${badgeInfo.style}" title="${escapeHtml(badgeInfo.tooltip)} — Click to change">
-            ${escapeHtml(t.category)}${(t.categorySource === 'rule' || t.categorySource === 'confirmed') ? ' ✓' : ''}
+            ${formatCategoryDebug(t)}
           </span>
         </td>
         <td class="text-right mono" style="color:${amountColor};font-weight:${amountWeight};">${t.isCredit ? '+' : '-'}${formatCurrencyPrecise(Math.abs(t.amount))}</td>

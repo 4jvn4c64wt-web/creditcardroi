@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:;">
   <title>Credit Card Value Tracker</title>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
@@ -401,6 +402,234 @@
 
 <script>
 // =============================================================================
+// UTILITY FUNCTIONS (Commercial-Grade Infrastructure)
+// =============================================================================
+
+/**
+ * Safely parse JSON with error handling and fallback
+ * Prevents crashes from corrupted localStorage data
+ * @param {string} jsonString - The JSON string to parse
+ * @param {*} fallback - Fallback value if parsing fails (default: null)
+ * @returns {*} Parsed value or fallback
+ */
+function safeJSONParse(jsonString, fallback = null) {
+  if (jsonString == null || jsonString === '') {
+    return fallback;
+  }
+  try {
+    const parsed = JSON.parse(jsonString);
+    return parsed != null ? parsed : fallback;
+  } catch (e) {
+    console.warn('JSON parse error:', e.message, '- using fallback');
+    return fallback;
+  }
+}
+
+/**
+ * Safely store data in localStorage with quota handling
+ * @param {string} key - Storage key
+ * @param {*} value - Value to store (will be JSON stringified)
+ * @returns {boolean} True if successful, false if quota exceeded
+ */
+function safeLocalStorageSet(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch (e) {
+    if (e.name === 'QuotaExceededError' || e.code === 22) {
+      console.error('localStorage quota exceeded for key:', key);
+      // Try to alert user on first quota error
+      if (!window._quotaWarningShown) {
+        window._quotaWarningShown = true;
+        alert('Storage limit reached. Some data may not be saved. Consider exporting your data and clearing old transactions.');
+      }
+    } else {
+      console.error('localStorage error:', e);
+    }
+    return false;
+  }
+}
+
+/**
+ * Safely retrieve and parse data from localStorage
+ * @param {string} key - Storage key
+ * @param {*} fallback - Fallback value if not found or parse fails
+ * @returns {*} Parsed value or fallback
+ */
+function safeLocalStorageGet(key, fallback = null) {
+  try {
+    const item = localStorage.getItem(key);
+    return safeJSONParse(item, fallback);
+  } catch (e) {
+    console.warn('localStorage read error for key:', key, e);
+    return fallback;
+  }
+}
+
+/**
+ * Unified date parsing utility - handles multiple formats consistently
+ * Supported formats: YYYY-MM-DD, MM/DD/YYYY, MM/DD/YY, M/D/YYYY, M/D/YY
+ * @param {string} dateStr - Date string in various formats
+ * @returns {{year: number, month: number, day: number, date: Date}|null} Parsed date components or null
+ */
+function parseDateString(dateStr) {
+  if (!dateStr || typeof dateStr !== 'string') {
+    return null;
+  }
+
+  const trimmed = dateStr.trim();
+  let year, month, day;
+
+  // ISO format: YYYY-MM-DD
+  if (trimmed.includes('-') && trimmed.indexOf('-') === 4) {
+    const parts = trimmed.split('-');
+    if (parts.length >= 3) {
+      year = parseInt(parts[0], 10);
+      month = parseInt(parts[1], 10);
+      day = parseInt(parts[2], 10);
+    }
+  }
+  // US format: MM/DD/YYYY or MM/DD/YY or M/D/YYYY or M/D/YY
+  else if (trimmed.includes('/')) {
+    const parts = trimmed.split('/');
+    if (parts.length >= 3) {
+      month = parseInt(parts[0], 10);
+      day = parseInt(parts[1], 10);
+      const yearPart = parts[2];
+      // Handle 2-digit years (assume 2000s)
+      year = parseInt(yearPart, 10);
+      if (yearPart.length === 2) {
+        year = 2000 + year;
+      }
+    }
+  }
+
+  // Validate parsed values
+  if (!year || !month || !day || isNaN(year) || isNaN(month) || isNaN(day)) {
+    // Fallback: try native Date parsing
+    const fallbackDate = new Date(trimmed);
+    if (!isNaN(fallbackDate.getTime())) {
+      return {
+        year: fallbackDate.getFullYear(),
+        month: fallbackDate.getMonth() + 1,
+        day: fallbackDate.getDate(),
+        date: fallbackDate
+      };
+    }
+    return null;
+  }
+
+  return {
+    year,
+    month,
+    day,
+    date: new Date(year, month - 1, day)
+  };
+}
+
+/**
+ * Get year from date string using unified parsing
+ * @param {string} dateStr - Date string
+ * @returns {number} Year, or current year if parsing fails
+ */
+function getYearFromDateString(dateStr) {
+  const parsed = parseDateString(dateStr);
+  return parsed ? parsed.year : new Date().getFullYear();
+}
+
+/**
+ * Get quarter (Q1-Q4) from date string
+ * @param {string} dateStr - Date string
+ * @returns {string} Quarter string (Q1, Q2, Q3, or Q4)
+ */
+function getQuarterFromDateString(dateStr) {
+  const parsed = parseDateString(dateStr);
+  if (!parsed) {
+    const now = new Date();
+    return `Q${Math.ceil((now.getMonth() + 1) / 3)}`;
+  }
+  return `Q${Math.ceil(parsed.month / 3)}`;
+}
+
+/**
+ * Generate content-based transaction ID for deduplication
+ * Uses content-based hashing for cross-upload deduplication
+ * @param {string} date - Transaction date
+ * @param {string} merchant - Merchant name
+ * @param {number} amount - Transaction amount
+ * @param {string} last4 - Card last 4 digits
+ * @returns {string} Content-based transaction ID (base form)
+ */
+function generateBaseTransactionId(date, merchant, amount, last4) {
+  return `${date}-${(merchant || '').substring(0, 30)}-${Math.abs(amount || 0).toFixed(2)}-${last4 || 'XXXX'}`.replace(/[^a-zA-Z0-9.-]/g, '_');
+}
+
+/**
+ * Generate unique transaction ID with collision handling
+ * Appends sequence number if base ID already exists in provided set
+ * Preserves deduplication behavior while handling same-batch duplicates
+ * @param {string} date - Transaction date
+ * @param {string} merchant - Merchant name
+ * @param {number} amount - Transaction amount
+ * @param {string} last4 - Card last 4 digits
+ * @param {Set<string>} existingIds - Set of already-used IDs in current batch
+ * @returns {string} Unique transaction ID
+ */
+function generateTransactionId(date, merchant, amount, last4, existingIds = new Set()) {
+  const baseId = generateBaseTransactionId(date, merchant, amount, last4);
+
+  // If no collision, use base ID (preserves deduplication)
+  if (!existingIds.has(baseId)) {
+    return baseId;
+  }
+
+  // Collision detected - append sequence number for truly duplicate transactions
+  // This handles legitimate duplicates like two $5 Starbucks purchases on the same day
+  let seq = 2;
+  let uniqueId = `${baseId}-${seq}`;
+  while (existingIds.has(uniqueId)) {
+    seq++;
+    uniqueId = `${baseId}-${seq}`;
+  }
+  return uniqueId;
+}
+
+/**
+ * Debounce function to limit rapid-fire events
+ * @param {Function} func - Function to debounce
+ * @param {number} wait - Milliseconds to wait
+ * @returns {Function} Debounced function
+ */
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
+/**
+ * Throttle function to limit execution frequency
+ * @param {Function} func - Function to throttle
+ * @param {number} limit - Minimum milliseconds between calls
+ * @returns {Function} Throttled function
+ */
+function throttle(func, limit) {
+  let inThrottle;
+  return function executedFunction(...args) {
+    if (!inThrottle) {
+      func(...args);
+      inThrottle = true;
+      setTimeout(() => inThrottle = false, limit);
+    }
+  };
+}
+
+// =============================================================================
 // CARD DEFINITIONS (Single Source of Truth)
 // =============================================================================
 const SKIP_ACCOUNTS = ['checking', 'savings', 'sofi', 'bank', 'venmo'];
@@ -740,20 +969,23 @@ const MONARCH_MAP = {
 // STATE
 // =============================================================================
 let state = {
-  cardMappings: JSON.parse(localStorage.getItem('ccTracker_cardMappings') || '{}'),
-  merchantCache: JSON.parse(localStorage.getItem('ccTracker_merchantCache') || '{}'),
-  customPointValues: JSON.parse(localStorage.getItem('ccTracker_pointValues') || '{}'),
-  creditOverrides: JSON.parse(localStorage.getItem('ccTracker_creditOverrides') || '{}'),
-  disabledCredits: JSON.parse(localStorage.getItem('ccTracker_disabledCredits') || '{}'),
-  monthlyCredits: JSON.parse(localStorage.getItem('ccTracker_monthlyCredits') || '{}'),
-  merchantRules: JSON.parse(localStorage.getItem('ccTracker_merchantRules') || '{}'),
-  confirmedTransactions: JSON.parse(localStorage.getItem('ccTracker_confirmedTxns') || '{}'), // txnId -> category (single-txn confirmations)
-  cashPlusCategories: JSON.parse(localStorage.getItem('ccTracker_cashPlusCategories') || '{}'),
-  cffCategories: JSON.parse(localStorage.getItem('ccTracker_cffCategories') || '{}'),
-  biltConfig: JSON.parse(localStorage.getItem('ccTracker_biltConfig') || '{}'),
-  columnMappings: JSON.parse(localStorage.getItem('ccTracker_columnMappings') || '{}'), // Remembers mappings by CSV shape
+  // Persistent state (loaded from localStorage with safe parsing)
+  cardMappings: safeLocalStorageGet('ccTracker_cardMappings', {}),
+  merchantCache: safeLocalStorageGet('ccTracker_merchantCache', {}),
+  customPointValues: safeLocalStorageGet('ccTracker_pointValues', {}),
+  creditOverrides: safeLocalStorageGet('ccTracker_creditOverrides', {}),
+  disabledCredits: safeLocalStorageGet('ccTracker_disabledCredits', {}),
+  monthlyCredits: safeLocalStorageGet('ccTracker_monthlyCredits', {}),
+  merchantRules: safeLocalStorageGet('ccTracker_merchantRules', {}),
+  confirmedTransactions: safeLocalStorageGet('ccTracker_confirmedTxns', {}), // txnId -> category (single-txn confirmations)
+  cashPlusCategories: safeLocalStorageGet('ccTracker_cashPlusCategories', {}),
+  cffCategories: safeLocalStorageGet('ccTracker_cffCategories', {}),
+  biltConfig: safeLocalStorageGet('ccTracker_biltConfig', {}),
+  columnMappings: safeLocalStorageGet('ccTracker_columnMappings', {}), // Remembers mappings by CSV shape
   pendingCSVData: null, // Temporarily holds CSV data during column mapping
-  savedTransactions: JSON.parse(localStorage.getItem('ccTracker_transactions') || '[]'),
+  savedTransactions: safeLocalStorageGet('ccTracker_transactions', []),
+
+  // Session state (not persisted)
   transactions: [],
   results: null,
   activeView: 'summary',
@@ -763,11 +995,12 @@ let state = {
   selectedCFFYear: null, // For CFF quarterly category year selection
   availableYears: [],
   summarySortState: { column: 'cardName', direction: 'asc' }, // For summary table sorting
+
   // Tour state
   tourComplete: localStorage.getItem('ccTracker_tourComplete') === 'true',
-  tourStep: parseInt(localStorage.getItem('ccTracker_tourStep') || '0'),
+  tourStep: parseInt(localStorage.getItem('ccTracker_tourStep') || '0', 10),
   tourActive: false,
-  featureEducation: JSON.parse(localStorage.getItem('ccTracker_featureEducation') || '{}') // tracks which feature tutorials have been shown
+  featureEducation: safeLocalStorageGet('ccTracker_featureEducation', {}) // tracks which feature tutorials have been shown
 };
 
 // =============================================================================
@@ -1761,7 +1994,7 @@ function applyColumnMappingAndParse() {
   // Save this mapping for future use
   const shapeKey = getCSVShapeKey(state.pendingCSVData.headers);
   state.columnMappings[shapeKey] = headerMapping;
-  localStorage.setItem('ccTracker_columnMappings', JSON.stringify(state.columnMappings));
+  safeLocalStorageSet('ccTracker_columnMappings', state.columnMappings);
   
   // Parse the CSV using the mapping
   const transactions = [];
@@ -1782,10 +2015,11 @@ function applyColumnMappingAndParse() {
     
     // Use default last4 if no account column, otherwise extract from account field
     const last4 = hasAccountColumn ? extractLast4(account) : defaultLast4;
-    
-    // Create unique ID from transaction content
-    const uniqueId = `${date}-${merchant.substring(0, 30)}-${amount.toFixed(2)}-${last4}`.replace(/[^a-zA-Z0-9.-]/g, '_');
-    
+
+    // Create unique ID with collision handling for same-batch duplicates
+    const usedIds = new Set(transactions.map(t => t.id));
+    const uniqueId = generateTransactionId(date, merchant, amount, last4, usedIds);
+
     transactions.push({
       id: uniqueId,
       date,
@@ -1833,11 +2067,12 @@ function parseCSV(text) {
     const account = fields[idx.account] || '';
     const original = fields[idx.original] || '';
     
-    // Create unique ID from transaction content (date + merchant + amount + last4)
-    // This ensures proper deduplication across uploads
+    // Create unique ID with collision handling for same-batch duplicates
+    // Content-based IDs ensure proper deduplication across uploads
     const last4 = extractLast4(account);
-    const uniqueId = `${date}-${merchant.substring(0, 30)}-${amount.toFixed(2)}-${last4}`.replace(/[^a-zA-Z0-9.-]/g, '_');
-    
+    const usedIds = new Set(transactions.map(t => t.id));
+    const uniqueId = generateTransactionId(date, merchant, amount, last4, usedIds);
+
     transactions.push({
       id: uniqueId,
       date,
@@ -1887,7 +2122,7 @@ async function processTransactions(transactions) {
   }
   
   // Save cache
-  localStorage.setItem('ccTracker_merchantCache', JSON.stringify(state.merchantCache));
+  safeLocalStorageSet('ccTracker_merchantCache', state.merchantCache);
   
   // Process each transaction (skip bank accounts and "skip" cards)
   const processed = transactions
@@ -2062,7 +2297,7 @@ function showMapping(allLast4s) {
       const l4 = e.target.dataset.last4;
       if (e.target.value) state.cardMappings[l4] = e.target.value;
       else delete state.cardMappings[l4];
-      localStorage.setItem('ccTracker_cardMappings', JSON.stringify(state.cardMappings));
+      safeLocalStorageSet('ccTracker_cardMappings', state.cardMappings);
       showMapping(allLast4s);
     });
   });
@@ -2703,12 +2938,21 @@ function showCardConfigEditor(preselectedCardId = null) {
           document.getElementById(`biltCalcModal-${cid}`).style.display = 'none';
         });
       });
-      // Calculator rent input - recalculate on change
+      // Calculator rent input - recalculate on change (debounced for storage, immediate for UI)
       document.querySelectorAll('.bilt-calc-rent').forEach(input => {
+        // Debounced save to prevent excessive localStorage writes
+        const debouncedSave = debounce((cid, rentVal) => {
+          if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
+          state.biltConfig[cid].manualRentAmount = rentVal;
+          safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
+        }, 300);
+
         input.addEventListener('input', () => {
           const cid = input.dataset.card;
           const rentVal = parseFloat(input.value) || 0;
           const cashFor100 = (rentVal / 100) * 3;
+
+          // Immediate UI update for responsiveness
           const results = document.querySelector(`.bilt-calc-results[data-card="${cid}"]`);
           if (results) {
             results.querySelector('.calc-100').textContent = cashFor100.toFixed(2);
@@ -2716,10 +2960,9 @@ function showCardConfigEditor(preselectedCardId = null) {
             results.querySelector('.calc-50').textContent = (cashFor100 * 0.50).toFixed(2);
             results.querySelector('.calc-25').textContent = (cashFor100 * 0.25).toFixed(2);
           }
-          // Also save to config for future reference
-          if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
-          state.biltConfig[cid].manualRentAmount = rentVal;
-          localStorage.setItem('ccTracker_biltConfig', JSON.stringify(state.biltConfig));
+
+          // Debounced storage save
+          debouncedSave(cid, rentVal);
         });
       });
       // Bilt Cash as credit checkbox
@@ -2728,7 +2971,7 @@ function showCardConfigEditor(preselectedCardId = null) {
           const cid = checkbox.dataset.card;
           if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
           state.biltConfig[cid].countBiltCashAsCredit = checkbox.checked;
-          localStorage.setItem('ccTracker_biltConfig', JSON.stringify(state.biltConfig));
+          safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
         });
       });
       // Monthly Bilt Cash redemption for rent
@@ -2737,7 +2980,7 @@ function showCardConfigEditor(preselectedCardId = null) {
           const cid = input.dataset.card;
           if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
           state.biltConfig[cid].monthlyBiltCashRedemption = parseFloat(input.value) || 0;
-          localStorage.setItem('ccTracker_biltConfig', JSON.stringify(state.biltConfig));
+          safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
         });
       });
       // Reward option
@@ -2746,7 +2989,7 @@ function showCardConfigEditor(preselectedCardId = null) {
           const cid = radio.dataset.card;
           if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
           state.biltConfig[cid].rewardOption = radio.value;
-          localStorage.setItem('ccTracker_biltConfig', JSON.stringify(state.biltConfig));
+          safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
           document.getElementById(`biltFlexibleSection-${cid}`).style.display = radio.value === 'flexible' ? '' : 'none';
           document.getElementById(`biltHousingSection-${cid}`).style.display = radio.value === 'housing-only' ? '' : 'none';
           // Update radio label backgrounds
@@ -2761,7 +3004,7 @@ function showCardConfigEditor(preselectedCardId = null) {
           const cid = radio.dataset.card;
           if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
           state.biltConfig[cid].rentDetection = radio.value;
-          localStorage.setItem('ccTracker_biltConfig', JSON.stringify(state.biltConfig));
+          safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
           document.getElementById(`biltManualRent-${cid}`).style.display = radio.value === 'manual' ? '' : 'none';
         });
       });
@@ -2771,7 +3014,7 @@ function showCardConfigEditor(preselectedCardId = null) {
           const cid = input.dataset.card;
           if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
           state.biltConfig[cid].manualRentAmount = parseFloat(input.value) || 2000;
-          localStorage.setItem('ccTracker_biltConfig', JSON.stringify(state.biltConfig));
+          safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
           renderCardConfig(); // Re-render to update helper text
         });
       });
@@ -2781,7 +3024,7 @@ function showCardConfigEditor(preselectedCardId = null) {
           const cid = sel.dataset.card;
           if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
           state.biltConfig[cid].manualRentDay = parseInt(sel.value);
-          localStorage.setItem('ccTracker_biltConfig', JSON.stringify(state.biltConfig));
+          safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
         });
       });
       // Rent merchant keyword
@@ -2790,7 +3033,7 @@ function showCardConfigEditor(preselectedCardId = null) {
           const cid = input.dataset.card;
           if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
           state.biltConfig[cid].rentMerchantKeyword = input.value.trim();
-          localStorage.setItem('ccTracker_biltConfig', JSON.stringify(state.biltConfig));
+          safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
         });
       });
       // Bonus category (Obsidian)
@@ -2799,7 +3042,7 @@ function showCardConfigEditor(preselectedCardId = null) {
           const cid = radio.dataset.card;
           if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
           state.biltConfig[cid].bonusCategory = radio.value;
-          localStorage.setItem('ccTracker_biltConfig', JSON.stringify(state.biltConfig));
+          safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
         });
       });
     }
@@ -3707,7 +3950,7 @@ function showCreditModal(txnId, cardId) {
     const selected = document.querySelector('input[name="creditType"]:checked')?.value;
     if (selected) {
       state.creditOverrides[txnId] = selected;
-      localStorage.setItem('ccTracker_creditOverrides', JSON.stringify(state.creditOverrides));
+      safeLocalStorageSet('ccTracker_creditOverrides', state.creditOverrides);
       modal.classList.add('hidden');
       // Reprocess to update totals
       await runProcessing();
@@ -3859,14 +4102,14 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
       if (saveAsRule) {
         // Save as merchant rule (applies to all transactions with this merchant)
         state.merchantRules[norm] = newCategory;
-        localStorage.setItem('ccTracker_merchantRules', JSON.stringify(state.merchantRules));
+        safeLocalStorageSet('ccTracker_merchantRules', state.merchantRules);
         // Remove any single-txn confirmation since rule takes precedence
         delete state.confirmedTransactions[txnId];
-        localStorage.setItem('ccTracker_confirmedTxns', JSON.stringify(state.confirmedTransactions));
+        safeLocalStorageSet('ccTracker_confirmedTxns', state.confirmedTransactions);
       } else {
         // Save as single-transaction confirmation only
         state.confirmedTransactions[txnId] = newCategory;
-        localStorage.setItem('ccTracker_confirmedTxns', JSON.stringify(state.confirmedTransactions));
+        safeLocalStorageSet('ccTracker_confirmedTxns', state.confirmedTransactions);
       }
     }
     
@@ -3910,7 +4153,7 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
       state.pendingFilterRestore = filterState;
       
       delete state.merchantRules[norm];
-      localStorage.setItem('ccTracker_merchantRules', JSON.stringify(state.merchantRules));
+      safeLocalStorageSet('ccTracker_merchantRules', state.merchantRules);
       modal.classList.add('hidden');
       await runProcessing();
       renderView('transactions');
@@ -3934,7 +4177,7 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
       state.pendingFilterRestore = filterState;
       
       delete state.confirmedTransactions[txnId];
-      localStorage.setItem('ccTracker_confirmedTxns', JSON.stringify(state.confirmedTransactions));
+      safeLocalStorageSet('ccTracker_confirmedTxns', state.confirmedTransactions);
       modal.classList.add('hidden');
       await runProcessing();
       renderView('transactions');
@@ -4080,63 +4323,63 @@ async function handleFile(file) {
         return;
       }
       
-      // Restore all state
+      // Restore all state using safe localStorage operations
       if (backup.transactions) {
         state.savedTransactions = backup.transactions;
         state.transactions = backup.transactions;
-        localStorage.setItem('ccTracker_transactions', JSON.stringify(backup.transactions));
+        safeLocalStorageSet('ccTracker_transactions', backup.transactions);
       }
       if (backup.cardMappings) {
         state.cardMappings = backup.cardMappings;
-        localStorage.setItem('ccTracker_cardMappings', JSON.stringify(backup.cardMappings));
+        safeLocalStorageSet('ccTracker_cardMappings', backup.cardMappings);
       }
       if (backup.customPointValues) {
         state.customPointValues = backup.customPointValues;
-        localStorage.setItem('ccTracker_customPointValues', JSON.stringify(backup.customPointValues));
+        safeLocalStorageSet('ccTracker_customPointValues', backup.customPointValues);
       }
       if (backup.creditOverrides) {
         state.creditOverrides = backup.creditOverrides;
-        localStorage.setItem('ccTracker_creditOverrides', JSON.stringify(backup.creditOverrides));
+        safeLocalStorageSet('ccTracker_creditOverrides', backup.creditOverrides);
       }
       if (backup.disabledCredits) {
         state.disabledCredits = backup.disabledCredits;
-        localStorage.setItem('ccTracker_disabledCredits', JSON.stringify(backup.disabledCredits));
+        safeLocalStorageSet('ccTracker_disabledCredits', backup.disabledCredits);
       }
       if (backup.monthlyCredits) {
         state.monthlyCredits = backup.monthlyCredits;
-        localStorage.setItem('ccTracker_monthlyCredits', JSON.stringify(backup.monthlyCredits));
+        safeLocalStorageSet('ccTracker_monthlyCredits', backup.monthlyCredits);
       }
       if (backup.merchantRules) {
         state.merchantRules = backup.merchantRules;
-        localStorage.setItem('ccTracker_merchantRules', JSON.stringify(backup.merchantRules));
+        safeLocalStorageSet('ccTracker_merchantRules', backup.merchantRules);
       }
       if (backup.confirmedTransactions) {
         state.confirmedTransactions = backup.confirmedTransactions;
-        localStorage.setItem('ccTracker_confirmedTransactions', JSON.stringify(backup.confirmedTransactions));
+        safeLocalStorageSet('ccTracker_confirmedTransactions', backup.confirmedTransactions);
       }
       if (backup.cashPlusCategories) {
         state.cashPlusCategories = backup.cashPlusCategories;
-        localStorage.setItem('ccTracker_cashPlusCategories', JSON.stringify(backup.cashPlusCategories));
+        safeLocalStorageSet('ccTracker_cashPlusCategories', backup.cashPlusCategories);
       }
       if (backup.cffCategories) {
         state.cffCategories = backup.cffCategories;
-        localStorage.setItem('ccTracker_cffCategories', JSON.stringify(backup.cffCategories));
+        safeLocalStorageSet('ccTracker_cffCategories', backup.cffCategories);
       }
       if (backup.biltConfig) {
         state.biltConfig = backup.biltConfig;
-        localStorage.setItem('ccTracker_biltConfig', JSON.stringify(backup.biltConfig));
+        safeLocalStorageSet('ccTracker_biltConfig', backup.biltConfig);
       }
       if (backup.columnMappings) {
         state.columnMappings = backup.columnMappings;
-        localStorage.setItem('ccTracker_columnMappings', JSON.stringify(backup.columnMappings));
+        safeLocalStorageSet('ccTracker_columnMappings', backup.columnMappings);
       }
-      
+
       showLoading(false);
       updateStoredTxnCount();
-      
+
       // Mark tour as complete since this is a returning user
       state.tourComplete = true;
-      localStorage.setItem('ccTracker_tourComplete', 'true');
+      safeLocalStorageSet('ccTracker_tourComplete', true);
       
       alert(`Backup restored successfully!\n\n${txnCount} transactions and all settings have been restored.`);
       
@@ -4171,8 +4414,8 @@ async function processAfterColumnMapping() {
   // This ensures proper deduplication with the new content-based IDs
   state.savedTransactions = state.savedTransactions.map(t => {
     if (t.id && t.id.startsWith('txn-')) {
-      // Regenerate ID using same logic as parseCSV
-      const newId = `${t.date}-${(t.merchant || '').substring(0, 30)}-${(t.amount || 0).toFixed(2)}-${t.last4 || ''}`.replace(/[^a-zA-Z0-9.-]/g, '_');
+      // Regenerate ID using unified ID generation
+      const newId = generateBaseTransactionId(t.date, t.merchant, t.amount, t.last4);
       return { ...t, id: newId };
     }
     return t;
@@ -4190,7 +4433,7 @@ async function processAfterColumnMapping() {
   
   // Save merged transactions to localStorage
   state.savedTransactions = state.transactions;
-  localStorage.setItem('ccTracker_transactions', JSON.stringify(state.transactions));
+  safeLocalStorageSet('ccTracker_transactions', state.transactions);
   
   // Update the stored count display
   if (typeof updateStoredTxnCount === 'function') updateStoredTxnCount();
@@ -4336,7 +4579,7 @@ const dismissedGuidance = JSON.parse(localStorage.getItem('ccTracker_dismissedGu
 
 function dismissGuidance(sectionId) {
   dismissedGuidance[sectionId] = true;
-  localStorage.setItem('ccTracker_dismissedGuidance', JSON.stringify(dismissedGuidance));
+  safeLocalStorageSet('ccTracker_dismissedGuidance', dismissedGuidance);
   const banner = document.getElementById('guidance' + sectionId.charAt(0).toUpperCase() + sectionId.slice(1));
   if (banner) banner.style.display = 'none';
 }
@@ -4654,7 +4897,7 @@ function renderTourStep() {
   }
   
   // Save progress
-  localStorage.setItem('ccTracker_tourStep', state.tourStep.toString());
+  safeLocalStorageSet('ccTracker_tourStep', state.tourStep);
   
   // Handle different step types
   if (step.type === 'modal') {
@@ -4943,7 +5186,7 @@ function endTour() {
   state.tourActive = false;
   state.tourComplete = true;
   state.tourStep = 0;
-  localStorage.setItem('ccTracker_tourComplete', 'true');
+  safeLocalStorageSet('ccTracker_tourComplete', true);
   localStorage.removeItem('ccTracker_tourStep');
   hideTourUI();
   document.getElementById('tourSkipConfirm').classList.add('hidden');
@@ -5014,7 +5257,7 @@ function showFeatureEducation(feature) {
   
   // Mark as shown
   state.featureEducation[feature] = true;
-  localStorage.setItem('ccTracker_featureEducation', JSON.stringify(state.featureEducation));
+  safeLocalStorageSet('ccTracker_featureEducation', state.featureEducation);
   
   // Show a simple tooltip
   const tooltip = document.createElement('div');
@@ -5159,7 +5402,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         return txnYear !== year;
       });
       state.transactions = state.savedTransactions;
-      localStorage.setItem('ccTracker_transactions', JSON.stringify(state.savedTransactions));
+      safeLocalStorageSet('ccTracker_transactions', state.savedTransactions);
       
       const deleted = beforeCount - state.savedTransactions.length;
       alert(`Deleted ${deleted} transactions from ${year}.`);
@@ -5390,7 +5633,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const pointVal = parseFloat(document.getElementById('configPointValue')?.value) / 100;
     if (!isNaN(pointVal) && pointVal > 0) {
       state.customPointValues[cardId] = pointVal;
-      localStorage.setItem('ccTracker_pointValues', JSON.stringify(state.customPointValues));
+      safeLocalStorageSet('ccTracker_pointValues', state.customPointValues);
     }
     
     // Save disabled credits
@@ -5401,7 +5644,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     });
     state.disabledCredits[cardId] = disabledList;
-    localStorage.setItem('ccTracker_disabledCredits', JSON.stringify(state.disabledCredits));
+    safeLocalStorageSet('ccTracker_disabledCredits', state.disabledCredits);
     
     // Save monthly credit claims - NOW YEAR-SPECIFIC
     const selectedYear = state.selectedCreditYear || new Date().getFullYear();
@@ -5431,11 +5674,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         state.monthlyCredits[cardId][creditName][selectedYear] = yearMonths.filter(m => m !== month);
       }
     });
-    localStorage.setItem('ccTracker_monthlyCredits', JSON.stringify(state.monthlyCredits));
+    safeLocalStorageSet('ccTracker_monthlyCredits', state.monthlyCredits);
     
     // Save Cash+ quarterly categories for selected year
+    // Use consistent fallback: most recent transaction year, or current year if no transactions
     if (cardId === 'us-bank-cash-plus') {
-      const cashPlusYear = state.selectedCashPlusYear || new Date().getFullYear();
+      const defaultYear = state.availableYears.length > 0 ? state.availableYears[0] : new Date().getFullYear();
+      const cashPlusYear = state.selectedCashPlusYear || defaultYear;
       ['Q1', 'Q2', 'Q3', 'Q4'].forEach(quarterKey => {
         const yearQuarterKey = `${cashPlusYear}-${quarterKey}`;
         const fivePercent = [];
@@ -5444,15 +5689,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
         const twoPercentCb = document.querySelector(`.cash-plus-2[data-quarter="${quarterKey}"]:checked`);
         const twoPercent = twoPercentCb ? twoPercentCb.dataset.category : '';
-        
+
         state.cashPlusCategories[yearQuarterKey] = { fivePercent, twoPercent };
       });
-      localStorage.setItem('ccTracker_cashPlusCategories', JSON.stringify(state.cashPlusCategories));
+      safeLocalStorageSet('ccTracker_cashPlusCategories', state.cashPlusCategories);
     }
-    
+
     // Save CFF quarterly categories for selected year
+    // Use consistent fallback: most recent transaction year, or current year if no transactions
     if (cardId === 'chase-freedom-flex') {
-      const cffYear = state.selectedCFFYear || new Date().getFullYear();
+      const defaultYear = state.availableYears.length > 0 ? state.availableYears[0] : new Date().getFullYear();
+      const cffYear = state.selectedCFFYear || defaultYear;
       ['Q1', 'Q2', 'Q3', 'Q4'].forEach(quarterKey => {
         const yearQuarterKey = `${cffYear}-${quarterKey}`;
         const selectedCats = [];
@@ -5461,7 +5708,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
         state.cffCategories[yearQuarterKey] = selectedCats;
       });
-      localStorage.setItem('ccTracker_cffCategories', JSON.stringify(state.cffCategories));
+      safeLocalStorageSet('ccTracker_cffCategories', state.cffCategories);
     }
     
     // Stay on config page, just reprocess in background

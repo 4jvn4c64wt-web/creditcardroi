@@ -158,15 +158,16 @@ const uniqueId = `${date}-${merchant.substring(0, 30)}-${amount.toFixed(2)}-${la
 
 ## Recommendations Summary
 
-### Immediate Actions (Security)
-- [ ] Wrap JSON.parse calls in try-catch blocks
-- [ ] Add Content Security Policy meta tag
-- [ ] Add localStorage quota error handling
+### Immediate Actions (Security) - COMPLETED
+- [x] Wrap JSON.parse calls in try-catch blocks (`safeJSONParse`, `safeLocalStorageGet`)
+- [x] Add Content Security Policy meta tag
+- [x] Add localStorage quota error handling (`safeLocalStorageSet`)
 
-### Short-term Actions (Bugs)
-- [ ] Fix transaction ID collision with timestamp/random component
-- [ ] Unify date parsing into single utility function
-- [ ] Review Bilt 2.0 date gate for accuracy
+### Short-term Actions (Bugs) - COMPLETED
+- [x] Fix transaction ID collision with sequence numbers for same-batch duplicates
+- [x] Unify date parsing into single utility function (`parseDateString`, `getYearFromDateString`)
+- [x] Fix Cash+/CFF year selection consistency bug
+- [x] Add input debouncing for calculator inputs
 
 ### Long-term Actions (Code Quality)
 - [ ] Consider splitting into ES6 modules

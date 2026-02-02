@@ -5009,14 +5009,38 @@ function showTourSpotlight(step) {
   overlay.classList.remove('hidden');
   spotlight.classList.remove('hidden');
   tooltip.classList.remove('hidden');
-  
+
   // Make spotlight clickable if required (set this before positioning)
-  if (step.clickRequired) {
+  // Exception: for 'select-card' action, keep spotlight non-blocking so users can click the dropdown
+  if (step.clickRequired && step.clickAction !== 'select-card') {
     spotlight.classList.add('tour-spotlight-clickable');
     spotlight.onclick = () => handleSpotlightClick(step);
   } else {
     spotlight.classList.remove('tour-spotlight-clickable');
     spotlight.onclick = null;
+
+    // For select-card, set up the change listener immediately since clicks pass through
+    if (step.clickAction === 'select-card') {
+      const select = document.getElementById('configCardSelect');
+      if (select) {
+        const handler = () => {
+          select.removeEventListener('change', handler);
+          setTimeout(() => {
+            state.tourStep++;
+            renderTourStep();
+          }, 300);
+        };
+        select.addEventListener('change', handler);
+        // Auto-advance after timeout if user doesn't interact
+        setTimeout(() => {
+          select.removeEventListener('change', handler);
+          if (state.tourActive && TOUR_STEPS[state.tourStep]?.clickAction === 'select-card') {
+            state.tourStep++;
+            renderTourStep();
+          }
+        }, 5000);
+      }
+    }
   }
   
   // Set content first

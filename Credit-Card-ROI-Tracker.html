@@ -903,16 +903,18 @@ const KNOWN_MERCHANTS = {
   'kayak': 'travel-ota', 'orbitz': 'travel-ota', 'travelocity': 'travel-ota', 'hotwire': 'travel-ota',
   
   // Travel portals - expanded patterns to catch more Chase Travel variations
-  // Note: CL* format has asterisk AFTER "CL", e.g., "CL* Chase Travel"
-  'chase travel': 'chase-travel', 'cl* chase': 'chase-travel', 'cl*chase': 'chase-travel',
-  'chasetravel': 'chase-travel', 'chase.com/travel': 'chase-travel', 'chasepay': 'chase-travel',
+  // Note: Patterns must match NORMALIZED text (asterisks/special chars removed)
+  // "CL* CHASE TRAVEL" normalizes to "cl chase travel", "CL*CHASE" normalizes to "clchase"
+  'chase travel': 'chase-travel', 'cl chase': 'chase-travel', 'clchase': 'chase-travel',
+  'chasetravel': 'chase-travel', 'chasecomtravel': 'chase-travel', 'chasepay': 'chase-travel',
   'cardmember serv': 'chase-travel', 'cardmember ser': 'chase-travel',
-  // Amex Travel portal - expanded patterns similar to Chase
-'amex travel': 'amex-travel', 'amextravel': 'amex-travel', 'american express travel': 'amex-travel',
-'amex.com/travel': 'amex-travel', 'aexp travel': 'amex-travel', 'aet*': 'amex-travel',
-'amex trv': 'amex-travel', 'americanexpress.com/travel': 'amex-travel',
-// Bilt Travel portal
-'bilt travel': 'bilt-travel', 'bilttravel': 'bilt-travel', 'bilt.com/travel': 'bilt-travel',
+  // Amex Travel portal - patterns must match normalized text (special chars removed)
+  // "amex.com/travel" -> "amexcomtravel", "AET*" -> "aet"
+  'amex travel': 'amex-travel', 'amextravel': 'amex-travel', 'american express travel': 'amex-travel',
+  'amexcomtravel': 'amex-travel', 'aexp travel': 'amex-travel', 'aet': 'amex-travel',
+  'amex trv': 'amex-travel', 'americanexpresscomtravel': 'amex-travel',
+  // Bilt Travel portal - "bilt.com/travel" -> "biltcomtravel"
+  'bilt travel': 'bilt-travel', 'bilttravel': 'bilt-travel', 'biltcomtravel': 'bilt-travel',
   
   // Groceries - supermarkets (qualify for Amex Gold 4x)
   'trader joe': 'grocery', 'safeway': 'grocery', 'kroger': 'grocery', 'publix': 'grocery',
@@ -1809,22 +1811,23 @@ function classifyTravel(normalizedMerchant, cardId) {
   const norm = normalizedMerchant;
 
   // Check for portal bookings (highest multiplier usually)
-  // Expanded Chase Travel patterns - note CL* format has asterisk AFTER "CL"
-  const chasePatterns = ['chase travel', 'chasetravel', 'cl* chase', 'cl*chase', 'chasepay', 'chase.com/travel', 'cardmember serv', 'cardmember ser'];
+  // Patterns must match NORMALIZED text (asterisks/special chars removed)
+  // "CL* CHASE TRAVEL" -> "cl chase travel", "CL*CHASE" -> "clchase", "chase.com/travel" -> "chasecomtravel"
+  const chasePatterns = ['chase travel', 'chasetravel', 'cl chase', 'clchase', 'chasepay', 'chasecomtravel', 'cardmember serv', 'cardmember ser'];
   for (const pattern of chasePatterns) {
     if (norm.includes(pattern)) {
       return { subcategory: 'chase-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Chase Travel portal' };
     }
   }
-  // Expanded Amex Travel patterns
-  const amexPatterns = ['amex travel', 'amextravel', 'american express travel', 'amex.com/travel', 'aexp travel', 'aet*', 'amex trv', 'americanexpress.com/travel'];
+  // Amex Travel patterns - must match normalized text (special chars removed)
+  const amexPatterns = ['amex travel', 'amextravel', 'american express travel', 'amexcomtravel', 'aexp travel', 'aet', 'amex trv', 'americanexpresscomtravel'];
   for (const pattern of amexPatterns) {
     if (norm.includes(pattern)) {
       return { subcategory: 'amex-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Amex Travel portal' };
     }
   }
-  // Bilt Travel patterns
-  const biltPatterns = ['bilt travel', 'bilttravel', 'bilt.com/travel'];
+  // Bilt Travel patterns - must match normalized text
+  const biltPatterns = ['bilt travel', 'bilttravel', 'biltcomtravel'];
   for (const pattern of biltPatterns) {
     if (norm.includes(pattern)) {
       return { subcategory: 'bilt-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Bilt Travel portal' };

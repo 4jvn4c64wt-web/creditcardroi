@@ -2429,18 +2429,30 @@ function applyColumnMappingAndParse() {
   const columnIndices = {};
   const headerMapping = {};
 
-  selects.forEach(sel => {
+  // DEBUG: Log all select elements and their values
+  console.log('[CSV Debug] ====== COLUMN MAPPING START ======');
+  console.log('[CSV Debug] Number of column selects:', selects.length);
+  console.log('[CSV Debug] Headers:', state.pendingCSVData?.headers);
+
+  selects.forEach((sel, idx) => {
     const field = sel.value;
     const colIndex = parseInt(sel.dataset.colIndex);
+    const headerName = state.pendingCSVData?.headers?.[colIndex] || 'unknown';
+    console.log(`[CSV Debug] Column ${colIndex} "${headerName}": mapped to "${field || '(skip)'}" (select index ${idx})`);
     if (field) {
       columnIndices[field] = colIndex;
       headerMapping[field] = state.pendingCSVData.headers[colIndex].toLowerCase().trim();
     }
   });
 
-  // DEBUG: Log column mapping
-  console.log('[CSV Debug] Column indices:', columnIndices);
+  // DEBUG: Log final column mapping
+  console.log('[CSV Debug] Final columnIndices:', JSON.stringify(columnIndices));
   console.log('[CSV Debug] Has category column:', columnIndices.category !== undefined);
+  if (columnIndices.category !== undefined) {
+    console.log('[CSV Debug] Category is column index:', columnIndices.category);
+  } else {
+    console.warn('[CSV Debug] WARNING: No category column mapped! Check dropdown values.');
+  }
   
   // Get default account if no account column is mapped
   const hasAccountColumn = columnIndices.account !== undefined;
@@ -2468,7 +2480,12 @@ function applyColumnMappingAndParse() {
     const account = hasAccountColumn ? (fields[columnIndices.account] || '') : `Card (...${defaultLast4})`;
     const category = columnIndices.category !== undefined ? (fields[columnIndices.category] || '') : '';
     const original = columnIndices.original !== undefined ? (fields[columnIndices.original] || '') : '';
-    
+
+    // DEBUG: Log first 3 transactions' category extraction
+    if (transactions.length < 3) {
+      console.log(`[CSV Debug] Row ${i}: merchant="${merchant}", category="${category}", fields[${columnIndices.category}]="${fields[columnIndices.category]}"`);
+    }
+
     // Use default last4 if no account column, otherwise extract from account field
     const last4 = hasAccountColumn ? extractLast4(account) : defaultLast4;
 

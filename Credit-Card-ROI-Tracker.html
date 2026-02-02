@@ -902,8 +902,10 @@ const KNOWN_MERCHANTS = {
   'expedia': 'travel-ota', 'booking.com': 'travel-ota', 'hotels.com': 'travel-ota', 'priceline': 'travel-ota',
   'kayak': 'travel-ota', 'orbitz': 'travel-ota', 'travelocity': 'travel-ota', 'hotwire': 'travel-ota',
   
-  // Travel portals
-  'chase travel': 'chase-travel', 'cl *chase travel': 'chase-travel',
+  // Travel portals - expanded patterns to catch more Chase Travel variations
+  'chase travel': 'chase-travel', 'cl *chase travel': 'chase-travel', 'cl *chase': 'chase-travel',
+  'chasetravel': 'chase-travel', 'chase.com/travel': 'chase-travel', 'chasepay': 'chase-travel',
+  'cardmember serv': 'chase-travel', 'cardmember ser': 'chase-travel',
   'amex travel': 'amex-travel', 'bilt travel': 'bilt-travel',
   
   // Groceries - supermarkets (qualify for Amex Gold 4x)
@@ -1338,6 +1340,8 @@ function mapToCardCategory(genericCategory, cardId, txnDate = null) {
     'bilt-travel': ['bilt-travel', 'travel', 'other'],
     'travel-ota': ['travel-ota', 'travel', 'other'],
     'travel': ['travel', 'other'], // Generic travel NEVER maps to card-specific portals
+    'car-rental': ['car-rental', 'travel', 'other'],
+    'cruise': ['cruise', 'travel', 'other'],
     'transit': ['transit', 'travel', 'ground-transport', 'other'],
     'lyft': ['lyft', 'transit', 'travel', 'ground-transport', 'other'],
     
@@ -1799,8 +1803,12 @@ function classifyTravel(normalizedMerchant, cardId) {
   const norm = normalizedMerchant;
 
   // Check for portal bookings (highest multiplier usually)
-  if (norm.includes('chase travel') || norm.includes('cl *chase')) {
-    return { subcategory: 'chase-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Chase Travel portal' };
+  // Expanded Chase Travel patterns to catch variations in statement descriptions
+  const chasePatterns = ['chase travel', 'chasetravel', 'cl *chase', 'chasepay', 'chase.com/travel', 'cardmember serv', 'cardmember ser'];
+  for (const pattern of chasePatterns) {
+    if (norm.includes(pattern)) {
+      return { subcategory: 'chase-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Chase Travel portal' };
+    }
   }
   if (norm.includes('amex travel')) {
     return { subcategory: 'amex-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Amex Travel portal' };
@@ -1839,6 +1847,22 @@ function classifyTravel(normalizedMerchant, cardId) {
   // Check for Airbnb/VRBO
   if (norm.includes('airbnb') || norm.includes('vrbo')) {
     return { subcategory: 'hotels-direct', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Vacation rental' };
+  }
+
+  // Check for car rentals (often show vendor name, not portal)
+  const carRentals = ['hertz', 'enterprise', 'avis', 'budget', 'national car', 'alamo', 'dollar rent', 'thrifty', 'sixt'];
+  for (const rental of carRentals) {
+    if (norm.includes(rental)) {
+      return { subcategory: 'car-rental', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: `Car rental: ${rental}` };
+    }
+  }
+
+  // Check for cruises
+  const cruises = ['carnival', 'royal caribbean', 'norwegian cruise', 'princess cruise', 'disney cruise', 'msc cruise'];
+  for (const cruise of cruises) {
+    if (norm.includes(cruise)) {
+      return { subcategory: 'cruise', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: `Cruise: ${cruise}` };
+    }
   }
 
   // Generic travel from CSV - we know it's travel but not which specific type

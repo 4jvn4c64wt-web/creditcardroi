@@ -2795,7 +2795,27 @@ async function processTransactions(transactions) {
 
   // Classify all transactions with rules
   for (const txn of transactions) {
-    // Check for single-transaction confirmation first (takes precedence like merchant rules)
+    // PRIORITY 0: Check skip patterns FIRST - these always take precedence
+    // This ensures payments, statement balance lines, etc. are always filtered out
+    // even if the user previously confirmed them as a different category
+    const normMerchant = (txn.merchant || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+    const skipPatterns = SPECIFIC_CATEGORY_KEYWORDS['skip'] || [];
+    let isSkipTransaction = false;
+    for (const pattern of skipPatterns) {
+      if (normMerchant.includes(pattern)) {
+        classifications[txn.id] = {
+          subcategory: 'skip',
+          source: 'skip-pattern',
+          confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE,
+          reason: `Skipped: "${pattern}"`
+        };
+        isSkipTransaction = true;
+        break;
+      }
+    }
+    if (isSkipTransaction) continue;
+
+    // Check for single-transaction confirmation (takes precedence like merchant rules)
     if (state.confirmedTransactions[txn.id]) {
       classifications[txn.id] = {
         subcategory: state.confirmedTransactions[txn.id],

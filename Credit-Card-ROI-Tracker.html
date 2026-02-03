@@ -1103,7 +1103,9 @@ const CATEGORY_HIERARCHY = {
 // Order matters: more specific patterns should be checked first
 const SPECIFIC_CATEGORY_KEYWORDS = {
   // Skip categories - checked first to filter out non-purchase transactions
-  'skip': ['transfer', 'payment thank you', 'autopay', 'credit card payment', 'paycheck', 'direct deposit', 'income', 'payroll', 'ach credit'],
+  // Skip patterns for non-purchase transactions (payments, transfers, statement lines)
+  'skip': ['transfer', 'payment thank you', 'autopay', 'credit card payment', 'paycheck', 'direct deposit', 'income', 'payroll', 'ach credit',
+           'automatic payment', 'last statement bal', 'statement balance', 'previous balance', 'balance from'],
 
   // Dining specifics
   'food-truck': ['food truck'],
@@ -2238,13 +2240,16 @@ function getCategoryBadgeStyle(txn, returnTooltip = false) {
   }
 }
 
-// Helper to check if transaction is a payment
+// Helper to check if transaction is a payment or statement balance line
 function isPaymentTransaction(txn) {
   const upper = (txn.merchant + ' ' + (txn.original || '')).toUpperCase();
   return upper.includes('AUTOMATIC PAYMENT') ||
          upper.includes('PAYMENT - THANK') ||
          upper.includes('ONLINE PAYMENT') ||
          upper.includes('AUTOPAY') ||
+         upper.includes('LAST STATEMENT BAL') ||
+         upper.includes('STATEMENT BALANCE') ||
+         upper.includes('PREVIOUS BALANCE') ||
          (txn.monarchCategory || '').toLowerCase().includes('credit card payment');
 }
 
@@ -2265,8 +2270,9 @@ function detectCredit(merchant, originalStatement, cardId, txnId) {
   const upper = (merchant + ' ' + originalStatement).toUpperCase();
   const disabled = state.disabledCredits[cardId] || [];
   
-  // Exclude payments and transfers - these are NOT statement credits
-  const excludeKeywords = ['PAYMENT', 'THANK YOU', 'AUTOMATIC PAYMENT', 'CREDIT CARD PAYMENT', 'TRANSFER'];
+  // Exclude payments, transfers, and statement balance lines - these are NOT statement credits
+  const excludeKeywords = ['PAYMENT', 'THANK YOU', 'AUTOMATIC PAYMENT', 'CREDIT CARD PAYMENT', 'TRANSFER',
+                           'LAST STATEMENT BAL', 'STATEMENT BALANCE', 'PREVIOUS BALANCE'];
   if (excludeKeywords.some(kw => upper.includes(kw))) return null;
   
   // Check each credit's keywords for a match
@@ -2303,6 +2309,46 @@ function detectCredit(merchant, originalStatement, cardId, txnId) {
 // =============================================================================
 // CSV PARSING WITH COLUMN MAPPING
 // =============================================================================
+
+// Detect if a row looks like data (not headers) - for headerless CSVs
+// Returns true if row appears to contain transaction data
+function isDataRow(fields) {
+  if (!fields || fields.length < 2) return false;
+
+  // Check if first field looks like a date (MM/DD/YYYY, YYYY-MM-DD, etc.)
+  const datePatterns = [
+    /^\d{1,2}\/\d{1,2}\/\d{2,4}$/,  // MM/DD/YYYY or M/D/YY
+    /^\d{4}-\d{2}-\d{2}$/,           // YYYY-MM-DD
+    /^\d{1,2}-\d{1,2}-\d{2,4}$/      // MM-DD-YYYY
+  ];
+  const firstField = (fields[0] || '').trim();
+  const looksLikeDate = datePatterns.some(p => p.test(firstField));
+
+  // Check if second field looks like an amount (number, possibly negative, with optional decimals)
+  const secondField = (fields[1] || '').trim();
+  const looksLikeAmount = /^-?\d+\.?\d*$/.test(secondField) || /^-?\$?\d+\.?\d*$/.test(secondField);
+
+  // If both match, this is likely a data row, not a header
+  return looksLikeDate && looksLikeAmount;
+}
+
+// Detect Wells Fargo headerless format from first data row
+// Wells Fargo format: date, amount, *, empty, merchant (5 columns, no headers)
+function isWellsFargoFormat(fields) {
+  if (!fields || fields.length !== 5) return false;
+
+  const [date, amount, asterisk, empty, merchant] = fields;
+
+  // Check pattern: date, numeric amount, asterisk, empty string, non-empty merchant
+  const datePattern = /^\d{1,2}\/\d{1,2}\/\d{2,4}$/;
+  const isDate = datePattern.test((date || '').trim());
+  const isAmount = /^-?\d+\.?\d*$/.test((amount || '').trim());
+  const isAsterisk = (asterisk || '').trim() === '*';
+  const isEmpty = (empty || '').trim() === '';
+  const hasMerchant = (merchant || '').trim().length > 0;
+
+  return isDate && isAmount && isAsterisk && isEmpty && hasMerchant;
+}
 
 // Known CSV formats for auto-detection
 const CSV_FORMATS = {
@@ -2379,24 +2425,68 @@ function detectCSVFormat(headers) {
 // Show column mapping UI
 function showColumnMapping(csvText) {
   const lines = csvText.split('\n').filter(l => l.trim());
-  if (lines.length < 2) {
+  if (lines.length < 1) {
     alert('CSV file appears to be empty or invalid.');
     return;
   }
-  
-  // Parse headers
-  const headers = parseCSVLine(lines[0]);
-  const previewRows = lines.slice(1, 6).map(line => parseCSVLine(line)); // First 5 data rows
-  
-  // Store for later use
-  state.pendingCSVData = { text: csvText, headers, lines };
-  
+
+  // Parse first row to check if it's data or headers
+  const firstRowFields = parseCSVLine(lines[0]);
+  const isHeaderless = isDataRow(firstRowFields);
+
+  let headers, previewRows, dataLines;
+
+  if (isHeaderless) {
+    // Headerless CSV - generate synthetic column names
+    headers = firstRowFields.map((_, i) => `Column ${i + 1}`);
+    // All lines are data (including first line)
+    previewRows = lines.slice(0, 5).map(line => parseCSVLine(line));
+    dataLines = lines; // All lines are data
+  } else {
+    // Normal CSV with headers
+    headers = firstRowFields;
+    previewRows = lines.slice(1, 6).map(line => parseCSVLine(line));
+    dataLines = lines.slice(1); // Skip header row
+  }
+
+  // Store for later use - include isHeaderless flag
+  state.pendingCSVData = { text: csvText, headers, lines, isHeaderless, dataLines };
+
   // Check if we have a saved mapping for this CSV shape
   const shapeKey = getCSVShapeKey(headers);
   const savedMapping = state.columnMappings[shapeKey];
 
   // Auto-detect format
-  const detected = detectCSVFormat(headers);
+  let detected;
+
+  // Check for Wells Fargo headerless format first
+  if (isHeaderless && isWellsFargoFormat(firstRowFields)) {
+    detected = {
+      formatId: 'wellsfargo',
+      formatName: 'Wells Fargo (no headers)',
+      isHeaderless: true,
+      mapping: {
+        date: 'Column 1',
+        amount: 'Column 2',
+        merchant: 'Column 5'
+        // No category or account columns in Wells Fargo CSVs
+      }
+    };
+  } else if (isHeaderless) {
+    // Generic headerless - try to guess based on column count
+    detected = {
+      formatId: 'headerless',
+      formatName: 'Unknown Format (no headers)',
+      isHeaderless: true,
+      mapping: {
+        date: 'Column 1',
+        amount: firstRowFields.length >= 2 ? 'Column 2' : null,
+        merchant: firstRowFields.length >= 5 ? 'Column 5' : (firstRowFields.length >= 3 ? 'Column 3' : null)
+      }
+    };
+  } else {
+    detected = detectCSVFormat(headers);
+  }
 
   // Use saved mapping if available, but MERGE with detected mapping
   // This ensures that if the saved mapping is missing optional fields (like category),
@@ -2429,11 +2519,25 @@ function showColumnMapping(csvText) {
     return '';
   }
   
+  // Build status message based on detection
+  let statusMessage;
+  if (savedMapping) {
+    statusMessage = '✓ Using your saved mapping for this format';
+  } else if (isHeaderless) {
+    statusMessage = `Detected: <strong>${detected.formatName}</strong> — using column positions (no headers found)`;
+  } else {
+    statusMessage = `Detected: <strong>${detected.formatName}</strong> — please verify below`;
+  }
+
+  // Calculate total transactions (dataLines for headerless, lines-1 for normal)
+  const totalTransactions = dataLines.length;
+
   container.innerHTML = `
-    <div style="padding:12px;background:#fefce8;border-bottom:1px solid #e7e5e4;">
+    <div style="padding:12px;background:${isHeaderless ? '#fef3c7' : '#fefce8'};border-bottom:1px solid #e7e5e4;">
       <span style="font-size:13px;">
-        ${savedMapping ? '✓ Using your saved mapping for this format' : `Detected: <strong>${detected.formatName}</strong> — please verify below`}
+        ${statusMessage}
       </span>
+      ${isHeaderless ? '<div style="font-size:11px;color:#92400e;margin-top:4px;">This file has no header row. First row contains data.</div>' : ''}
     </div>
     <div style="overflow-x:auto;">
       <table style="min-width:100%;border-collapse:collapse;">
@@ -2473,7 +2577,7 @@ function showColumnMapping(csvText) {
       </table>
     </div>
     <div style="padding:12px;background:#f5f5f4;font-size:11px;color:#78716c;">
-      Showing first ${previewRows.length} rows of ${lines.length - 1} total transactions
+      Showing first ${previewRows.length} rows of ${totalTransactions} total transactions
     </div>
   `;
   
@@ -2591,11 +2695,12 @@ function applyColumnMappingAndParse() {
   safeLocalStorageSet('ccTracker_columnMappings', state.columnMappings);
   
   // Parse the CSV using the mapping
+  // Use dataLines which already accounts for headerless CSVs (includes all data rows)
   const transactions = [];
-  const lines = state.pendingCSVData.lines;
-  
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
+  const dataLines = state.pendingCSVData.dataLines || state.pendingCSVData.lines.slice(1);
+
+  for (let i = 0; i < dataLines.length; i++) {
+    const line = dataLines[i].trim();
     if (!line) continue;
     
     const fields = parseCSVLine(line);
@@ -2741,13 +2846,16 @@ async function processTransactions(transactions) {
     const card = CARDS[cardId];
     const isCredit = txn.amount > 0;
     
-    // Detect if this is a payment (not a refund or statement credit)
+    // Detect if this is a payment or statement balance line (not a refund or statement credit)
     const upperMerchant = (txn.merchant + ' ' + txn.original).toUpperCase();
     const isPayment = isCredit && (
       upperMerchant.includes('AUTOMATIC PAYMENT') ||
       upperMerchant.includes('PAYMENT - THANK') ||
       upperMerchant.includes('ONLINE PAYMENT') ||
       upperMerchant.includes('AUTOPAY') ||
+      upperMerchant.includes('LAST STATEMENT BAL') ||
+      upperMerchant.includes('STATEMENT BALANCE') ||
+      upperMerchant.includes('PREVIOUS BALANCE') ||
       txn.monarchCategory?.toLowerCase().includes('credit card payment')
     );
     

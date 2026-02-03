@@ -886,17 +886,30 @@ const KNOWN_MERCHANTS = {
   'bird ride': 'transit', 'revel': 'transit', 'via ': 'transit', 'nj transit': 'transit',
   'path train': 'transit', 'lirr': 'transit', 'metro north': 'transit',
   
-  // Airlines
-  'delta': 'flights-direct', 'american airlines': 'flights-direct', 'united air': 'flights-direct',
-  'southwest': 'flights-direct', 'jetblue': 'flights-direct', 'alaska air': 'flights-direct',
-  'spirit air': 'flights-direct', 'frontier air': 'flights-direct', 'hawaiian air': 'flights-direct',
+  // Airlines (ultra-safe, confidence: 100)
+  'delta': 'flights-direct', 'delta air': 'flights-direct', 'delta airlines': 'flights-direct',
+  'united': 'flights-direct', 'united air': 'flights-direct', 'united airlines': 'flights-direct',
+  'american air': 'flights-direct', 'american airlines': 'flights-direct',
+  'southwest': 'flights-direct', 'southwest air': 'flights-direct',
+  'jetblue': 'flights-direct', 'jet blue': 'flights-direct',
+  'alaska air': 'flights-direct', 'alaska airlines': 'flights-direct',
+  'spirit air': 'flights-direct', 'spirit airlines': 'flights-direct',
+  'frontier air': 'flights-direct', 'frontier airlines': 'flights-direct',
+  'hawaiian air': 'flights-direct', 'hawaiian airlines': 'flights-direct',
+  'allegiant': 'flights-direct', 'allegiant air': 'flights-direct',
   
-  // Hotels
+  // Hotels (ultra-safe, confidence: 100)
   'marriott': 'hotels-direct', 'hilton': 'hotels-direct', 'hyatt': 'hotels-direct',
-  'ihg': 'hotels-direct', 'airbnb': 'hotels-direct', 'vrbo': 'hotels-direct',
+  'ihg': 'hotels-direct', 'intercontinental': 'hotels-direct',
+  'wyndham': 'hotels-direct', 'best western': 'hotels-direct', 'radisson': 'hotels-direct',
+  'choice hotels': 'hotels-direct', 'sheraton': 'hotels-direct', 'westin': 'hotels-direct',
+  'ritz carlton': 'hotels-direct', 'ritz-carlton': 'hotels-direct', 'four seasons': 'hotels-direct',
+  'renaissance hotel': 'hotels-direct',
+  // Additional hotels
+  'airbnb': 'hotels-direct', 'vrbo': 'hotels-direct',
   'flamingo hotel': 'hotels-direct', 'mgm': 'hotels-direct', 'caesars': 'hotels-direct',
-  'wyndham': 'hotels-direct', 'best western': 'hotels-direct', 'holiday inn': 'hotels-direct',
-  'hampton inn': 'hotels-direct', 'courtyard': 'hotels-direct', 'fairfield inn': 'hotels-direct',
+  'holiday inn': 'hotels-direct', 'hampton inn': 'hotels-direct', 'courtyard': 'hotels-direct',
+  'fairfield inn': 'hotels-direct',
   
   // OTAs
   'expedia': 'travel-ota', 'booking.com': 'travel-ota', 'hotels.com': 'travel-ota', 'priceline': 'travel-ota',
@@ -913,7 +926,17 @@ const KNOWN_MERCHANTS = {
 'amex trv': 'amex-travel', 'americanexpress.com/travel': 'amex-travel',
 // Bilt Travel portal
 'bilt travel': 'bilt-travel', 'bilttravel': 'bilt-travel', 'bilt.com/travel': 'bilt-travel',
-  
+
+  // Car Rental (ultra-safe, confidence: 100)
+  'hertz': 'car-rental', 'enterprise rent': 'car-rental', 'enterprise car': 'car-rental',
+  'avis': 'car-rental', 'budget rent': 'car-rental', 'budget car': 'car-rental',
+  'national car rental': 'car-rental', 'alamo': 'car-rental', 'dollar rent': 'car-rental',
+  'thrifty': 'car-rental', 'sixt': 'car-rental',
+
+  // Cruise (ultra-safe, confidence: 100)
+  'carnival cruise': 'cruise', 'royal caribbean': 'cruise', 'norwegian cruise': 'cruise',
+  'princess cruise': 'cruise', 'disney cruise': 'cruise', 'msc cruise': 'cruise',
+
   // Groceries - supermarkets (qualify for Amex Gold 4x)
   'trader joe': 'grocery', 'safeway': 'grocery', 'kroger': 'grocery', 'publix': 'grocery',
   'aldi': 'grocery', 'wegmans': 'grocery', 'stop shop': 'grocery', 'stop & shop': 'grocery',
@@ -927,12 +950,18 @@ const KNOWN_MERCHANTS = {
   'costco': 'wholesale', 'sams club': 'wholesale', "sam's club": 'wholesale', 'bjs': 'wholesale',
   'target': 'retail', 'walmart': 'retail',
   
-  // Streaming & Subscriptions
-  'netflix': 'streaming', 'spotify': 'streaming', 'disney+': 'streaming', 'hulu': 'streaming',
-  'hbo': 'streaming', 'peacock': 'streaming', 'paramount': 'streaming', 'apple tv': 'streaming',
-  'youtube premium': 'streaming', 'amazon prime video': 'streaming', 'max ': 'streaming',
-  'apple music': 'streaming', 'audible': 'streaming', 'kindle unlimited': 'streaming',
-  'apple one': 'streaming', 'espn+': 'streaming', 'discovery+': 'streaming', 'sirius': 'streaming',
+  // Streaming & Subscriptions (ultra-safe, confidence: 100)
+  'netflix': 'streaming', 'spotify': 'streaming', 'hulu': 'streaming',
+  'disney+': 'streaming', 'disney plus': 'streaming',
+  'hbo': 'streaming', 'hbo max': 'streaming',
+  'apple music': 'streaming', 'apple tv': 'streaming', 'apple one': 'streaming',
+  'amazon prime video': 'streaming', 'prime video': 'streaming',
+  'paramount': 'streaming', 'paramount+': 'streaming', 'paramount plus': 'streaming',
+  'peacock': 'streaming', 'youtube premium': 'streaming',
+  'pandora': 'streaming', 'tidal': 'streaming', 'deezer': 'streaming',
+  // Additional streaming services
+  'max ': 'streaming', 'audible': 'streaming', 'kindle unlimited': 'streaming',
+  'espn+': 'streaming', 'discovery+': 'streaming', 'sirius': 'streaming',
   'crunchyroll': 'streaming', 'fubo': 'streaming', 'sling tv': 'streaming', 'youtube tv': 'streaming',
   'xfinity stream': 'streaming', 'spectrum': 'streaming', 'optimum': 'streaming',
   'headspace': 'streaming', 'calm': 'streaming', 'duolingo': 'streaming', 'masterclass': 'streaming',

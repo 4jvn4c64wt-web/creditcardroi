@@ -779,6 +779,7 @@ const CARDS = {
     baseRate: 1,
     credits: [
       { name: 'Travel Credit', amount: 300, keywords: ['TRAVEL CREDIT'], manual: false },
+      { name: 'Global Entry/TSA PreCheck', amount: 100, keywords: ['GLOBAL ENTRY', 'TSA PRECHECK', 'KNOWN TRAVELER', 'TRUSTED TRAVELER', 'USCUSTOMS'], manual: false },
       { name: 'Dining/OpenTable Credit', amount: 300, keywords: ['DINING CREDIT', 'OPENTABLE'], manual: false },
       { name: 'The Edit Hotels', amount: 500, keywords: ['THE EDIT'], manual: false },
       { name: 'DoorDash Restaurant Credit', amount: 60, keywords: [], manual: true }, // $5/month in-app
@@ -2475,12 +2476,19 @@ function detectCredit(merchant, originalStatement, cardId, txnId) {
     }
   }
   
-  // No specific credit matched. If this looks like a statement credit,
-  // return generic "Statement Credit" - let user manually classify it
+  // No specific credit matched. Check for rewards redemption patterns.
+  if (upper.includes('REWARD') && (upper.includes('REDEEM') || upper.includes('STATEMENT'))) {
+    return 'Rewards Redemption';
+  }
+  if (upper.includes('CASHBACK') || upper.includes('CASH BACK')) {
+    return 'Cash Back Redemption';
+  }
+
+  // If this looks like a generic statement credit, return that
   if (upper.includes('CREDIT') && !upper.includes('CREDIT CARD')) {
     return 'Statement Credit';
   }
-  
+
   // No match found - this is just a refund, not a statement credit
   return null;
 }
@@ -3303,10 +3311,20 @@ async function processTransactions(transactions) {
     const cardId = state.cardMappings[txn.last4];
     const card = CARDS[cardId];
     const isCredit = txn.amount > 0;
-    
+
     // Detect if this is a payment or statement balance line (not a refund or statement credit)
     const upperMerchant = (txn.merchant + ' ' + txn.original).toUpperCase();
-    const isPayment = isCredit && (
+
+    // First, check if this looks like a statement credit (should NOT be treated as payment)
+    const looksLikeStatementCredit = isCredit && (
+      (upperMerchant.includes('CREDIT') && !upperMerchant.includes('CREDIT CARD')) ||
+      upperMerchant.includes('REWARD') ||
+      upperMerchant.includes('REDEEM') ||
+      upperMerchant.includes('CASHBACK') ||
+      upperMerchant.includes('CASH BACK')
+    );
+
+    const isPayment = isCredit && !looksLikeStatementCredit && (
       upperMerchant.includes('AUTOMATIC PAYMENT') ||
       upperMerchant.includes('PAYMENT - THANK') ||
       upperMerchant.includes('ONLINE PAYMENT') ||

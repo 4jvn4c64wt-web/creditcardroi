@@ -837,8 +837,13 @@ const KNOWN_MERCHANTS = {
   'premier dental': 'medical', 'hss ': 'medical', 'myhss': 'medical',
   'mount sinai': 'medical', 'bjc healthcare': 'medical',
 
-  // Insurance
-  'state farm': 'insurance',
+  // Insurance (confidence 100)
+  'state farm': 'insurance', 'geico': 'insurance', 'allstate': 'insurance', 'progressive': 'insurance',
+  'liberty mutual': 'insurance', 'usaa ins': 'insurance', 'farmers ins': 'insurance', 'nationwide ins': 'insurance',
+  'travelers ins': 'insurance', 'cigna': 'insurance', 'anthem': 'insurance', 'aetna': 'insurance',
+  'unitedhealth': 'insurance', 'connecticare': 'insurance', 'bcbs': 'insurance', 'blue cross': 'insurance',
+  'blue shield': 'insurance', 'humana': 'insurance', 'kaiser': 'insurance', 'metlife ins': 'insurance',
+  'prudential ins': 'insurance',
 
   // Food delivery
   // Note: 'uber eats' and 'ubereats' must be listed here (before 'uber ') to ensure food delivery is dining
@@ -1501,6 +1506,10 @@ function mapToCardCategory(genericCategory, cardId, txnDate = null) {
     'entertainment': ['entertainment', 'other'],
     'utilities': ['utilities', 'other'],
     'cell-phone': ['cell-phone', 'other'],
+
+    // Insurance/Medical
+    'insurance': ['insurance', 'other'],
+    'medical': ['medical', 'other'],
   };
   
   // Try to find a match from the mappings
@@ -1712,6 +1721,11 @@ function classifyMerchant(merchant, csvCategory, cardId = null, originalStatemen
   // ==========================================================================
   for (const [key, cat] of Object.entries(KNOWN_MERCHANTS)) {
     if (combinedNorm.includes(key)) {
+      // Check for exclusions (e.g., 'aetna cvs' should not match 'aetna' -> insurance)
+      const exclusions = KEYWORD_EXCLUSIONS[cat];
+      if (exclusions && exclusions.some(excl => combinedNorm.includes(excl))) {
+        continue; // Skip this match due to exclusion
+      }
       state.merchantCache[cacheKey] = cat;
       return {
         subcategory: cat,

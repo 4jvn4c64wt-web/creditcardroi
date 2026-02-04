@@ -1360,6 +1360,7 @@ let state = {
   confirmedTransactions: safeLocalStorageGet('ccTracker_confirmedTxns', {}), // txnId -> category (single-txn confirmations)
   cashPlusCategories: safeLocalStorageGet('ccTracker_cashPlusCategories', {}),
   cffCategories: safeLocalStorageGet('ccTracker_cffCategories', {}),
+  cffPaypalDecemberOnly: safeLocalStorageGet('ccTracker_cffPaypalDecemberOnly', {}), // Tracks PayPal December-only for Q4 by year
   biltConfig: safeLocalStorageGet('ccTracker_biltConfig', {}),
   columnMappings: safeLocalStorageGet('ccTracker_columnMappings', {}), // Remembers mappings by CSV shape
   pendingCSVData: null, // Temporarily holds CSV data during column mapping
@@ -2183,7 +2184,7 @@ function detectBiltRentPayments(transactions, cardId) {
   return rentTxns;
 }
 
-function getMultiplier(cardId, category, txnDate = null) {
+function getMultiplier(cardId, category, txnDate = null, merchantDesc = '') {
   const card = CARDS[cardId];
   if (!card) return { rate: 1, reason: 'Unknown card' };
   
@@ -2245,6 +2246,48 @@ function getMultiplier(cardId, category, txnDate = null) {
 
     // Try year-specific key first, then fall back to quarter-only key for legacy data
     const selectedCats = state.cffCategories[yearQuarterKey] || state.cffCategories[quarter] || [];
+
+    // PayPal wrapper detection: PayPal is a payment wrapper, not a merchant category.
+    // If PayPal is selected as a 5% category for this quarter, check if the transaction
+    // was made through PayPal and award 5x regardless of the underlying merchant category.
+    if (selectedCats.includes('paypal') && merchantDesc) {
+      const normMerchant = (merchantDesc || '').toLowerCase();
+      const isPaypalTransaction = normMerchant.includes('paypal');
+
+      if (isPaypalTransaction) {
+        // For Q4, check if December-only mode is enabled
+        if (quarter === 'Q4') {
+          const decemberOnlyKey = `${year}-Q4`;
+          const isDecemberOnly = state.cffPaypalDecemberOnly[decemberOnlyKey];
+
+          if (isDecemberOnly) {
+            // Parse the transaction month - only award 5x if December (month 11)
+            let txnMonth = 11; // Default to December
+            if (txnDate) {
+              if (txnDate.includes('-')) {
+                txnMonth = parseInt(txnDate.split('-')[1]) - 1; // YYYY-MM-DD
+              } else if (txnDate.includes('/')) {
+                txnMonth = parseInt(txnDate.split('/')[0]) - 1; // MM/DD/YYYY
+              }
+            }
+
+            if (txnMonth !== 11) {
+              // Not December - don't award PayPal 5x, fall through to normal classification
+              // (PayPal is December-only for this Q4)
+            } else {
+              // December - award PayPal 5x
+              return { rate: 5, reason: `5% PayPal (${year} Q4 December)` };
+            }
+          } else {
+            // Not December-only - award PayPal 5x for entire Q4
+            return { rate: 5, reason: `5% PayPal (${year} ${quarter} bonus)` };
+          }
+        } else {
+          // Non-Q4 quarter - straightforward PayPal 5x
+          return { rate: 5, reason: `5% PayPal (${year} ${quarter} bonus)` };
+        }
+      }
+    }
 
     // Walk up hierarchy to check if this category or any parent is a selected 5% category
     let checkCat = category;
@@ -3344,6 +3387,9 @@ async function processTransactions(transactions) {
     let isRefund = false;
     
     if (card) {
+      // Build merchant description for PayPal wrapper detection
+      const merchantDesc = (txn.merchant || '') + ' ' + (txn.original || '');
+
       if (isPayment) {
         // Payments: don't count, gray styling
         multiplier = { rate: 0, reason: 'Payment' };
@@ -3352,16 +3398,16 @@ async function processTransactions(transactions) {
         if (creditMatch) {
           // Statement credit - also calculate what points would have been earned
           // so we can subtract them (credits reduce points like refunds)
-          const categoryMult = getMultiplier(cardId, cardCategory, txn.date);
+          const categoryMult = getMultiplier(cardId, cardCategory, txn.date, merchantDesc);
           multiplier = { rate: categoryMult.rate, reason: `Credit: ${creditMatch} (-${categoryMult.rate}x)` };
         } else {
           // This is a refund - apply same multiplier as a charge would get, but negative
           isRefund = true;
-          multiplier = getMultiplier(cardId, cardCategory, txn.date);
+          multiplier = getMultiplier(cardId, cardCategory, txn.date, merchantDesc);
           multiplier.reason = `Refund: -${multiplier.rate}x ${cardCategory}`;
         }
       } else {
-        multiplier = getMultiplier(cardId, cardCategory, txn.date);
+        multiplier = getMultiplier(cardId, cardCategory, txn.date, merchantDesc);
       }
     }
     
@@ -3741,7 +3787,10 @@ function showCardConfigEditor(preselectedCardId = null) {
             const yearQuarterKey = `${selectedCFFYear}-${q.id}`;
             const selectedCats = state.cffCategories[yearQuarterKey] || state.cffCategories[q.id] || [];
             const isCurrentQuarter = selectedCFFYear === currentYear && getCurrentQuarter() === q.id;
-            
+            const isQ4 = q.id === 'Q4';
+            const paypalDecemberOnly = isQ4 && state.cffPaypalDecemberOnly[`${selectedCFFYear}-Q4`];
+            const paypalSelected = selectedCats.includes('paypal');
+
             return `
             <details style="margin-bottom:12px;border:1px solid #e7e5e4;border-radius:8px;${isCurrentQuarter ? 'border-color:#059669;' : ''}" ${isCurrentQuarter ? 'open' : ''}>
               <summary style="padding:12px;cursor:pointer;font-weight:500;font-size:13px;background:${isCurrentQuarter ? '#dcfce7' : '#fafaf9'};border-radius:7px;list-style:none;display:flex;justify-content:space-between;align-items:center;">
@@ -3752,12 +3801,15 @@ function showCardConfigEditor(preselectedCardId = null) {
               </summary>
               <div style="padding:12px;">
                 <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:6px;max-height:200px;overflow-y:auto;">
-                  ${Object.entries(CFF_5_LABELS).map(([key, label]) => `
-                    <label style="display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid #e7e5e4;border-radius:4px;cursor:pointer;font-size:11px;${selectedCats.includes(key) ? 'background:#dcfce7;border-color:#059669;' : ''}">
-                      <input type="checkbox" class="cff-5" data-year="${selectedCFFYear}" data-quarter="${q.id}" data-category="${key}" ${selectedCats.includes(key) ? 'checked' : ''}>
-                      ${label}
+                  ${Object.entries(CFF_5_LABELS).map(([key, label]) => {
+                    const isPaypalInQ4 = isQ4 && key === 'paypal';
+                    const isChecked = selectedCats.includes(key);
+                    return `
+                    <label style="display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid #e7e5e4;border-radius:4px;cursor:pointer;font-size:11px;${isChecked ? 'background:#dcfce7;border-color:#059669;' : ''}${isPaypalInQ4 ? 'position:relative;' : ''}">
+                      <input type="checkbox" class="cff-5" data-year="${selectedCFFYear}" data-quarter="${q.id}" data-category="${key}" ${isChecked ? 'checked' : ''}>
+                      ${label}${isPaypalInQ4 && isChecked ? `<button type="button" class="cff-paypal-dec-toggle" data-year="${selectedCFFYear}" title="PayPal is sometimes only active in December of Q4" style="margin-left:auto;padding:1px 4px;font-size:9px;border:1px solid ${paypalDecemberOnly ? '#059669' : '#d1d5db'};border-radius:3px;background:${paypalDecemberOnly ? '#dcfce7' : '#f9fafb'};color:${paypalDecemberOnly ? '#059669' : '#6b7280'};cursor:pointer;white-space:nowrap;">Dec only</button>` : ''}
                     </label>
-                  `).join('')}
+                  `}).join('')}
                 </div>
               </div>
             </details>
@@ -4102,6 +4154,37 @@ function showCardConfigEditor(preselectedCardId = null) {
         cb.addEventListener('change', () => {
           cb.closest('label').style.background = cb.checked ? '#dcfce7' : '';
           cb.closest('label').style.borderColor = cb.checked ? '#059669' : '#e7e5e4';
+          // If this is the PayPal checkbox in Q4, need to re-render to show/hide Dec only toggle
+          if (cb.dataset.category === 'paypal' && cb.dataset.quarter === 'Q4') {
+            // Save current state first, then re-render
+            const year = parseInt(cb.dataset.year);
+            const yearQuarterKey = `${year}-Q4`;
+            const selectedCats = [];
+            document.querySelectorAll(`.cff-5[data-quarter="Q4"][data-year="${year}"]:checked`).forEach(chk => {
+              selectedCats.push(chk.dataset.category);
+            });
+            state.cffCategories[yearQuarterKey] = selectedCats;
+            safeLocalStorageSet('ccTracker_cffCategories', state.cffCategories);
+            renderCardConfig();
+          }
+        });
+      });
+
+      // PayPal December-only toggle for Q4
+      document.querySelectorAll('.cff-paypal-dec-toggle').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const year = parseInt(btn.dataset.year);
+          const key = `${year}-Q4`;
+          // Toggle the December-only setting
+          state.cffPaypalDecemberOnly[key] = !state.cffPaypalDecemberOnly[key];
+          safeLocalStorageSet('ccTracker_cffPaypalDecemberOnly', state.cffPaypalDecemberOnly);
+          // Update button appearance
+          const isActive = state.cffPaypalDecemberOnly[key];
+          btn.style.borderColor = isActive ? '#059669' : '#d1d5db';
+          btn.style.background = isActive ? '#dcfce7' : '#f9fafb';
+          btn.style.color = isActive ? '#059669' : '#6b7280';
         });
       });
     }

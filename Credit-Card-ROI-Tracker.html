@@ -2923,6 +2923,25 @@ function applyColumnMappingAndParse() {
     console.log(`Skipped ${skippedByAccountType.length} non-credit card transactions based on account type:`, skippedByAccountType);
   }
 
+  // Sign convention auto-detection
+  // Monarch/Chase use "charges are negative", Rocket Money uses "charges are positive"
+  // If >60% of non-zero amounts are positive, flip all amounts to normalize
+  const nonZeroAmounts = transactions.filter(t => t.amount !== 0);
+  if (nonZeroAmounts.length > 0) {
+    const positiveCount = nonZeroAmounts.filter(t => t.amount > 0).length;
+    const positivePercent = (positiveCount / nonZeroAmounts.length) * 100;
+
+    if (positivePercent > 60) {
+      // CSV uses "charges are positive" convention - flip to "charges are negative"
+      for (const txn of transactions) {
+        txn.amount = txn.amount * -1;
+      }
+      console.log(`Sign convention: detected charges-as-positive (${positivePercent.toFixed(1)}% positive), flipping all amounts`);
+    } else {
+      console.log(`Sign convention: charges-as-negative (${positivePercent.toFixed(1)}% positive), no flip needed`);
+    }
+  }
+
   // Clear pending data
   state.pendingCSVData = null;
 

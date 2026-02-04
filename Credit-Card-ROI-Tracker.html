@@ -3396,6 +3396,18 @@ async function processTransactions(transactions) {
       } else if (isCredit) {
         creditMatch = detectCredit(txn.merchant, txn.original, cardId, txn.id);
         if (creditMatch) {
+          // Credit was successfully identified — update confidence and reason
+          // to reflect this, replacing the merchant classification result
+          if (creditMatch === 'Statement Credit') {
+            // Generic fallback - we know it's a credit but not which specific one
+            cls.confidence = 50;
+            cls.reason = 'Statement credit (unmatched — assign manually)';
+          } else {
+            // Specific credit matched
+            cls.confidence = 100;
+            cls.reason = `Credit: ${creditMatch}`;
+          }
+
           // Statement credit - also calculate what points would have been earned
           // so we can subtract them (credits reduce points like refunds)
           const categoryMult = getMultiplier(cardId, cardCategory, txn.date, merchantDesc);

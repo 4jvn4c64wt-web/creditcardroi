@@ -837,6 +837,9 @@ const KNOWN_MERCHANTS = {
   'premier dental': 'medical', 'hss ': 'medical', 'myhss': 'medical',
   'mount sinai': 'medical', 'bjc healthcare': 'medical',
 
+  // Insurance
+  'state farm': 'insurance',
+
   // Food delivery
   // Note: 'uber eats' and 'ubereats' must be listed here (before 'uber ') to ensure food delivery is dining
   'doordash': 'dining', 'uber eats': 'dining', 'ubereats': 'dining', 'grubhub': 'dining', 'seamless': 'dining', 'caviar': 'dining',
@@ -894,7 +897,8 @@ const KNOWN_MERCHANTS = {
   'shell': 'gas', 'exxon': 'gas', 'mobil': 'gas', 'chevron': 'gas', 'bp ': 'gas',
   'speedway': 'gas', 'wawa': 'gas', 'sunoco': 'gas', 'citgo': 'gas', 'valero': 'gas',
   'marathon gas': 'gas', 'phillips 66': 'gas', 'circle k': 'gas', 'sheetz': 'gas',
-  
+  'quiktrip': 'gas', 'qt ': 'gas',
+
   // Transit & Rideshare
   // IMPORTANT: Uber patterns must be checked carefully - uber eats is dining, uber ride is transit
   // 'uber eats' is listed above in Food delivery section and will be matched first
@@ -2008,7 +2012,7 @@ function classifyTravel(normalizedText, cardId) {
   }
 
   // Check for car rentals (often show vendor name, not portal)
-  const carRentals = ['hertz', 'enterprise', 'avis', 'budget', 'national car', 'alamo', 'dollar rent', 'thrifty', 'sixt'];
+  const carRentals = ['hertz', 'enterprise', 'avis', 'budget', 'national car', 'alamo', 'dollar rent', 'thrifty', 'sixt', 'zipcar'];
   for (const rental of carRentals) {
     if (norm.includes(rental)) {
       return { subcategory: 'car-rental', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: `Car rental: ${rental}` };

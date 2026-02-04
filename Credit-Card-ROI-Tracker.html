@@ -985,6 +985,13 @@ const KNOWN_MERCHANTS = {
   // Parking
   'parking': 'parking', 'spothero': 'parking', 'parkwhiz': 'parking', 'parkme': 'parking',
 
+  // Shipping/Mail
+  'usps': 'shipping',
+
+  // Travel (for credit detection - Global Entry/TSA PreCheck)
+  'uscustoms': 'travel',
+  'trusted traveler': 'travel',
+
   // Streaming & Subscriptions (ultra-safe, confidence: 100)
   'netflix': 'streaming', 'spotify': 'streaming', 'hulu': 'streaming',
   'disney+': 'streaming', 'disney plus': 'streaming',
@@ -1149,6 +1156,7 @@ const CATEGORY_HIERARCHY = {
   'dry-cleaning': 'other',
   'insurance': 'other',
   'medical': 'other',
+  'shipping': 'other',
   'legal': 'other',
   'tax': 'other',
   'education': 'other',
@@ -1177,9 +1185,13 @@ const CATEGORY_HIERARCHY = {
 // Order matters: more specific patterns should be checked first
 const SPECIFIC_CATEGORY_KEYWORDS = {
   // Skip categories - checked first to filter out non-purchase transactions
-  // Skip patterns for non-purchase transactions (payments, transfers, statement lines)
+  // Skip patterns for non-purchase transactions (payments, transfers, statement lines, fees, interest)
   'skip': ['transfer', 'payment thank you', 'autopay', 'credit card payment', 'paycheck', 'direct deposit', 'income', 'payroll', 'ach credit',
-           'automatic payment', 'last statement bal', 'statement balance', 'previous balance', 'balance from'],
+           'automatic payment', 'last statement bal', 'statement balance', 'previous balance', 'balance from',
+           'interest charge', 'interest debit', 'purch interest',
+           'annual membership fee', 'annual fee', 'returned payment', 'late fee', 'late charge',
+           'over limit fee', 'balance transfer fee', 'cash advance fee', 'foreign transaction fee',
+           'payment received', 'autopay payment', 'credit balance refund'],
 
   // Dining specifics
   'food-truck': ['food truck'],
@@ -1516,9 +1528,10 @@ function mapToCardCategory(genericCategory, cardId, txnDate = null) {
     'utilities': ['utilities', 'other'],
     'cell-phone': ['cell-phone', 'other'],
 
-    // Insurance/Medical
+    // Insurance/Medical/Shipping
     'insurance': ['insurance', 'other'],
     'medical': ['medical', 'other'],
+    'shipping': ['shipping', 'other'],
   };
   
   // Try to find a match from the mappings
@@ -1681,7 +1694,11 @@ const CSV_TO_SUBCATEGORY = {
   'medical': 'medical',
   'healthcare': 'medical',
   'health care': 'medical',
-  'doctor': 'medical'
+  'doctor': 'medical',
+
+  // Shipping
+  'shipping': 'shipping',
+  'postage': 'shipping'
 };
 
 function classifyMerchant(merchant, csvCategory, cardId = null, originalStatement = null) {

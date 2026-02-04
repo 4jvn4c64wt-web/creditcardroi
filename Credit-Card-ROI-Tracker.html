@@ -846,7 +846,19 @@ const KNOWN_MERCHANTS = {
   'joes pizza': 'dining', "joe's pizza": 'dining', 'levain': 'dining', 'magnolia bakery': 'dining',
   'ess-a-bagel': 'dining', 'pick a bagel': 'dining', 'gregorys coffee': 'dining', 'bluestone lane': 'dining',
   'le pain quotidien': 'dining', 'pret a manger': 'dining', 'au bon pain': 'dining',
-  
+
+  // Additional dining (high confidence)
+  '9th ave saloon': 'dining', 'auntie anne': 'dining', 'balthazar': 'dining', 'birch coffee': 'dining',
+  'bonannos': 'dining', 'bostwick': 'dining', 'broad nosh': 'dining', 'cava ': 'dining',
+  'ddbr': 'dining', 'dominies': 'dining', 'elephent ear': 'dining', 'giardino': 'dining',
+  'hey tea': 'dining', 'hibino': 'dining', 'imasa': 'dining', 'innout': 'dining',
+  'jaspers': 'dining', 'jongro': 'dining', 'juice generation': 'dining', 'juicegeneration': 'dining',
+  'kazunori': 'dining', 'master panda': 'dining', 'naisnow': 'dining', 'nook express': 'dining',
+  'partea': 'dining', 'rise bar': 'dining', 'scalino': 'dining', 'snack chicha': 'dining',
+  'sweetleaf': 'dining', 'taco mahal': 'dining', 'too good to go': 'dining', 'toribro': 'dining',
+  'turntable': 'dining', 'uncle rays': 'dining', 'white noise coffee': 'dining', 'zaruma': 'dining',
+  'zoob zib': 'dining',
+
   // Dining keywords (high confidence) - removed ambiguous: bar, kitchen, bowl
   'restaurant': 'dining', 'cafe': 'dining', 'grill': 'dining', 'pizza': 'dining', 'sushi': 'dining',
   'noodle': 'dining', 'burger': 'dining', 'bagel': 'dining', 'espresso': 'dining', 'coffee house': 'dining',
@@ -885,12 +897,13 @@ const KNOWN_MERCHANTS = {
   'citi bike': 'transit', 'citibike': 'transit', 'lime scooter': 'transit', 'lime ride': 'transit',
   'bird ride': 'transit', 'revel': 'transit', 'via ': 'transit', 'nj transit': 'transit',
   'path train': 'transit', 'lirr': 'transit', 'metro north': 'transit',
-  
+  'desert cab': 'transit', 'omny': 'transit',
+
   // Airlines (ultra-safe, confidence: 100)
   'delta': 'flights-direct', 'delta air': 'flights-direct', 'delta airlines': 'flights-direct',
   'united': 'flights-direct', 'united air': 'flights-direct', 'united airlines': 'flights-direct',
   'american air': 'flights-direct', 'american airlines': 'flights-direct',
-  'southwest': 'flights-direct', 'southwest air': 'flights-direct',
+  'southwest': 'flights-direct', 'southwest air': 'flights-direct', 'southwes': 'flights-direct',
   'jetblue': 'flights-direct', 'jet blue': 'flights-direct',
   'alaska air': 'flights-direct', 'alaska airlines': 'flights-direct',
   'spirit air': 'flights-direct', 'spirit airlines': 'flights-direct',
@@ -909,7 +922,8 @@ const KNOWN_MERCHANTS = {
   'airbnb': 'hotels-direct', 'vrbo': 'hotels-direct',
   'flamingo hotel': 'hotels-direct', 'mgm': 'hotels-direct', 'caesars': 'hotels-direct',
   'holiday inn': 'hotels-direct', 'hampton inn': 'hotels-direct', 'courtyard': 'hotels-direct',
-  'fairfield inn': 'hotels-direct',
+  'fairfield inn': 'hotels-direct', 'omni': 'hotels-direct', 'park lane hotel': 'hotels-direct',
+  'residence inn': 'hotels-direct', 'sonesta': 'hotels-direct',
   
   // OTAs
   'expedia': 'travel-ota', 'booking.com': 'travel-ota', 'hotels.com': 'travel-ota', 'priceline': 'travel-ota',
@@ -931,7 +945,7 @@ const KNOWN_MERCHANTS = {
   'hertz': 'car-rental', 'enterprise rent': 'car-rental', 'enterprise car': 'car-rental',
   'avis': 'car-rental', 'budget rent': 'car-rental', 'budget car': 'car-rental',
   'national car rental': 'car-rental', 'alamo': 'car-rental', 'dollar rent': 'car-rental',
-  'thrifty': 'car-rental', 'sixt': 'car-rental',
+  'thrifty': 'car-rental', 'sixt': 'car-rental', 'zipcar': 'car-rental',
 
   // Cruise (ultra-safe, confidence: 100)
   'carnival cruise': 'cruise', 'royal caribbean': 'cruise', 'norwegian cruise': 'cruise',
@@ -945,7 +959,10 @@ const KNOWN_MERCHANTS = {
   'fairway': 'grocery', 'morton williams': 'grocery', 'food bazaar': 'grocery', 'key food': 'grocery',
   'sprouts': 'grocery', 'harris teeter': 'grocery', 'meijer': 'grocery', 'hy-vee': 'grocery',
   'winn dixie': 'grocery', 'piggly wiggly': 'grocery', "trader joe's": 'grocery',
-  
+  // Additional grocery
+  'amish market': 'grocery', 'city acres': 'grocery', 'dierbergs': 'grocery',
+  'foodcellar': 'grocery', 'hashi market': 'grocery', 'hudson market': 'grocery', 'schnucks': 'grocery',
+
   // Wholesale clubs & big box (do NOT qualify for Amex Gold supermarket 4x)
   'costco': 'wholesale', 'sams club': 'wholesale', "sam's club": 'wholesale', 'bjs': 'wholesale',
   'target': 'retail', 'walmart': 'retail',
@@ -966,6 +983,10 @@ const KNOWN_MERCHANTS = {
   'xfinity stream': 'streaming', 'spectrum': 'streaming', 'optimum': 'streaming',
   'headspace': 'streaming', 'calm': 'streaming', 'duolingo': 'streaming', 'masterclass': 'streaming',
   'skillshare': 'streaming', 'brilliant': 'streaming', 'nytimes': 'streaming', 'wsj': 'streaming',
+  // Additional streaming/subscriptions
+  'applecom': 'streaming', 'google one': 'streaming', 'helpmaxcom': 'streaming',
+  'microsoftpc': 'streaming', 'noom': 'streaming', 'origin financial': 'streaming',
+  'ouraring': 'streaming', 'pointme': 'streaming', 'steamgames': 'streaming', 'stitch fix': 'streaming',
 
   // Wine & Liquor stores (often miscategorized as Travel by banks)
   // Note: 'spirits' alone is too broad (matches 'Holy Spirit Church'), use specific patterns
@@ -994,12 +1015,18 @@ const KNOWN_MERCHANTS = {
   'lululemon': 'retail', 'saks': 'retail', 'nordstrom': 'retail', 'macys': 'retail', "macy's": 'retail',
   'bloomingdales': 'retail', 'neiman marcus': 'retail', 'jcpenney': 'retail', 'kohls': 'retail',
   'best buy': 'retail', 'apple store': 'retail', 'home depot': 'retail', 'lowes': 'retail',
-  
+  // Additional retail
+  'on sportswear': 'retail', 'patagonia': 'retail', 'rei ': 'retail', 'seven scents': 'retail',
+  'suitsupply': 'retail', 'tumi': 'retail', 'uniqlo': 'retail', 'williamssonomacom': 'retail',
+
   // Entertainment
   'stubhub': 'entertainment', 'ticketmaster': 'entertainment', 'amc theatre': 'entertainment',
   'regal cinema': 'entertainment', 'cinemark': 'entertainment', 'fandango': 'entertainment',
   'seatgeek': 'entertainment', 'vivid seats': 'entertainment',
-  
+  // Additional entertainment
+  'avant gard': 'entertainment', 'big apple r': 'entertainment', 'brooklyn bowl': 'entertainment',
+  'dicefm': 'entertainment', 'san diego zoo': 'entertainment', 'seeticket': 'entertainment',
+
   // Rent
   'bilt': 'rent'
 };

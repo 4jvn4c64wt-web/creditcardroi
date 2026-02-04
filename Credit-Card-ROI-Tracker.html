@@ -899,7 +899,7 @@ const KNOWN_MERCHANTS = {
   'imperfect foods': 'online-grocery', 'misfits market': 'online-grocery', 'gopuff': 'online-grocery',
   
   // Gas
-  'shell': 'gas', 'exxon': 'gas', 'mobil': 'gas', 'chevron': 'gas', 'bp ': 'gas',
+  'shell': 'gas', 'exxon': 'gas', 'mobil ': 'gas', 'chevron': 'gas', 'bp ': 'gas',
   'speedway': 'gas', 'wawa': 'gas', 'sunoco': 'gas', 'citgo': 'gas', 'valero': 'gas',
   'marathon gas': 'gas', 'phillips 66': 'gas', 'circle k': 'gas', 'sheetz': 'gas',
   'quiktrip': 'gas', 'qt ': 'gas', 'holiday station': 'gas',
@@ -3368,6 +3368,7 @@ async function processTransactions(transactions) {
       category: cardCategory,         // After hierarchy rollup for this card
       categorySource: cls.source,
       confidence: cls.confidence || 0,
+      classificationReason: cls.reason || '',  // Why it was classified this way
       multiplier: multiplier.rate,
       reason: multiplier.reason,
       points,
@@ -5438,6 +5439,7 @@ function buildExportData() {
     category: t.category || 'other',
     categorySource: t.categorySource,
     confidence: t.confidence,
+    classificationReason: t.classificationReason || '',
     multiplier: t.multiplier,
     points: t.points,
     pointsValue: t.pointsValue,
@@ -5476,7 +5478,7 @@ function exportAsCSV() {
   }
 
   // Build CSV header - include both Subcategory and Card Category to match table display
-  const headers = ['Date', 'Merchant', 'Account', 'Amount', 'Card', 'Subcategory', 'Card Category', 'Multiplier', 'Points Earned'];
+  const headers = ['Date', 'Merchant', 'Account', 'Amount', 'Card', 'Subcategory', 'Card Category', 'Multiplier', 'Points Earned', 'Confidence', 'Reason'];
 
   // Build CSV rows using processed transaction data
   const rows = transactions.map(t => {
@@ -5485,6 +5487,9 @@ function exportAsCSV() {
     const cardCategory = t.category || 'other';
     const multiplier = t.multiplier || 1;
     const pointsEarned = Math.round(t.points || 0);
+    const confidence = t.confidence || 0;
+    // Escape reason for CSV: wrap in quotes and escape internal quotes by doubling
+    const reason = `"${(t.classificationReason || '').replace(/"/g, '""')}"`;
 
     return [
       t.date,
@@ -5495,7 +5500,9 @@ function exportAsCSV() {
       subcategory,
       cardCategory,
       multiplier,
-      t.isPayment ? 0 : pointsEarned
+      t.isPayment ? 0 : pointsEarned,
+      confidence,
+      reason
     ].join(',');
   });
 

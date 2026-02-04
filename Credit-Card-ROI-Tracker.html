@@ -138,22 +138,23 @@
       <h2 class="card-title">Map Your CSV Columns</h2>
       <p style="font-size:13px;color:#78716c;margin-bottom:8px;">Tell us which columns contain which data. We've tried to auto-detect, but please verify.</p>
       <p style="font-size:12px;color:#059669;margin-bottom:8px;">💡 <strong>Tip:</strong> The more columns you map, the more accurate your point calculations will be. Category and Original Statement help identify merchants correctly.</p>
-      <p style="font-size:12px;color:#1e40af;margin-bottom:16px;">📅 <strong>Date Column:</strong> For bank/card issuer CSVs with both "Post Date" and "Transaction Date", we auto-select <strong>Post Date</strong> because points are earned when the transaction posts, not when it's made.</p>
+      <p style="font-size:12px;color:#1e40af;margin-bottom:8px;">📅 <strong>Date Column:</strong> For bank/card issuer CSVs with both "Post Date" and "Transaction Date", we auto-select <strong>Post Date</strong> because points are earned when the transaction posts, not when it's made.</p>
+      <p style="font-size:12px;color:#7c3aed;margin-bottom:16px;">🏦 <strong>Account Type:</strong> If your CSV has an "Account Type" or "Account Name" column (e.g., Rocket Money), map it to filter out non-credit card transactions (Checking, Savings, etc.) automatically.</p>
       
       <div id="csvPreview" style="overflow-x:auto;margin-bottom:16px;border:1px solid #e7e5e4;border-radius:8px;">
         <!-- Preview table will be inserted here -->
       </div>
       
-      <!-- Default Account Section (shown when no account column is mapped) -->
+      <!-- Default Account Section (shown when no card number column is mapped) -->
       <div id="defaultAccountSection" class="hidden" style="margin-bottom:16px;padding:16px;background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;">
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
           <div style="flex:1;min-width:200px;">
             <div style="font-weight:600;color:#1e40af;margin-bottom:4px;">💳 Which card is this file from?</div>
-            <div style="font-size:12px;color:#1e3a8a;">This file doesn't have an account column. Enter the last 4 digits of the card so we can match transactions correctly.</div>
+            <div style="font-size:12px;color:#1e3a8a;">This file doesn't have a Card Number column. Enter the last 4 digits of the card so we can match transactions correctly.</div>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
             <span style="font-size:13px;color:#57534e;">Card ending in:</span>
-            <input type="text" id="defaultAccountInput" maxlength="4" placeholder="1234" 
+            <input type="text" id="defaultAccountInput" maxlength="4" placeholder="1234"
                    style="width:70px;padding:8px 12px;border:1px solid #d6d3d1;border-radius:6px;font-family:'IBM Plex Mono',monospace;font-size:16px;text-align:center;letter-spacing:2px;">
           </div>
         </div>
@@ -1347,6 +1348,60 @@ function extractLast4(account) {
   return match ? match[1] : null;
 }
 
+// Parse combined account field (e.g., "Chase Sapphire Reserve (...1234)")
+// Returns: { accountType: string|null, cardNumber: string|null }
+function parseCombinedAccountField(value) {
+  if (!value || typeof value !== 'string') {
+    return { accountType: null, cardNumber: null };
+  }
+
+  const trimmed = value.trim();
+
+  // Try to extract last 4 digits
+  const last4Match = trimmed.match(/\(?\.{0,3}(\d{4})\)?\s*$/);
+  const cardNumber = last4Match ? last4Match[1] : null;
+
+  // Get account type (everything before the number pattern)
+  let accountType = null;
+  if (cardNumber) {
+    // Remove the last4 pattern to get the account name/type
+    accountType = trimmed.replace(/\s*\(?\.{0,3}\d{4}\)?\s*$/, '').trim();
+  } else {
+    // No card number found - entire value is the account type
+    accountType = trimmed;
+  }
+
+  return { accountType: accountType || null, cardNumber };
+}
+
+// Check if a transaction should be skipped based on account type
+// Returns true if the account type indicates a non-credit card account
+function shouldSkipByAccountType(accountType) {
+  if (!accountType) return false;
+
+  const normalized = accountType.toLowerCase().trim();
+
+  // Skip these non-credit account types
+  const skipTypes = ['checking', 'savings', 'investment', 'brokerage', 'money market', 'debit', 'bank'];
+  if (skipTypes.some(type => normalized.includes(type))) {
+    return true;
+  }
+
+  // If account type is specified and doesn't contain 'credit', skip it
+  // This catches generic non-credit accounts
+  if (normalized.length > 0 && !normalized.includes('credit')) {
+    // But allow card names that don't explicitly say "credit"
+    const cardNameIndicators = ['visa', 'mastercard', 'amex', 'american express', 'discover',
+                                'sapphire', 'reserve', 'freedom', 'unlimited', 'preferred',
+                                'gold', 'platinum', 'rewards', 'cash back', 'cashback'];
+    if (!cardNameIndicators.some(indicator => normalized.includes(indicator))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 // Get valid categories for a card (handles Cash+ and CFF dynamic categories)
 function getCardCategories(cardId, txnDate = null) {
   const card = CARDS[cardId];
@@ -1512,7 +1567,11 @@ const CONFIDENCE_ADJUSTMENTS = {
   MULTIPLE_HEURISTICS_BONUS: 10,   // 2+ heuristics agree on same category
   KEYWORD_CONFLICTS: -15,          // Merchant name keyword disagrees with subcategory
   POS_PATTERN_CONFLICTS: -10,      // POS pattern disagrees with subcategory
-  ADDRESS_CONFLICTS: -10           // Address pattern disagrees with subcategory
+  ADDRESS_CONFLICTS: -10,          // Address pattern disagrees with subcategory
+
+  // Sibling transaction signal
+  SIBLING: 15,                     // Each high-confidence sibling with same subcategory
+  SIBLING_MAX: 50                  // Cap total sibling contribution
 };
 
 // Vague CSV categories that trigger discovery mode
@@ -2467,13 +2526,67 @@ function detectCSVFormat(headers) {
     // Bank CSVs often have both; budgeting apps use adjusted 'date' which is fine
     date: findHeader(['post date', 'posting date', 'date', 'transaction date', 'trans date']),
     merchant: findHeader(['merchant', 'description', 'payee', 'name']),
-    category: findHeader(['category', 'type']),
-    account: findHeader(['account', 'card', 'card no']),
+    category: findHeader(['category']),
+    account: findHeader(['account', 'card', 'card no', 'card number']),
+    accountName: findHeader(['account name', 'card name', 'account nickname']),
+    accountType: findHeader(['account type', 'type']),
     amount: findHeader(['amount', 'debit', 'credit']),
     original: findHeader(['original statement', 'original', 'statement', 'memo'])
   };
-  
+
   return { formatId: 'generic', formatName: 'Unknown Format', mapping: genericMapping };
+}
+
+// Determine if a column value represents a Card Number, Account Type, Account Name, or Combined
+// Returns: 'cardNumber' | 'accountType' | 'accountName' | 'combined' | 'unknown'
+function detectAccountColumnType(sampleValue) {
+  if (!sampleValue || typeof sampleValue !== 'string') return 'unknown';
+
+  const value = sampleValue.trim();
+  const lowerValue = value.toLowerCase();
+
+  // Check for numeric patterns (Card Number): "1234", "...1234", "(1234)"
+  if (/^\(?\.{0,3}\d{4}\)?\s*$/.test(value)) {
+    return 'cardNumber';
+  }
+
+  // Check for combined format: "Chase Sapphire Reserve (...1234)" or "Credit Card (1234)"
+  const combinedMatch = value.match(/.*\(?\.{0,3}(\d{4})\)?$/);
+  const hasText = value.replace(/[^\w\s]/g, '').replace(/\d+/g, '').trim().length > 0;
+  if (combinedMatch && hasText) {
+    return 'combined';
+  }
+
+  // Check for account type keywords (generic account types used for filtering)
+  const accountTypeKeywords = ['checking', 'savings', 'investment', 'brokerage', 'money market', 'debit'];
+  if (accountTypeKeywords.some(keyword => lowerValue.includes(keyword))) {
+    return 'accountType';
+  }
+
+  // "Credit Card" alone is an account type
+  if (lowerValue === 'credit card' || lowerValue === 'credit') {
+    return 'accountType';
+  }
+
+  // Check if the value contains card name patterns (specific card names)
+  // e.g., "Chase Sapphire Reserve", "Amex Gold", "Citi Double Cash"
+  const cardNamePatterns = ['visa', 'mastercard', 'amex', 'american express', 'discover',
+                           'sapphire', 'reserve', 'freedom', 'unlimited', 'preferred',
+                           'gold', 'platinum', 'rewards', 'cash back', 'cashback',
+                           'venture', 'quicksilver', 'double cash', 'custom cash',
+                           'blue cash', 'everyday', 'boundless', 'world elite'];
+  if (cardNamePatterns.some(pattern => lowerValue.includes(pattern))) {
+    return 'accountName'; // It's a card name like "Chase Sapphire Reserve"
+  }
+
+  // If it's mostly text (not numbers) and longer than a few words, likely account name
+  const numericContent = value.replace(/[^\d]/g, '');
+  const textContent = value.replace(/[\d\s\W]/g, '');
+  if (textContent.length > 5 && textContent.length > numericContent.length) {
+    return 'accountName';
+  }
+
+  return 'unknown';
 }
 
 // Show column mapping UI
@@ -2540,6 +2653,49 @@ function showColumnMapping(csvText) {
     };
   } else {
     detected = detectCSVFormat(headers);
+
+    // Smart column detection: examine first data row to determine if "account" column
+    // is actually Card Number, Account Type, Account Name, or Combined
+    if (!savedMapping && previewRows.length > 0) {
+      const normalizedHeaders = headers.map(h => h.toLowerCase().trim());
+
+      // Check each column that might need smart detection
+      for (let i = 0; i < normalizedHeaders.length; i++) {
+        const header = normalizedHeaders[i];
+        const sampleValue = previewRows[0][i];
+
+        // If header is "account", "account name", "account type", or similar - detect what it really is
+        if (header === 'account' || header === 'account name' || header === 'account type' || header === 'type') {
+          const columnType = detectAccountColumnType(sampleValue);
+
+          // Clear any existing mappings for this header first
+          const clearExistingMappings = () => {
+            if (detected.mapping.account === headers[i]) detected.mapping.account = null;
+            if (detected.mapping.accountName === headers[i]) detected.mapping.accountName = null;
+            if (detected.mapping.accountType === headers[i]) detected.mapping.accountType = null;
+            if (detected.mapping.accountCombined === headers[i]) detected.mapping.accountCombined = null;
+          };
+
+          // Remap based on detected type
+          if (columnType === 'cardNumber') {
+            clearExistingMappings();
+            detected.mapping.account = headers[i];
+          } else if (columnType === 'accountType') {
+            // It's an account type column (e.g., "Checking", "Credit Card", "Savings")
+            clearExistingMappings();
+            detected.mapping.accountType = headers[i];
+          } else if (columnType === 'accountName') {
+            // It's a card name column (e.g., "Chase Sapphire Reserve", "Amex Gold")
+            clearExistingMappings();
+            detected.mapping.accountName = headers[i];
+          } else if (columnType === 'combined') {
+            // It's a combined column (e.g., "Chase Sapphire Reserve (...1234)")
+            clearExistingMappings();
+            detected.mapping.accountCombined = headers[i];
+          }
+        }
+      }
+    }
   }
 
   // Use saved mapping if available, but MERGE with detected mapping
@@ -2557,7 +2713,10 @@ function showColumnMapping(csvText) {
     { value: 'date', label: '📅 Date', required: true },
     { value: 'merchant', label: '🏪 Merchant/Description', required: true },
     { value: 'amount', label: '💰 Amount', required: true },
-    { value: 'account', label: '💳 Account/Card (or enter last 4 below)' },
+    { value: 'account', label: '💳 Card Number (last 4 digits like "1234" or "...1234")' },
+    { value: 'accountName', label: '🏷️ Account Name (e.g., "Chase Sapphire Reserve")' },
+    { value: 'accountType', label: '🏦 Account Type (Credit Card, Checking, Savings)' },
+    { value: 'accountCombined', label: '💳🏷️ Account Name + Number (e.g., "Sapphire Reserve ...1234")' },
     { value: 'category', label: '📁 Category (optional, improves accuracy)' },
     { value: 'original', label: '📝 Original Statement (optional, improves accuracy)' }
   ];
@@ -2700,11 +2859,12 @@ function validateColumnMapping() {
   const defaultAccountInput = document.getElementById('defaultAccountInput');
   
   // Show/hide default account input based on whether account column is mapped
-  const hasAccountColumn = usedFields.has('account');
+  // Account can come from: 'account' (card number), or 'accountCombined' (combined field)
+  const hasAccountColumn = usedFields.has('account') || usedFields.has('accountCombined');
   if (defaultAccountSection) {
     defaultAccountSection.classList.toggle('hidden', hasAccountColumn);
   }
-  
+
   // Check if we need a default account value
   const needsDefaultAccount = !hasAccountColumn;
   const hasValidDefaultAccount = defaultAccountInput && /^\d{4}$/.test(defaultAccountInput.value.trim());
@@ -2738,36 +2898,77 @@ function applyColumnMappingAndParse() {
     }
   });
 
-  // Get default account if no account column is mapped
+  // Determine account column configuration
   const hasAccountColumn = columnIndices.account !== undefined;
+  const hasAccountNameColumn = columnIndices.accountName !== undefined;
+  const hasAccountTypeColumn = columnIndices.accountType !== undefined;
+  const hasAccountCombinedColumn = columnIndices.accountCombined !== undefined;
   const defaultAccountInput = document.getElementById('defaultAccountInput');
-  const defaultLast4 = (!hasAccountColumn && defaultAccountInput) ? defaultAccountInput.value.trim() : null;
-  
+  const defaultLast4 = (!hasAccountColumn && !hasAccountCombinedColumn && defaultAccountInput)
+    ? defaultAccountInput.value.trim()
+    : null;
+
   // Save this mapping for future use
   const shapeKey = getCSVShapeKey(state.pendingCSVData.headers);
   state.columnMappings[shapeKey] = headerMapping;
   safeLocalStorageSet('ccTracker_columnMappings', state.columnMappings);
-  
+
   // Parse the CSV using the mapping
   // Use dataLines which already accounts for headerless CSVs (includes all data rows)
   const transactions = [];
+  const skippedByAccountType = [];
   const dataLines = state.pendingCSVData.dataLines || state.pendingCSVData.lines.slice(1);
 
   for (let i = 0; i < dataLines.length; i++) {
     const line = dataLines[i].trim();
     if (!line) continue;
-    
+
     const fields = parseCSVLine(line);
-    
+
     const amount = parseFloat((fields[columnIndices.amount] || '0').replace(/[$,]/g, '')) || 0;
     const date = fields[columnIndices.date] || '';
     const merchant = fields[columnIndices.merchant] || '';
-    const account = hasAccountColumn ? (fields[columnIndices.account] || '') : `Card (...${defaultLast4})`;
     const category = columnIndices.category !== undefined ? (fields[columnIndices.category] || '') : '';
     const original = columnIndices.original !== undefined ? (fields[columnIndices.original] || '') : '';
 
-    // Use default last4 if no account column, otherwise extract from account field
-    const last4 = hasAccountColumn ? extractLast4(account) : defaultLast4;
+    // Handle account information based on column configuration
+    let account = '';
+    let accountName = null;
+    let last4 = null;
+    let accountType = null;
+
+    if (hasAccountCombinedColumn) {
+      // Combined field: "Chase Sapphire Reserve (...1234)" or "Credit Card (1234)"
+      const combinedValue = fields[columnIndices.accountCombined] || '';
+      const parsed = parseCombinedAccountField(combinedValue);
+      account = combinedValue;
+      last4 = parsed.cardNumber;
+      accountName = parsed.accountType; // The text part is the account name
+    } else if (hasAccountColumn) {
+      // Dedicated card number column
+      account = fields[columnIndices.account] || '';
+      last4 = extractLast4(account);
+    } else if (defaultLast4) {
+      // User-provided default last 4
+      account = `Card (...${defaultLast4})`;
+      last4 = defaultLast4;
+    }
+
+    // Get account name from dedicated column if present (overrides combined field)
+    if (hasAccountNameColumn) {
+      accountName = fields[columnIndices.accountName] || null;
+    }
+
+    // Get account type from dedicated column if present
+    if (hasAccountTypeColumn) {
+      accountType = fields[columnIndices.accountType] || null;
+    }
+
+    // Skip transactions from non-credit accounts based on account type
+    if (shouldSkipByAccountType(accountType)) {
+      skippedByAccountType.push({ date, merchant, amount, accountType });
+      continue; // Don't import this transaction
+    }
 
     // Create unique ID with collision handling for same-batch duplicates
     const usedIds = new Set(transactions.map(t => t.id));
@@ -2781,8 +2982,34 @@ function applyColumnMappingAndParse() {
       account,
       original,
       amount,
-      last4
+      last4,
+      accountName,  // Card name like "Chase Sapphire Reserve"
+      accountType   // Account type like "Credit Card", "Checking"
     });
+  }
+
+  // Log skipped transactions for debugging (if any)
+  if (skippedByAccountType.length > 0) {
+    console.log(`Skipped ${skippedByAccountType.length} non-credit card transactions based on account type:`, skippedByAccountType);
+  }
+
+  // Sign convention auto-detection
+  // Monarch/Chase use "charges are negative", Rocket Money uses "charges are positive"
+  // If >60% of non-zero amounts are positive, flip all amounts to normalize
+  const nonZeroAmounts = transactions.filter(t => t.amount !== 0);
+  if (nonZeroAmounts.length > 0) {
+    const positiveCount = nonZeroAmounts.filter(t => t.amount > 0).length;
+    const positivePercent = (positiveCount / nonZeroAmounts.length) * 100;
+
+    if (positivePercent > 60) {
+      // CSV uses "charges are positive" convention - flip to "charges are negative"
+      for (const txn of transactions) {
+        txn.amount = txn.amount * -1;
+      }
+      console.log(`Sign convention: detected charges-as-positive (${positivePercent.toFixed(1)}% positive), flipping all amounts`);
+    } else {
+      console.log(`Sign convention: charges-as-negative (${positivePercent.toFixed(1)}% positive), no flip needed`);
+    }
   }
 
   // Clear pending data
@@ -2901,7 +3128,91 @@ async function processTransactions(transactions) {
       };
     }
   }
-  
+
+  // ==========================================================================
+  // SIBLING TRANSACTION SIGNAL (post-processing)
+  // After individual classification, boost confidence for transactions with
+  // vague CSV categories when other transactions from the exact same merchant
+  // were classified with high confidence.
+  // ==========================================================================
+
+  // Step 1: Build merchant lookup - normalized merchant name → array of classifications
+  const merchantLookup = {};
+  for (const txn of transactions) {
+    const normMerch = normalize(txn.merchant);
+    if (!normMerch) continue;
+
+    if (!merchantLookup[normMerch]) {
+      merchantLookup[normMerch] = [];
+    }
+
+    const cls = classifications[txn.id];
+    if (cls) {
+      merchantLookup[normMerch].push({
+        txnId: txn.id,
+        subcategory: cls.subcategory,
+        confidence: cls.confidence,
+        monarchCategory: txn.monarchCategory
+      });
+    }
+  }
+
+  // Step 2: Loop through transactions and apply sibling boosts
+  for (const txn of transactions) {
+    const cls = classifications[txn.id];
+
+    // Skip non-classified or skip transactions
+    if (!cls || cls.subcategory === 'skip') continue;
+
+    // Check if the CSV category is vague - if not vague, skip (CSV is authoritative)
+    const csvCategory = (txn.monarchCategory || '').toLowerCase().trim();
+    const isVagueCSV = !csvCategory || VAGUE_CSV_CATEGORIES.includes(csvCategory);
+    if (!isVagueCSV) continue;
+
+    // Look up siblings (same normalized merchant)
+    const normMerch = normalize(txn.merchant);
+    const allSiblings = merchantLookup[normMerch] || [];
+
+    // Filter to qualifying siblings: not self, confidence >= 50
+    const qualifyingSiblings = allSiblings.filter(s =>
+      s.txnId !== txn.id && s.confidence >= 50
+    );
+
+    if (qualifyingSiblings.length === 0) continue;
+
+    // Count agreeing siblings (same subcategory as current classification)
+    const agreeingSiblings = qualifyingSiblings.filter(s =>
+      s.subcategory === cls.subcategory
+    );
+
+    // Count disagreeing siblings (different subcategory, excluding 'other' and 'skip')
+    const disagreeingSiblings = qualifyingSiblings.filter(s =>
+      s.subcategory !== cls.subcategory &&
+      s.subcategory !== 'other' &&
+      s.subcategory !== 'skip'
+    );
+
+    if (agreeingSiblings.length > 0) {
+      // Apply sibling boost, capped at SIBLING_MAX
+      const rawBoost = agreeingSiblings.length * CONFIDENCE_ADJUSTMENTS.SIBLING;
+      const siblingBoost = Math.min(rawBoost, CONFIDENCE_ADJUSTMENTS.SIBLING_MAX);
+
+      cls.confidence = Math.min(100, cls.confidence + siblingBoost);
+      cls.reason += `; Sibling signal: ${agreeingSiblings.length} similar txns (+${siblingBoost})`;
+    } else if (disagreeingSiblings.length > 0) {
+      // Siblings exist but disagree - note the conflict but don't change classification
+      // Find the most common disagreeing subcategory
+      const subcategoryCounts = {};
+      for (const s of disagreeingSiblings) {
+        subcategoryCounts[s.subcategory] = (subcategoryCounts[s.subcategory] || 0) + 1;
+      }
+      const topDisagreeing = Object.entries(subcategoryCounts)
+        .sort((a, b) => b[1] - a[1])[0];
+
+      cls.reason += `; Sibling conflict: ${disagreeingSiblings.length} txns suggest ${topDisagreeing[0]}`;
+    }
+  }
+
   // Save cache
   safeLocalStorageSet('ccTracker_merchantCache', state.merchantCache);
   
@@ -3063,11 +3374,12 @@ function showMapping(allLast4s) {
   const container = document.getElementById('mappingRows');
   container.innerHTML = creditCardLast4s.map(last4 => {
     const txn = state.transactions.find(t => t.last4 === last4);
-    const acctName = txn ? txn.account.split('(')[0].trim() : '';
+    // Prefer accountName if available, otherwise fall back to parsing account field
+    const displayName = txn?.accountName || (txn ? txn.account.split('(')[0].trim() : '');
     return `
     <div class="card-mapping-row">
       <span class="card-last4">•••• ${escapeHtml(last4)}</span>
-      <span style="font-size:12px;color:#78716c;min-width:140px;">${escapeHtml(acctName)}</span>
+      <span style="font-size:12px;color:#57534e;min-width:180px;font-weight:500;">${escapeHtml(displayName)}</span>
       <select class="form-select" data-last4="${escapeHtml(last4)}" style="flex:1;max-width:300px;">
         <option value="">Select card...</option>
         ${Object.entries(CARDS)

@@ -832,7 +832,11 @@ const CARDS = {
 const KNOWN_MERCHANTS = {
   // Drugstores
   'cvs': 'drugstore', 'walgreens': 'drugstore', 'rite aid': 'drugstore', 'duane reade': 'drugstore',
-  
+
+  // Medical
+  'premier dental': 'medical', 'hss ': 'medical', 'myhss': 'medical',
+  'mount sinai': 'medical', 'bjc healthcare': 'medical',
+
   // Food delivery
   // Note: 'uber eats' and 'ubereats' must be listed here (before 'uber ') to ensure food delivery is dining
   'doordash': 'dining', 'uber eats': 'dining', 'ubereats': 'dining', 'grubhub': 'dining', 'seamless': 'dining', 'caviar': 'dining',
@@ -860,7 +864,7 @@ const KNOWN_MERCHANTS = {
   'partea': 'dining', 'rise bar': 'dining', 'scalino': 'dining', 'snack chicha': 'dining',
   'sweetleaf': 'dining', 'taco mahal': 'dining', 'too good to go': 'dining', 'toribro': 'dining',
   'turntable': 'dining', 'uncle rays': 'dining', 'white noise coffee': 'dining', 'zaruma': 'dining',
-  'zoob zib': 'dining',
+  'zoob zib': 'dining', 'manhatto': 'dining',
 
   // Dining keywords (high confidence) - removed ambiguous: bar, kitchen, bowl
   'restaurant': 'dining', 'cafe': 'dining', 'grill': 'dining', 'pizza': 'dining', 'sushi': 'dining',
@@ -982,7 +986,8 @@ const KNOWN_MERCHANTS = {
   // Additional streaming/subscriptions
   'applecom': 'streaming', 'google one': 'streaming', 'helpmaxcom': 'streaming',
   'microsoftpc': 'streaming', 'noom': 'streaming', 'origin financial': 'streaming',
-  'ouraring': 'streaming', 'pointme': 'streaming', 'steamgames': 'streaming', 'stitch fix': 'streaming',
+  'ouraring': 'streaming', 'pointme': 'streaming', 'steamgames': 'streaming', 'wl steam': 'streaming',
+  'stitch fix': 'streaming',
 
   // Wine & Liquor stores (often miscategorized as Travel by banks)
   // Note: 'spirits' alone is too broad (matches 'Holy Spirit Church'), use specific patterns
@@ -996,7 +1001,8 @@ const KNOWN_MERCHANTS = {
   'water bill': 'utilities', 'electric bill': 'utilities', 'gas bill': 'utilities',
   
   // Cell phone (for Cash+ 5%)
-  'verizon': 'cell-phone', 'att': 'cell-phone', 'at&t': 'cell-phone', 't-mobile': 'cell-phone',
+  'verizon': 'cell-phone', 'at t': 'cell-phone', 'att ': 'cell-phone', 'att wireless': 'cell-phone',
+  'att bill': 'cell-phone', 'at&t': 'cell-phone', 't-mobile': 'cell-phone',
   'tmobile': 'cell-phone', 'sprint': 'cell-phone', 'mint mobile': 'cell-phone', 'visible': 'cell-phone',
   'cricket': 'cell-phone', 'metro pcs': 'cell-phone', 'boost mobile': 'cell-phone',
   
@@ -1124,6 +1130,7 @@ const CATEGORY_HIERARCHY = {
   'laundry': 'other',
   'dry-cleaning': 'other',
   'insurance': 'other',
+  'medical': 'other',
   'legal': 'other',
   'tax': 'other',
   'education': 'other',
@@ -1187,7 +1194,7 @@ const SPECIFIC_CATEGORY_KEYWORDS = {
   'uber-ride': ['uber trip', 'uber ride'],
   'taxi': ['taxi', 'cab ', 'yellow cab'],
   'subway': ['subway', 'metro', 'mta', 'wmata', 'bart', 'cta'],
-  'bus': ['bus', 'greyhound', 'megabus', 'flixbus'],
+  'bus': ['greyhound', 'megabus', 'flixbus'],
 
   // Shopping specifics
   'makeup': ['makeup', 'cosmetic', 'sephora', 'ulta', 'mac cosmetics'],
@@ -1220,7 +1227,15 @@ const SPECIFIC_CATEGORY_KEYWORDS = {
   // Services
   'salon': ['salon', 'hair', 'barber', 'supercuts', 'great clips'],
   'laundry': ['laundry', 'dry clean', 'cleaners'],
-  'insurance': ['insurance', 'geico', 'progressive', 'state farm', 'allstate'],
+  'insurance': ['insurance', 'state farm', 'geico', 'allstate', 'progressive',
+              'liberty mutual', 'usaa ins', 'farmers ins', 'nationwide ins',
+              'travelers ins', 'cigna', 'anthem', 'aetna', 'unitedhealth',
+              'connecticare', 'bcbs', 'blue cross', 'blue shield', 'humana',
+              'kaiser', 'metlife ins', 'prudential ins'],
+  'medical': ['dental', 'dentist', 'physician', 'medical', 'hospital',
+            'surgery', 'surgical', 'urgent care', 'pediatr', 'orthoped',
+            'dermatol', 'chiropract', 'healthcare', 'health care',
+            'physical therapy', 'optometr', 'ophthalmol'],
   'education': ['tuition', 'school', 'university', 'college', 'coursera', 'udemy'],
   'charity': ['charity', 'donation', 'nonprofit', 'red cross', 'united way']
 };
@@ -1228,7 +1243,8 @@ const SPECIFIC_CATEGORY_KEYWORDS = {
 // Keyword exclusions: if merchant contains any of these, don't match the category
 // This prevents false positives like "HK Best Barbers" matching 'bar' → dining
 const KEYWORD_EXCLUSIONS = {
-  'bar': ['barber', 'chocolate bar', 'candy bar', 'granola bar', 'protein bar', 'snack bar', 'handlebar', 'sidebar', 'crossbar', 'toolbar']
+  'bar': ['barber', 'chocolate bar', 'candy bar', 'granola bar', 'protein bar', 'snack bar', 'handlebar', 'sidebar', 'crossbar', 'toolbar'],
+  'insurance': ['aetna cvs', 'cvs aetna']
 };
 
 
@@ -1634,7 +1650,16 @@ const CSV_TO_SUBCATEGORY = {
   'utilities': 'utilities',
   'electric': 'utilities',
   'internet': 'utilities',
-  'phone': 'utilities'
+  'phone': 'utilities',
+
+  // Insurance
+  'insurance': 'insurance',
+
+  // Medical
+  'medical': 'medical',
+  'healthcare': 'medical',
+  'health care': 'medical',
+  'doctor': 'medical'
 };
 
 function classifyMerchant(merchant, csvCategory, cardId = null, originalStatement = null) {

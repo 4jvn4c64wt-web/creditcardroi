@@ -5426,11 +5426,32 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
 
 // Build complete export data object
 function buildExportData() {
+  // Include processed transactions with subcategory and category to match table display
+  const processedTransactions = (state.results?.processed || []).map(t => ({
+    id: t.id,
+    date: t.date,
+    merchant: t.merchant,
+    account: t.account,
+    amount: t.amount,
+    cardName: t.cardName,
+    subcategory: t.subcategory || 'other',
+    category: t.category || 'other',
+    categorySource: t.categorySource,
+    confidence: t.confidence,
+    multiplier: t.multiplier,
+    points: t.points,
+    pointsValue: t.pointsValue,
+    isPayment: t.isPayment,
+    isCredit: t.isCredit,
+    isRefund: t.isRefund
+  }));
+
   return {
-    version: '1.0',
+    version: '1.1',
     exportedAt: new Date().toISOString(),
     appName: 'Credit Card ROI Tracker',
     transactions: state.savedTransactions,
+    processedTransactions: processedTransactions,
     cardMappings: state.cardMappings,
     customPointValues: state.customPointValues,
     creditOverrides: state.creditOverrides,
@@ -5447,39 +5468,39 @@ function buildExportData() {
 
 // Export transactions as CSV
 function exportAsCSV() {
-  const transactions = state.savedTransactions;
+  // Use processed transactions which have proper subcategory and category
+  const transactions = state.results?.processed || [];
   if (transactions.length === 0) {
     alert('No transactions to export.');
     return;
   }
-  
-  // Build CSV header
-  const headers = ['Date', 'Merchant', 'Category', 'Account', 'Amount', 'Card', 'Points Category', 'Multiplier', 'Points Earned'];
-  
-  // Build CSV rows
+
+  // Build CSV header - include both Subcategory and Card Category to match table display
+  const headers = ['Date', 'Merchant', 'Account', 'Amount', 'Card', 'Subcategory', 'Card Category', 'Multiplier', 'Points Earned'];
+
+  // Build CSV rows using processed transaction data
   const rows = transactions.map(t => {
-    const cardId = state.cardMappings[t.last4];
-    const card = CARDS[cardId];
-    const cardName = card?.shortName || t.account || 'Unknown';
-    const pointsCategory = t.assignedCategory || t.category || 'other';
-    const multiplier = card?.multipliers?.[pointsCategory] || card?.baseRate || 1;
-    const pointsEarned = Math.round(Math.abs(t.amount) * multiplier);
-    
+    // Use the already-computed values from processTransactions
+    const subcategory = t.subcategory || 'other';
+    const cardCategory = t.category || 'other';
+    const multiplier = t.multiplier || 1;
+    const pointsEarned = Math.round(t.points || 0);
+
     return [
       t.date,
       `"${(t.merchant || '').replace(/"/g, '""')}"`,
-      t.category || '',
       t.account || '',
       t.amount,
-      cardName,
-      pointsCategory,
+      t.cardName || 'Unknown',
+      subcategory,
+      cardCategory,
       multiplier,
       t.isPayment ? 0 : pointsEarned
     ].join(',');
   });
-  
+
   const csv = [headers.join(','), ...rows].join('\n');
-  
+
   // Download
   const blob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);

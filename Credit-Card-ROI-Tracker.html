@@ -914,7 +914,7 @@ const KNOWN_MERCHANTS = {
   // 'uber eats' is listed above in Food delivery section and will be matched first
   'lyft': 'lyft', 'uber trip': 'transit', 'ubertrip': 'transit', 'uber ride': 'transit',
   'uber*': 'transit', 'uber': 'transit', // 'uber' must come after 'uber eats' in the iteration
-  'mta': 'transit', 'metro': 'transit', 'bart': 'transit', 'amtrak': 'transit',
+  'mta': 'transit', 'metro': 'transit', 'bart': 'transit', 'amtrak': 'transit', 'nationalrai': 'transit',
   'citi bike': 'transit', 'citibike': 'transit', 'lime scooter': 'transit', 'lime ride': 'transit',
   'bird ride': 'transit', 'revel': 'transit', 'via ': 'transit', 'nj transit': 'transit',
   'path train': 'transit', 'lirr': 'transit', 'metro north': 'transit',
@@ -4154,18 +4154,38 @@ function showCardConfigEditor(preselectedCardId = null) {
         cb.addEventListener('change', () => {
           cb.closest('label').style.background = cb.checked ? '#dcfce7' : '';
           cb.closest('label').style.borderColor = cb.checked ? '#059669' : '#e7e5e4';
-          // If this is the PayPal checkbox in Q4, need to re-render to show/hide Dec only toggle
+          // If this is the PayPal checkbox in Q4, dynamically add/remove Dec only toggle
           if (cb.dataset.category === 'paypal' && cb.dataset.quarter === 'Q4') {
-            // Save current state first, then re-render
+            const label = cb.closest('label');
             const year = parseInt(cb.dataset.year);
-            const yearQuarterKey = `${year}-Q4`;
-            const selectedCats = [];
-            document.querySelectorAll(`.cff-5[data-quarter="Q4"][data-year="${year}"]:checked`).forEach(chk => {
-              selectedCats.push(chk.dataset.category);
-            });
-            state.cffCategories[yearQuarterKey] = selectedCats;
-            safeLocalStorageSet('ccTracker_cffCategories', state.cffCategories);
-            renderCardConfig();
+            const existingBtn = label.querySelector('.cff-paypal-dec-toggle');
+
+            if (cb.checked && !existingBtn) {
+              // Add the Dec only button
+              const isActive = state.cffPaypalDecemberOnly[`${year}-Q4`];
+              const btn = document.createElement('button');
+              btn.type = 'button';
+              btn.className = 'cff-paypal-dec-toggle';
+              btn.dataset.year = year;
+              btn.title = 'PayPal is sometimes only active in December of Q4';
+              btn.textContent = 'Dec only';
+              btn.style.cssText = `margin-left:auto;padding:1px 4px;font-size:9px;border:1px solid ${isActive ? '#059669' : '#d1d5db'};border-radius:3px;background:${isActive ? '#dcfce7' : '#f9fafb'};color:${isActive ? '#059669' : '#6b7280'};cursor:pointer;white-space:nowrap;`;
+              btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const key = `${year}-Q4`;
+                state.cffPaypalDecemberOnly[key] = !state.cffPaypalDecemberOnly[key];
+                safeLocalStorageSet('ccTracker_cffPaypalDecemberOnly', state.cffPaypalDecemberOnly);
+                const active = state.cffPaypalDecemberOnly[key];
+                btn.style.borderColor = active ? '#059669' : '#d1d5db';
+                btn.style.background = active ? '#dcfce7' : '#f9fafb';
+                btn.style.color = active ? '#059669' : '#6b7280';
+              });
+              label.appendChild(btn);
+            } else if (!cb.checked && existingBtn) {
+              // Remove the Dec only button
+              existingBtn.remove();
+            }
           }
         });
       });

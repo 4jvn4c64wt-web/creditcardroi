@@ -68,6 +68,7 @@
     .tooltip:hover::before { content: ''; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: #1c1917; margin-bottom: -8px; z-index: 100; }
     .help-icon { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: #e7e5e4; color: #78716c; font-size: 11px; cursor: help; margin-left: 4px; }
     .help-icon:hover { background: #d6d3d1; }
+    .tooltip-multiline:hover::after { white-space: pre-line; text-align: left; min-width: 140px; }
     @media (max-width: 900px) { .metrics-grid { grid-template-columns: repeat(2, 1fr); } .metric:nth-child(2), .metric:nth-child(4) { border-right: none; } }
     @media (max-width: 500px) { .metrics-grid { grid-template-columns: 1fr; } .metric { border-right: none; border-bottom: 1px solid #e7e5e4; } .metric:last-child { border-bottom: none; } }
     
@@ -136,7 +137,8 @@
     <div id="columnMappingSection" class="card hidden">
       <h2 class="card-title">Map Your CSV Columns</h2>
       <p style="font-size:13px;color:#78716c;margin-bottom:8px;">Tell us which columns contain which data. We've tried to auto-detect, but please verify.</p>
-      <p style="font-size:12px;color:#059669;margin-bottom:16px;">💡 <strong>Tip:</strong> The more columns you map, the more accurate your point calculations will be. Category and Original Statement help identify merchants correctly.</p>
+      <p style="font-size:12px;color:#059669;margin-bottom:8px;">💡 <strong>Tip:</strong> The more columns you map, the more accurate your point calculations will be. Category and Original Statement help identify merchants correctly.</p>
+      <p style="font-size:12px;color:#1e40af;margin-bottom:16px;">📅 <strong>Date Column:</strong> For bank/card issuer CSVs with both "Post Date" and "Transaction Date", we auto-select <strong>Post Date</strong> because points are earned when the transaction posts, not when it's made.</p>
       
       <div id="csvPreview" style="overflow-x:auto;margin-bottom:16px;border:1px solid #e7e5e4;border-radius:8px;">
         <!-- Preview table will be inserted here -->
@@ -176,14 +178,13 @@
             <div style="font-size:13px;color:#1e3a8a;line-height:1.5;">
               Each account from your CSV is shown by its last 4 digits. Select which credit card it belongs to so we can apply the correct earning rates.
               <br><br>
-              <strong>Tip:</strong> Use "Skip" for checking/savings accounts or cards you don't want to track.
+              <strong>Tip:</strong> Use "Skip" for checking/savings accounts or cards you don't want to track. You can also map multiple card numbers to the same card (useful after card replacement due to fraud or expiration).
             </div>
           </div>
           <button onclick="dismissGuidance('mappingSection')" style="background:none;border:none;color:#1e40af;cursor:pointer;font-size:18px;padding:0;line-height:1;">&times;</button>
         </div>
       </div>
-      
-      <p style="font-size:12px;color:#059669;margin-bottom:16px;">🔒 Card numbers are stored only in your browser — never uploaded anywhere.</p>
+
       <div id="mappingRows"></div>
       <div style="margin-top:20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
         <button class="btn btn-primary" id="processBtn" disabled>Process Transactions</button>
@@ -199,8 +200,9 @@
         <button class="btn btn-secondary" id="helpBtnCardConfig" style="padding:6px 12px;">❓ Help</button>
       </div>
       
-      <div style="margin-bottom:16px;">
+      <div style="margin-bottom:16px;display:flex;align-items:center;gap:8px;">
         <select id="configCardSelect" class="form-select" style="min-width:250px;"></select>
+        <span id="cardMappingInfo" class="help-icon tooltip tooltip-multiline" data-tooltip="" style="display:none;">?</span>
       </div>
       
       <div id="cardConfigContent"></div>
@@ -930,27 +932,20 @@ const KNOWN_MERCHANTS = {
   'kayak': 'travel-ota', 'orbitz': 'travel-ota', 'travelocity': 'travel-ota', 'hotwire': 'travel-ota',
   
   // Travel portals - expanded patterns to catch more Chase Travel variations
-  // Note: CL* format has asterisk AFTER "CL", e.g., "CL* Chase Travel"
-  'chase travel': 'chase-travel', 'cl* chase': 'chase-travel', 'cl*chase': 'chase-travel',
-  'chasetravel': 'chase-travel', 'chase.com/travel': 'chase-travel', 'chasepay': 'chase-travel',
+  // Note: Patterns must match NORMALIZED text (asterisks/special chars removed)
+  // "CL* CHASE TRAVEL" normalizes to "cl chase travel", "CL*CHASE" normalizes to "clchase"
+  'chase travel': 'chase-travel', 'cl chase': 'chase-travel', 'clchase': 'chase-travel',
+  'chasetravel': 'chase-travel', 'chasecomtravel': 'chase-travel', 'chasepay': 'chase-travel',
   'cardmember serv': 'chase-travel', 'cardmember ser': 'chase-travel',
-  // Amex Travel portal - expanded patterns similar to Chase
-'amex travel': 'amex-travel', 'amextravel': 'amex-travel', 'american express travel': 'amex-travel',
-'amex.com/travel': 'amex-travel', 'aexp travel': 'amex-travel', 'aet*': 'amex-travel',
-'amex trv': 'amex-travel', 'americanexpress.com/travel': 'amex-travel',
-// Bilt Travel portal
-'bilt travel': 'bilt-travel', 'bilttravel': 'bilt-travel', 'bilt.com/travel': 'bilt-travel',
 
-  // Car Rental (ultra-safe, confidence: 100)
-  'hertz': 'car-rental', 'enterprise rent': 'car-rental', 'enterprise car': 'car-rental',
-  'avis': 'car-rental', 'budget rent': 'car-rental', 'budget car': 'car-rental',
-  'national car rental': 'car-rental', 'alamo': 'car-rental', 'dollar rent': 'car-rental',
-  'thrifty': 'car-rental', 'sixt': 'car-rental', 'zipcar': 'car-rental',
-
-  // Cruise (ultra-safe, confidence: 100)
-  'carnival cruise': 'cruise', 'royal caribbean': 'cruise', 'norwegian cruise': 'cruise',
-  'princess cruise': 'cruise', 'disney cruise': 'cruise', 'msc cruise': 'cruise',
-
+  // Amex Travel portal - patterns must match normalized text (special chars removed)
+  // "amex.com/travel" -> "amexcomtravel", "AET*" -> "aet"
+  'amex travel': 'amex-travel', 'amextravel': 'amex-travel', 'american express travel': 'amex-travel',
+  'amexcomtravel': 'amex-travel', 'aexp travel': 'amex-travel', 'aet': 'amex-travel',
+  'amex trv': 'amex-travel', 'americanexpresscomtravel': 'amex-travel',
+  // Bilt Travel portal - "bilt.com/travel" -> "biltcomtravel"
+  'bilt travel': 'bilt-travel', 'bilttravel': 'bilt-travel', 'biltcomtravel': 'bilt-travel',
+  
   // Groceries - supermarkets (qualify for Amex Gold 4x)
   'trader joe': 'grocery', 'safeway': 'grocery', 'kroger': 'grocery', 'publix': 'grocery',
   'aldi': 'grocery', 'wegmans': 'grocery', 'stop shop': 'grocery', 'stop & shop': 'grocery',
@@ -1156,7 +1151,9 @@ const CATEGORY_HIERARCHY = {
 // Order matters: more specific patterns should be checked first
 const SPECIFIC_CATEGORY_KEYWORDS = {
   // Skip categories - checked first to filter out non-purchase transactions
-  'skip': ['transfer', 'payment thank you', 'autopay', 'credit card payment', 'paycheck', 'direct deposit', 'income', 'payroll', 'ach credit'],
+  // Skip patterns for non-purchase transactions (payments, transfers, statement lines)
+  'skip': ['transfer', 'payment thank you', 'autopay', 'credit card payment', 'paycheck', 'direct deposit', 'income', 'payroll', 'ach credit',
+           'automatic payment', 'last statement bal', 'statement balance', 'previous balance', 'balance from'],
 
   // Dining specifics
   'food-truck': ['food truck'],
@@ -1581,8 +1578,12 @@ const CSV_TO_SUBCATEGORY = {
   'phone': 'utilities'
 };
 
-function classifyMerchant(merchant, csvCategory, cardId = null) {
+function classifyMerchant(merchant, csvCategory, cardId = null, originalStatement = null) {
   const norm = normalize(merchant);
+  // Combine merchant and original statement for pattern matching
+  // Original statement often contains the raw bank descriptor (e.g., "CL *Chase Travel")
+  const normOriginal = normalize(originalStatement || '');
+  const combinedNorm = norm + ' ' + normOriginal;
   const cacheKey = norm.substring(0, 50);
   const normCSV = (csvCategory || '').toLowerCase().trim();
 
@@ -1590,11 +1591,11 @@ function classifyMerchant(merchant, csvCategory, cardId = null) {
   const isVagueCSV = !normCSV || VAGUE_CSV_CATEGORIES.some(v => normCSV.includes(v));
 
   // ==========================================================================
-  // PRIORITY 1: Skip Detection
+  // PRIORITY 1: Skip Detection (check both merchant and original statement)
   // ==========================================================================
   const skipPatterns = SPECIFIC_CATEGORY_KEYWORDS['skip'] || [];
   for (const pattern of skipPatterns) {
-    if (norm.includes(pattern)) {
+    if (combinedNorm.includes(pattern)) {
       return {
         subcategory: 'skip',
         confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE,
@@ -1619,10 +1620,10 @@ function classifyMerchant(merchant, csvCategory, cardId = null) {
   }
 
   // ==========================================================================
-  // PRIORITY 3: Known Merchant List (always 100 confidence)
+  // PRIORITY 3: Known Merchant List (check both merchant and original statement)
   // ==========================================================================
   for (const [key, cat] of Object.entries(KNOWN_MERCHANTS)) {
-    if (norm.includes(key)) {
+    if (combinedNorm.includes(key)) {
       state.merchantCache[cacheKey] = cat;
       return {
         subcategory: cat,
@@ -1645,8 +1646,9 @@ function classifyMerchant(merchant, csvCategory, cardId = null) {
   if (!isVagueCSV) {
     csvSubcategory = mapCSVToSubcategory(normCSV);
     // Special case: travel needs its own classification
+    // Pass combinedNorm to check both merchant and original statement for travel portals
     if (csvSubcategory === '_travel_') {
-      return classifyTravel(norm, cardId);
+      return classifyTravel(combinedNorm, cardId);
     }
   }
 
@@ -1861,26 +1863,28 @@ function checkAddressPatterns(normalizedMerchant) {
 }
 
 // Special handling for travel classification
-function classifyTravel(normalizedMerchant, cardId) {
-  const norm = normalizedMerchant;
+// normalizedText includes both merchant and original statement for better pattern matching
+function classifyTravel(normalizedText, cardId) {
+  const norm = normalizedText;
 
   // Check for portal bookings (highest multiplier usually)
-  // Expanded Chase Travel patterns - note CL* format has asterisk AFTER "CL"
-  const chasePatterns = ['chase travel', 'chasetravel', 'cl* chase', 'cl*chase', 'chasepay', 'chase.com/travel', 'cardmember serv', 'cardmember ser'];
+  // Patterns must match NORMALIZED text (asterisks/special chars removed)
+  // "CL* CHASE TRAVEL" -> "cl chase travel", "CL*CHASE" -> "clchase", "chase.com/travel" -> "chasecomtravel"
+  const chasePatterns = ['chase travel', 'chasetravel', 'cl chase', 'clchase', 'chasepay', 'chasecomtravel', 'cardmember serv', 'cardmember ser'];
   for (const pattern of chasePatterns) {
     if (norm.includes(pattern)) {
       return { subcategory: 'chase-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Chase Travel portal' };
     }
   }
-  // Expanded Amex Travel patterns
-  const amexPatterns = ['amex travel', 'amextravel', 'american express travel', 'amex.com/travel', 'aexp travel', 'aet*', 'amex trv', 'americanexpress.com/travel'];
+  // Amex Travel patterns - must match normalized text (special chars removed)
+  const amexPatterns = ['amex travel', 'amextravel', 'american express travel', 'amexcomtravel', 'aexp travel', 'aet', 'amex trv', 'americanexpresscomtravel'];
   for (const pattern of amexPatterns) {
     if (norm.includes(pattern)) {
       return { subcategory: 'amex-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Amex Travel portal' };
     }
   }
-  // Bilt Travel patterns
-  const biltPatterns = ['bilt travel', 'bilttravel', 'bilt.com/travel'];
+  // Bilt Travel patterns - must match normalized text
+  const biltPatterns = ['bilt travel', 'bilttravel', 'biltcomtravel'];
   for (const pattern of biltPatterns) {
     if (norm.includes(pattern)) {
       return { subcategory: 'bilt-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Bilt Travel portal' };
@@ -2290,13 +2294,16 @@ function getCategoryBadgeStyle(txn, returnTooltip = false) {
   }
 }
 
-// Helper to check if transaction is a payment
+// Helper to check if transaction is a payment or statement balance line
 function isPaymentTransaction(txn) {
   const upper = (txn.merchant + ' ' + (txn.original || '')).toUpperCase();
   return upper.includes('AUTOMATIC PAYMENT') ||
          upper.includes('PAYMENT - THANK') ||
          upper.includes('ONLINE PAYMENT') ||
          upper.includes('AUTOPAY') ||
+         upper.includes('LAST STATEMENT BAL') ||
+         upper.includes('STATEMENT BALANCE') ||
+         upper.includes('PREVIOUS BALANCE') ||
          (txn.monarchCategory || '').toLowerCase().includes('credit card payment');
 }
 
@@ -2317,8 +2324,9 @@ function detectCredit(merchant, originalStatement, cardId, txnId) {
   const upper = (merchant + ' ' + originalStatement).toUpperCase();
   const disabled = state.disabledCredits[cardId] || [];
   
-  // Exclude payments and transfers - these are NOT statement credits
-  const excludeKeywords = ['PAYMENT', 'THANK YOU', 'AUTOMATIC PAYMENT', 'CREDIT CARD PAYMENT', 'TRANSFER'];
+  // Exclude payments, transfers, and statement balance lines - these are NOT statement credits
+  const excludeKeywords = ['PAYMENT', 'THANK YOU', 'AUTOMATIC PAYMENT', 'CREDIT CARD PAYMENT', 'TRANSFER',
+                           'LAST STATEMENT BAL', 'STATEMENT BALANCE', 'PREVIOUS BALANCE'];
   if (excludeKeywords.some(kw => upper.includes(kw))) return null;
   
   // Check each credit's keywords for a match
@@ -2356,6 +2364,46 @@ function detectCredit(merchant, originalStatement, cardId, txnId) {
 // CSV PARSING WITH COLUMN MAPPING
 // =============================================================================
 
+// Detect if a row looks like data (not headers) - for headerless CSVs
+// Returns true if row appears to contain transaction data
+function isDataRow(fields) {
+  if (!fields || fields.length < 2) return false;
+
+  // Check if first field looks like a date (MM/DD/YYYY, YYYY-MM-DD, etc.)
+  const datePatterns = [
+    /^\d{1,2}\/\d{1,2}\/\d{2,4}$/,  // MM/DD/YYYY or M/D/YY
+    /^\d{4}-\d{2}-\d{2}$/,           // YYYY-MM-DD
+    /^\d{1,2}-\d{1,2}-\d{2,4}$/      // MM-DD-YYYY
+  ];
+  const firstField = (fields[0] || '').trim();
+  const looksLikeDate = datePatterns.some(p => p.test(firstField));
+
+  // Check if second field looks like an amount (number, possibly negative, with optional decimals)
+  const secondField = (fields[1] || '').trim();
+  const looksLikeAmount = /^-?\d+\.?\d*$/.test(secondField) || /^-?\$?\d+\.?\d*$/.test(secondField);
+
+  // If both match, this is likely a data row, not a header
+  return looksLikeDate && looksLikeAmount;
+}
+
+// Detect Wells Fargo headerless format from first data row
+// Wells Fargo format: date, amount, *, empty, merchant (5 columns, no headers)
+function isWellsFargoFormat(fields) {
+  if (!fields || fields.length !== 5) return false;
+
+  const [date, amount, asterisk, empty, merchant] = fields;
+
+  // Check pattern: date, numeric amount, asterisk, empty string, non-empty merchant
+  const datePattern = /^\d{1,2}\/\d{1,2}\/\d{2,4}$/;
+  const isDate = datePattern.test((date || '').trim());
+  const isAmount = /^-?\d+\.?\d*$/.test((amount || '').trim());
+  const isAsterisk = (asterisk || '').trim() === '*';
+  const isEmpty = (empty || '').trim() === '';
+  const hasMerchant = (merchant || '').trim().length > 0;
+
+  return isDate && isAmount && isAsterisk && isEmpty && hasMerchant;
+}
+
 // Known CSV formats for auto-detection
 const CSV_FORMATS = {
   monarch: {
@@ -2366,8 +2414,9 @@ const CSV_FORMATS = {
   },
   chase: {
     name: 'Chase',
+    // Chase CSVs have both 'transaction date' and 'post date' - use post date for accurate point calculation
     detect: (headers) => headers.includes('transaction date') && headers.includes('post date') && headers.includes('description'),
-    mapping: { date: 'transaction date', merchant: 'description', category: 'category', account: null, amount: 'amount', original: null }
+    mapping: { date: 'post date', merchant: 'description', category: 'category', account: null, amount: 'amount', original: null }
   },
   amex: {
     name: 'American Express',
@@ -2414,7 +2463,8 @@ function detectCSVFormat(headers) {
   };
   
   const genericMapping = {
-    // Prefer 'post date' over 'transaction date' - post date is when points are credited
+    // Prefer 'post date' over 'transaction date' - points are earned when transaction POSTS, not when made
+    // Bank CSVs often have both; budgeting apps use adjusted 'date' which is fine
     date: findHeader(['post date', 'posting date', 'date', 'transaction date', 'trans date']),
     merchant: findHeader(['merchant', 'description', 'payee', 'name']),
     category: findHeader(['category', 'type']),
@@ -2429,24 +2479,68 @@ function detectCSVFormat(headers) {
 // Show column mapping UI
 function showColumnMapping(csvText) {
   const lines = csvText.split('\n').filter(l => l.trim());
-  if (lines.length < 2) {
+  if (lines.length < 1) {
     alert('CSV file appears to be empty or invalid.');
     return;
   }
-  
-  // Parse headers
-  const headers = parseCSVLine(lines[0]);
-  const previewRows = lines.slice(1, 6).map(line => parseCSVLine(line)); // First 5 data rows
-  
-  // Store for later use
-  state.pendingCSVData = { text: csvText, headers, lines };
-  
+
+  // Parse first row to check if it's data or headers
+  const firstRowFields = parseCSVLine(lines[0]);
+  const isHeaderless = isDataRow(firstRowFields);
+
+  let headers, previewRows, dataLines;
+
+  if (isHeaderless) {
+    // Headerless CSV - generate synthetic column names
+    headers = firstRowFields.map((_, i) => `Column ${i + 1}`);
+    // All lines are data (including first line)
+    previewRows = lines.slice(0, 5).map(line => parseCSVLine(line));
+    dataLines = lines; // All lines are data
+  } else {
+    // Normal CSV with headers
+    headers = firstRowFields;
+    previewRows = lines.slice(1, 6).map(line => parseCSVLine(line));
+    dataLines = lines.slice(1); // Skip header row
+  }
+
+  // Store for later use - include isHeaderless flag
+  state.pendingCSVData = { text: csvText, headers, lines, isHeaderless, dataLines };
+
   // Check if we have a saved mapping for this CSV shape
   const shapeKey = getCSVShapeKey(headers);
   const savedMapping = state.columnMappings[shapeKey];
 
   // Auto-detect format
-  const detected = detectCSVFormat(headers);
+  let detected;
+
+  // Check for Wells Fargo headerless format first
+  if (isHeaderless && isWellsFargoFormat(firstRowFields)) {
+    detected = {
+      formatId: 'wellsfargo',
+      formatName: 'Wells Fargo (no headers)',
+      isHeaderless: true,
+      mapping: {
+        date: 'Column 1',
+        amount: 'Column 2',
+        merchant: 'Column 5'
+        // No category or account columns in Wells Fargo CSVs
+      }
+    };
+  } else if (isHeaderless) {
+    // Generic headerless - try to guess based on column count
+    detected = {
+      formatId: 'headerless',
+      formatName: 'Unknown Format (no headers)',
+      isHeaderless: true,
+      mapping: {
+        date: 'Column 1',
+        amount: firstRowFields.length >= 2 ? 'Column 2' : null,
+        merchant: firstRowFields.length >= 5 ? 'Column 5' : (firstRowFields.length >= 3 ? 'Column 3' : null)
+      }
+    };
+  } else {
+    detected = detectCSVFormat(headers);
+  }
 
   // Use saved mapping if available, but MERGE with detected mapping
   // This ensures that if the saved mapping is missing optional fields (like category),
@@ -2479,11 +2573,25 @@ function showColumnMapping(csvText) {
     return '';
   }
   
+  // Build status message based on detection
+  let statusMessage;
+  if (savedMapping) {
+    statusMessage = '✓ Using your saved mapping for this format';
+  } else if (isHeaderless) {
+    statusMessage = `Detected: <strong>${detected.formatName}</strong> — using column positions (no headers found)`;
+  } else {
+    statusMessage = `Detected: <strong>${detected.formatName}</strong> — please verify below`;
+  }
+
+  // Calculate total transactions (dataLines for headerless, lines-1 for normal)
+  const totalTransactions = dataLines.length;
+
   container.innerHTML = `
-    <div style="padding:12px;background:#fefce8;border-bottom:1px solid #e7e5e4;">
+    <div style="padding:12px;background:${isHeaderless ? '#fef3c7' : '#fefce8'};border-bottom:1px solid #e7e5e4;">
       <span style="font-size:13px;">
-        ${savedMapping ? '✓ Using your saved mapping for this format' : `Detected: <strong>${detected.formatName}</strong> — please verify below`}
+        ${statusMessage}
       </span>
+      ${isHeaderless ? '<div style="font-size:11px;color:#92400e;margin-top:4px;">This file has no header row. First row contains data.</div>' : ''}
     </div>
     <div style="overflow-x:auto;">
       <table style="min-width:100%;border-collapse:collapse;">
@@ -2523,7 +2631,7 @@ function showColumnMapping(csvText) {
       </table>
     </div>
     <div style="padding:12px;background:#f5f5f4;font-size:11px;color:#78716c;">
-      Showing first ${previewRows.length} rows of ${lines.length - 1} total transactions
+      Showing first ${previewRows.length} rows of ${totalTransactions} total transactions
     </div>
   `;
   
@@ -2641,11 +2749,12 @@ function applyColumnMappingAndParse() {
   safeLocalStorageSet('ccTracker_columnMappings', state.columnMappings);
   
   // Parse the CSV using the mapping
+  // Use dataLines which already accounts for headerless CSVs (includes all data rows)
   const transactions = [];
-  const lines = state.pendingCSVData.lines;
-  
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
+  const dataLines = state.pendingCSVData.dataLines || state.pendingCSVData.lines.slice(1);
+
+  for (let i = 0; i < dataLines.length; i++) {
+    const line = dataLines[i].trim();
     if (!line) continue;
     
     const fields = parseCSVLine(line);
@@ -2740,7 +2849,30 @@ async function processTransactions(transactions) {
 
   // Classify all transactions with rules
   for (const txn of transactions) {
-    // Check for single-transaction confirmation first (takes precedence like merchant rules)
+    // PRIORITY 0: Check skip patterns FIRST - these always take precedence
+    // This ensures payments, statement balance lines, etc. are always filtered out
+    // even if the user previously confirmed them as a different category
+    // Check both merchant and original statement fields
+    const normMerchant = (txn.merchant || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+    const normOriginal = (txn.original || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+    const combinedText = normMerchant + ' ' + normOriginal;
+    const skipPatterns = SPECIFIC_CATEGORY_KEYWORDS['skip'] || [];
+    let isSkipTransaction = false;
+    for (const pattern of skipPatterns) {
+      if (combinedText.includes(pattern)) {
+        classifications[txn.id] = {
+          subcategory: 'skip',
+          source: 'skip-pattern',
+          confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE,
+          reason: `Skipped: "${pattern}"`
+        };
+        isSkipTransaction = true;
+        break;
+      }
+    }
+    if (isSkipTransaction) continue;
+
+    // Check for single-transaction confirmation (takes precedence like merchant rules)
     if (state.confirmedTransactions[txn.id]) {
       classifications[txn.id] = {
         subcategory: state.confirmedTransactions[txn.id],
@@ -2755,7 +2887,8 @@ async function processTransactions(transactions) {
     const cardId = state.cardMappings[txn.last4];
     const effectiveCardId = (cardId && cardId !== 'skip') ? cardId : null;
 
-    const result = classifyMerchant(txn.merchant, txn.monarchCategory, effectiveCardId);
+    // Pass original statement for better pattern matching (e.g., "CL *Chase Travel")
+    const result = classifyMerchant(txn.merchant, txn.monarchCategory, effectiveCardId, txn.original);
     if (result.subcategory) {
       classifications[txn.id] = result;
     } else {
@@ -2791,13 +2924,16 @@ async function processTransactions(transactions) {
     const card = CARDS[cardId];
     const isCredit = txn.amount > 0;
     
-    // Detect if this is a payment (not a refund or statement credit)
+    // Detect if this is a payment or statement balance line (not a refund or statement credit)
     const upperMerchant = (txn.merchant + ' ' + txn.original).toUpperCase();
     const isPayment = isCredit && (
       upperMerchant.includes('AUTOMATIC PAYMENT') ||
       upperMerchant.includes('PAYMENT - THANK') ||
       upperMerchant.includes('ONLINE PAYMENT') ||
       upperMerchant.includes('AUTOPAY') ||
+      upperMerchant.includes('LAST STATEMENT BAL') ||
+      upperMerchant.includes('STATEMENT BALANCE') ||
+      upperMerchant.includes('PREVIOUS BALANCE') ||
       txn.monarchCategory?.toLowerCase().includes('credit card payment')
     );
     
@@ -2978,7 +3114,65 @@ function showCardConfigEditor(preselectedCardId = null) {
   if (preselectedCardId && usedCardIds.includes(preselectedCardId)) {
     select.value = preselectedCardId;
   }
-  
+
+  // Helper: Get all last-4s mapped to a given cardId
+  function getAllMappingsForCard(cardId) {
+    const mappings = [];
+    for (const [last4, mappedCardId] of Object.entries(state.cardMappings)) {
+      if (mappedCardId === cardId) {
+        mappings.push(last4);
+      }
+    }
+    return mappings;
+  }
+
+  // Helper: Calculate points per last-4 from processed transactions
+  function getPointsPerLast4(cardId) {
+    const last4List = getAllMappingsForCard(cardId);
+    const pointsByLast4 = {};
+
+    // Initialize with 0 points
+    for (const last4 of last4List) {
+      pointsByLast4[last4] = 0;
+    }
+
+    // Sum points from processed transactions
+    if (state.results?.processed) {
+      for (const txn of state.results.processed) {
+        if (txn.cardId === cardId && txn.last4 && pointsByLast4.hasOwnProperty(txn.last4)) {
+          pointsByLast4[txn.last4] += txn.points || 0;
+        }
+      }
+    }
+
+    return pointsByLast4;
+  }
+
+  // Update the card mapping tooltip
+  function updateCardMappingTooltip() {
+    const cardId = select.value;
+    const infoIcon = document.getElementById('cardMappingInfo');
+    if (!infoIcon) return;
+
+    const pointsByLast4 = getPointsPerLast4(cardId);
+    const entries = Object.entries(pointsByLast4);
+
+    if (entries.length === 0) {
+      infoIcon.style.display = 'none';
+      return;
+    }
+
+    // Build tooltip text
+    const label = entries.length === 1 ? 'Card Number:' : 'Card Numbers:';
+    const lines = entries.map(([last4, points]) => {
+      const formattedPoints = Math.round(points).toLocaleString();
+      return `...${last4} (${formattedPoints} pts)`;
+    });
+
+    infoIcon.setAttribute('data-tooltip', label + '\n' + lines.join('\n'));
+    infoIcon.style.display = 'inline-flex';
+  }
+
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   
   const CASH_PLUS_5_LABELS = {
@@ -3700,8 +3894,12 @@ function showCardConfigEditor(preselectedCardId = null) {
     }
   }
   
-  select.addEventListener('change', renderCardConfig);
+  select.addEventListener('change', () => {
+    renderCardConfig();
+    updateCardMappingTooltip();
+  });
   renderCardConfig();
+  updateCardMappingTooltip();
 }
 
 // Helper to get current quarter string

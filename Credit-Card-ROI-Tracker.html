@@ -2481,7 +2481,8 @@ function detectCSVFormat(headers) {
     merchant: findHeader(['merchant', 'description', 'payee', 'name']),
     category: findHeader(['category']),
     account: findHeader(['account', 'card', 'card no', 'card number']),
-    accountType: findHeader(['account type', 'account name', 'type']),
+    accountName: findHeader(['account name', 'card name', 'account nickname']),
+    accountType: findHeader(['account type', 'type']),
     amount: findHeader(['amount', 'debit', 'credit']),
     original: findHeader(['original statement', 'original', 'statement', 'memo'])
   };
@@ -2489,12 +2490,18 @@ function detectCSVFormat(headers) {
   return { formatId: 'generic', formatName: 'Unknown Format', mapping: genericMapping };
 }
 
-// Determine if a column value represents a Card Number or an Account Type
-// Returns: 'cardNumber' | 'accountType' | 'combined' | 'unknown'
+// Determine if a column value represents a Card Number, Account Type, Account Name, or Combined
+// Returns: 'cardNumber' | 'accountType' | 'accountName' | 'combined' | 'unknown'
 function detectAccountColumnType(sampleValue) {
   if (!sampleValue || typeof sampleValue !== 'string') return 'unknown';
 
   const value = sampleValue.trim();
+  const lowerValue = value.toLowerCase();
+
+  // Check for numeric patterns (Card Number): "1234", "...1234", "(1234)"
+  if (/^\(?\.{0,3}\d{4}\)?\s*$/.test(value)) {
+    return 'cardNumber';
+  }
 
   // Check for combined format: "Chase Sapphire Reserve (...1234)" or "Credit Card (1234)"
   const combinedMatch = value.match(/.*\(?\.{0,3}(\d{4})\)?$/);
@@ -2503,32 +2510,33 @@ function detectAccountColumnType(sampleValue) {
     return 'combined';
   }
 
-  // Check for numeric patterns (Card Number): "1234", "...1234", "(1234)"
-  if (/^\(?\.{0,3}\d{4}\)?\s*$/.test(value)) {
-    return 'cardNumber';
-  }
-
-  // Check for account type keywords
-  const lowerValue = value.toLowerCase();
-  const accountTypeKeywords = ['credit card', 'credit', 'checking', 'savings', 'investment',
-                               'brokerage', 'money market', 'bank', 'debit'];
+  // Check for account type keywords (generic account types used for filtering)
+  const accountTypeKeywords = ['checking', 'savings', 'investment', 'brokerage', 'money market', 'debit'];
   if (accountTypeKeywords.some(keyword => lowerValue.includes(keyword))) {
     return 'accountType';
   }
 
-  // Check if the value contains card-like patterns (card names with numbers at end)
-  // e.g., "Chase Sapphire Reserve", "Amex Gold"
-  const cardNamePatterns = ['visa', 'mastercard', 'amex', 'discover', 'sapphire', 'reserve',
-                           'freedom', 'unlimited', 'preferred', 'gold', 'platinum'];
-  if (cardNamePatterns.some(pattern => lowerValue.includes(pattern))) {
-    return 'combined'; // Card name without explicit last 4 - treat as combined
+  // "Credit Card" alone is an account type
+  if (lowerValue === 'credit card' || lowerValue === 'credit') {
+    return 'accountType';
   }
 
-  // If it's mostly text (not numbers), likely account type
+  // Check if the value contains card name patterns (specific card names)
+  // e.g., "Chase Sapphire Reserve", "Amex Gold", "Citi Double Cash"
+  const cardNamePatterns = ['visa', 'mastercard', 'amex', 'american express', 'discover',
+                           'sapphire', 'reserve', 'freedom', 'unlimited', 'preferred',
+                           'gold', 'platinum', 'rewards', 'cash back', 'cashback',
+                           'venture', 'quicksilver', 'double cash', 'custom cash',
+                           'blue cash', 'everyday', 'boundless', 'world elite'];
+  if (cardNamePatterns.some(pattern => lowerValue.includes(pattern))) {
+    return 'accountName'; // It's a card name like "Chase Sapphire Reserve"
+  }
+
+  // If it's mostly text (not numbers) and longer than a few words, likely account name
   const numericContent = value.replace(/[^\d]/g, '');
   const textContent = value.replace(/[\d\s\W]/g, '');
-  if (textContent.length > numericContent.length) {
-    return 'accountType';
+  if (textContent.length > 5 && textContent.length > numericContent.length) {
+    return 'accountName';
   }
 
   return 'unknown';
@@ -2600,7 +2608,7 @@ function showColumnMapping(csvText) {
     detected = detectCSVFormat(headers);
 
     // Smart column detection: examine first data row to determine if "account" column
-    // is actually Card Number, Account Type, or Combined
+    // is actually Card Number, Account Type, Account Name, or Combined
     if (!savedMapping && previewRows.length > 0) {
       const normalizedHeaders = headers.map(h => h.toLowerCase().trim());
 
@@ -2609,31 +2617,33 @@ function showColumnMapping(csvText) {
         const header = normalizedHeaders[i];
         const sampleValue = previewRows[0][i];
 
-        // If header is "account", "account name", or similar - detect what it really is
-        if (header === 'account' || header === 'account name' || header === 'account type') {
+        // If header is "account", "account name", "account type", or similar - detect what it really is
+        if (header === 'account' || header === 'account name' || header === 'account type' || header === 'type') {
           const columnType = detectAccountColumnType(sampleValue);
+
+          // Clear any existing mappings for this header first
+          const clearExistingMappings = () => {
+            if (detected.mapping.account === headers[i]) detected.mapping.account = null;
+            if (detected.mapping.accountName === headers[i]) detected.mapping.accountName = null;
+            if (detected.mapping.accountType === headers[i]) detected.mapping.accountType = null;
+            if (detected.mapping.accountCombined === headers[i]) detected.mapping.accountCombined = null;
+          };
 
           // Remap based on detected type
           if (columnType === 'cardNumber') {
-            // It's a card number column
-            if (detected.mapping.accountType === headers[i]) {
-              detected.mapping.accountType = null;
-            }
+            clearExistingMappings();
             detected.mapping.account = headers[i];
           } else if (columnType === 'accountType') {
-            // It's an account type column (e.g., "Checking", "Credit Card")
-            if (detected.mapping.account === headers[i]) {
-              detected.mapping.account = null;
-            }
+            // It's an account type column (e.g., "Checking", "Credit Card", "Savings")
+            clearExistingMappings();
             detected.mapping.accountType = headers[i];
+          } else if (columnType === 'accountName') {
+            // It's a card name column (e.g., "Chase Sapphire Reserve", "Amex Gold")
+            clearExistingMappings();
+            detected.mapping.accountName = headers[i];
           } else if (columnType === 'combined') {
             // It's a combined column (e.g., "Chase Sapphire Reserve (...1234)")
-            if (detected.mapping.account === headers[i]) {
-              detected.mapping.account = null;
-            }
-            if (detected.mapping.accountType === headers[i]) {
-              detected.mapping.accountType = null;
-            }
+            clearExistingMappings();
             detected.mapping.accountCombined = headers[i];
           }
         }
@@ -2656,9 +2666,10 @@ function showColumnMapping(csvText) {
     { value: 'date', label: '📅 Date', required: true },
     { value: 'merchant', label: '🏪 Merchant/Description', required: true },
     { value: 'amount', label: '💰 Amount', required: true },
-    { value: 'account', label: '💳 Card Number (last 4 digits to identify card)' },
-    { value: 'accountType', label: '🏦 Account Type (Credit/Checking/Savings)' },
-    { value: 'accountCombined', label: '💳🏦 Account Type + Number (combined)' },
+    { value: 'account', label: '💳 Card Number (last 4 digits like "1234" or "...1234")' },
+    { value: 'accountName', label: '🏷️ Account Name (e.g., "Chase Sapphire Reserve")' },
+    { value: 'accountType', label: '🏦 Account Type (Credit Card, Checking, Savings)' },
+    { value: 'accountCombined', label: '💳🏷️ Account Name + Number (e.g., "Sapphire Reserve ...1234")' },
     { value: 'category', label: '📁 Category (optional, improves accuracy)' },
     { value: 'original', label: '📝 Original Statement (optional, improves accuracy)' }
   ];
@@ -2842,6 +2853,7 @@ function applyColumnMappingAndParse() {
 
   // Determine account column configuration
   const hasAccountColumn = columnIndices.account !== undefined;
+  const hasAccountNameColumn = columnIndices.accountName !== undefined;
   const hasAccountTypeColumn = columnIndices.accountType !== undefined;
   const hasAccountCombinedColumn = columnIndices.accountCombined !== undefined;
   const defaultAccountInput = document.getElementById('defaultAccountInput');
@@ -2874,6 +2886,7 @@ function applyColumnMappingAndParse() {
 
     // Handle account information based on column configuration
     let account = '';
+    let accountName = null;
     let last4 = null;
     let accountType = null;
 
@@ -2883,7 +2896,7 @@ function applyColumnMappingAndParse() {
       const parsed = parseCombinedAccountField(combinedValue);
       account = combinedValue;
       last4 = parsed.cardNumber;
-      accountType = parsed.accountType;
+      accountName = parsed.accountType; // The text part is the account name
     } else if (hasAccountColumn) {
       // Dedicated card number column
       account = fields[columnIndices.account] || '';
@@ -2894,7 +2907,12 @@ function applyColumnMappingAndParse() {
       last4 = defaultLast4;
     }
 
-    // Get account type from dedicated column if present (overrides combined field)
+    // Get account name from dedicated column if present (overrides combined field)
+    if (hasAccountNameColumn) {
+      accountName = fields[columnIndices.accountName] || null;
+    }
+
+    // Get account type from dedicated column if present
     if (hasAccountTypeColumn) {
       accountType = fields[columnIndices.accountType] || null;
     }
@@ -2918,7 +2936,8 @@ function applyColumnMappingAndParse() {
       original,
       amount,
       last4,
-      accountType // Store for reference
+      accountName,  // Card name like "Chase Sapphire Reserve"
+      accountType   // Account type like "Credit Card", "Checking"
     });
   }
 
@@ -3308,11 +3327,12 @@ function showMapping(allLast4s) {
   const container = document.getElementById('mappingRows');
   container.innerHTML = creditCardLast4s.map(last4 => {
     const txn = state.transactions.find(t => t.last4 === last4);
-    const acctName = txn ? txn.account.split('(')[0].trim() : '';
+    // Prefer accountName if available, otherwise fall back to parsing account field
+    const displayName = txn?.accountName || (txn ? txn.account.split('(')[0].trim() : '');
     return `
     <div class="card-mapping-row">
       <span class="card-last4">•••• ${escapeHtml(last4)}</span>
-      <span style="font-size:12px;color:#78716c;min-width:140px;">${escapeHtml(acctName)}</span>
+      <span style="font-size:12px;color:#57534e;min-width:180px;font-weight:500;">${escapeHtml(displayName)}</span>
       <select class="form-select" data-last4="${escapeHtml(last4)}" style="flex:1;max-width:300px;">
         <option value="">Select card...</option>
         ${Object.entries(CARDS)

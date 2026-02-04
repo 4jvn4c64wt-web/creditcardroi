@@ -1520,7 +1520,11 @@ const CONFIDENCE_ADJUSTMENTS = {
   MULTIPLE_HEURISTICS_BONUS: 10,   // 2+ heuristics agree on same category
   KEYWORD_CONFLICTS: -15,          // Merchant name keyword disagrees with subcategory
   POS_PATTERN_CONFLICTS: -10,      // POS pattern disagrees with subcategory
-  ADDRESS_CONFLICTS: -10           // Address pattern disagrees with subcategory
+  ADDRESS_CONFLICTS: -10,          // Address pattern disagrees with subcategory
+
+  // Sibling transaction signal
+  SIBLING: 15,                     // Each high-confidence sibling with same subcategory
+  SIBLING_MAX: 50                  // Cap total sibling contribution
 };
 
 // Vague CSV categories that trigger discovery mode
@@ -3058,7 +3062,91 @@ async function processTransactions(transactions) {
       };
     }
   }
-  
+
+  // ==========================================================================
+  // SIBLING TRANSACTION SIGNAL (post-processing)
+  // After individual classification, boost confidence for transactions with
+  // vague CSV categories when other transactions from the exact same merchant
+  // were classified with high confidence.
+  // ==========================================================================
+
+  // Step 1: Build merchant lookup - normalized merchant name → array of classifications
+  const merchantLookup = {};
+  for (const txn of transactions) {
+    const normMerch = normalize(txn.merchant);
+    if (!normMerch) continue;
+
+    if (!merchantLookup[normMerch]) {
+      merchantLookup[normMerch] = [];
+    }
+
+    const cls = classifications[txn.id];
+    if (cls) {
+      merchantLookup[normMerch].push({
+        txnId: txn.id,
+        subcategory: cls.subcategory,
+        confidence: cls.confidence,
+        monarchCategory: txn.monarchCategory
+      });
+    }
+  }
+
+  // Step 2: Loop through transactions and apply sibling boosts
+  for (const txn of transactions) {
+    const cls = classifications[txn.id];
+
+    // Skip non-classified or skip transactions
+    if (!cls || cls.subcategory === 'skip') continue;
+
+    // Check if the CSV category is vague - if not vague, skip (CSV is authoritative)
+    const csvCategory = (txn.monarchCategory || '').toLowerCase().trim();
+    const isVagueCSV = !csvCategory || VAGUE_CSV_CATEGORIES.includes(csvCategory);
+    if (!isVagueCSV) continue;
+
+    // Look up siblings (same normalized merchant)
+    const normMerch = normalize(txn.merchant);
+    const allSiblings = merchantLookup[normMerch] || [];
+
+    // Filter to qualifying siblings: not self, confidence >= 50
+    const qualifyingSiblings = allSiblings.filter(s =>
+      s.txnId !== txn.id && s.confidence >= 50
+    );
+
+    if (qualifyingSiblings.length === 0) continue;
+
+    // Count agreeing siblings (same subcategory as current classification)
+    const agreeingSiblings = qualifyingSiblings.filter(s =>
+      s.subcategory === cls.subcategory
+    );
+
+    // Count disagreeing siblings (different subcategory, excluding 'other' and 'skip')
+    const disagreeingSiblings = qualifyingSiblings.filter(s =>
+      s.subcategory !== cls.subcategory &&
+      s.subcategory !== 'other' &&
+      s.subcategory !== 'skip'
+    );
+
+    if (agreeingSiblings.length > 0) {
+      // Apply sibling boost, capped at SIBLING_MAX
+      const rawBoost = agreeingSiblings.length * CONFIDENCE_ADJUSTMENTS.SIBLING;
+      const siblingBoost = Math.min(rawBoost, CONFIDENCE_ADJUSTMENTS.SIBLING_MAX);
+
+      cls.confidence = Math.min(100, cls.confidence + siblingBoost);
+      cls.reason += `; Sibling signal: ${agreeingSiblings.length} similar txns (+${siblingBoost})`;
+    } else if (disagreeingSiblings.length > 0) {
+      // Siblings exist but disagree - note the conflict but don't change classification
+      // Find the most common disagreeing subcategory
+      const subcategoryCounts = {};
+      for (const s of disagreeingSiblings) {
+        subcategoryCounts[s.subcategory] = (subcategoryCounts[s.subcategory] || 0) + 1;
+      }
+      const topDisagreeing = Object.entries(subcategoryCounts)
+        .sort((a, b) => b[1] - a[1])[0];
+
+      cls.reason += `; Sibling conflict: ${disagreeingSiblings.length} txns suggest ${topDisagreeing[0]}`;
+    }
+  }
+
   // Save cache
   safeLocalStorageSet('ccTracker_merchantCache', state.merchantCache);
   

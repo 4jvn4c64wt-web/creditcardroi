@@ -1427,6 +1427,7 @@ let state = {
   selectedCFFYear: null, // For CFF quarterly category year selection
   availableYears: [],
   summarySortState: { column: 'cardName', direction: 'asc' }, // For summary table sorting
+  txnCardYearToggle: false, // For transactions page card year toggle
 
   // Tour state
   tourComplete: localStorage.getItem('ccTracker_tourComplete') === 'true',
@@ -5582,6 +5583,8 @@ function renderView(view) {
           <label id="needsReviewFilter" style="display:flex;align-items:center;gap:6px;font-size:13px;color:#b45309;cursor:pointer;" title="Show transactions that need manual review">
             <input type="checkbox" id="filterNeedsReview"> 🔍 Needs Review${needsReviewBadge}
           </label>
+          <span id="txnCardYearToggle" class="tooltip tooltip-multiline" data-tooltip="Select a card with an annual fee to view card year"
+            style="display:inline-block;font-size:9px;font-weight:600;padding:2px 6px;border-radius:3px;background:#e7e5e4;color:#a8a29e;cursor:not-allowed;margin-left:auto;opacity:0.5;">CY</span>
         </div>`;
         })()}
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
@@ -5624,7 +5627,9 @@ function renderView(view) {
       document.getElementById('filterCategory').value = '';
       document.getElementById('filterCreditsOnly').checked = false;
       document.getElementById('filterNeedsReview').checked = false;
+      state.txnCardYearToggle = false;
       renderTransactions();
+      updateTxnCardYearToggle();
     });
     
     function renderTransactions() {
@@ -5634,34 +5639,67 @@ function renderView(view) {
       const catFilter = document.getElementById('filterCategory').value;
       const creditsOnly = document.getElementById('filterCreditsOnly').checked;
       const needsReview = document.getElementById('filterNeedsReview').checked;
-      
+
       let txns = r.processed.sort((a, b) => new Date(b.date) - new Date(a.date));
-      
-      // Apply year filter
-      if (yearFilter) {
-        txns = txns.filter(t => {
-          const dateStr = t.date;
-          let year;
-          if (dateStr.includes('-')) year = parseInt(dateStr.split('-')[0]);
-          else if (dateStr.includes('/')) year = parseInt(dateStr.split('/')[2]);
-          else year = new Date(dateStr).getFullYear();
-          return year === parseInt(yearFilter);
-        });
+
+      // Check if card year toggle is active
+      let cardYearActive = false;
+      let cardYearPeriod = null;
+      if (state.txnCardYearToggle && cardFilter && yearFilter) {
+        // Find cardId from cardName
+        let selectedCardId = null;
+        for (const [cardId, card] of Object.entries(CARDS)) {
+          if (card.name === cardFilter) {
+            selectedCardId = cardId;
+            break;
+          }
+        }
+        if (selectedCardId) {
+          cardYearPeriod = getCardYearPeriod(selectedCardId, parseInt(yearFilter));
+          if (cardYearPeriod) {
+            cardYearActive = true;
+          }
+        }
       }
-      
-      // Apply month filter
-      if (monthFilter !== '') {
-        txns = txns.filter(t => {
-          const dateStr = t.date;
-          let month;
-          if (dateStr.includes('-')) month = parseInt(dateStr.split('-')[1]) - 1;
-          else if (dateStr.includes('/')) month = parseInt(dateStr.split('/')[0]) - 1;
-          else month = new Date(dateStr).getMonth();
-          return month === parseInt(monthFilter);
-        });
-      }
-      
+
+      // Apply card filter first (needed for card year filtering)
       if (cardFilter) txns = txns.filter(t => t.cardName === cardFilter);
+
+      // Apply year/date filter
+      if (cardYearActive && cardYearPeriod) {
+        // Filter by card year date range
+        txns = txns.filter(t => {
+          const parsed = parseDateString(t.date);
+          if (!parsed) return false;
+          const txnDate = parsed.date;
+          return txnDate >= cardYearPeriod.startDate && txnDate < cardYearPeriod.endDate;
+        });
+        // Month filter is ignored when card year is active
+      } else {
+        // Apply calendar year filter
+        if (yearFilter) {
+          txns = txns.filter(t => {
+            const dateStr = t.date;
+            let year;
+            if (dateStr.includes('-')) year = parseInt(dateStr.split('-')[0]);
+            else if (dateStr.includes('/')) year = parseInt(dateStr.split('/')[2]);
+            else year = new Date(dateStr).getFullYear();
+            return year === parseInt(yearFilter);
+          });
+        }
+
+        // Apply month filter (only when not in card year mode)
+        if (monthFilter !== '') {
+          txns = txns.filter(t => {
+            const dateStr = t.date;
+            let month;
+            if (dateStr.includes('-')) month = parseInt(dateStr.split('-')[1]) - 1;
+            else if (dateStr.includes('/')) month = parseInt(dateStr.split('/')[0]) - 1;
+            else month = new Date(dateStr).getMonth();
+            return month === parseInt(monthFilter);
+          });
+        }
+      }
       if (catFilter) txns = txns.filter(t => t.category === catFilter);
       if (creditsOnly) txns = txns.filter(t => t.isCredit);
       if (needsReview) txns = txns.filter(t => !t.isPayment && t.confidence < CONFIDENCE_THRESHOLD);
@@ -5855,14 +5893,90 @@ function renderView(view) {
       state.pendingFilterRestore = null;
       // Re-render with restored filters
       renderTransactions();
+      updateTxnCardYearToggle();
     } else {
       renderTransactions();
+      updateTxnCardYearToggle();
     }
-    
+
+    // Function to update CY toggle state based on selected card
+    function updateTxnCardYearToggle() {
+      const toggle = document.getElementById('txnCardYearToggle');
+      if (!toggle) return;
+
+      const cardFilter = document.getElementById('filterCard').value;
+      const yearFilter = document.getElementById('filterYear').value;
+
+      // Find cardId from cardName
+      let selectedCardId = null;
+      if (cardFilter) {
+        for (const [cardId, card] of Object.entries(CARDS)) {
+          if (card.name === cardFilter) {
+            selectedCardId = cardId;
+            break;
+          }
+        }
+      }
+
+      // Determine if toggle should be enabled
+      const canEnable = selectedCardId && yearFilter && canShowCardYearToggle(selectedCardId);
+
+      if (!canEnable) {
+        // Disabled state
+        toggle.style.background = '#e7e5e4';
+        toggle.style.color = '#a8a29e';
+        toggle.style.cursor = 'not-allowed';
+        toggle.style.opacity = '0.5';
+        toggle.dataset.tooltip = 'Select a card with an annual fee to view card year';
+        toggle.dataset.cardId = '';
+        state.txnCardYearToggle = false;
+      } else {
+        // Can be enabled - get the card year period for tooltip
+        const cardYearPeriod = getCardYearPeriod(selectedCardId, parseInt(yearFilter));
+        const dateRange = cardYearPeriod
+          ? `${cardYearPeriod.startFormatted} – ${cardYearPeriod.endFormatted}`
+          : 'Card year';
+
+        if (state.txnCardYearToggle) {
+          // Enabled and ON
+          toggle.style.background = '#4b6bfb';
+          toggle.style.color = '#fff';
+          toggle.style.cursor = 'pointer';
+          toggle.style.opacity = '1';
+          toggle.dataset.tooltip = `Showing card year: ${dateRange}`;
+        } else {
+          // Enabled but OFF
+          toggle.style.background = '#e7e5e4';
+          toggle.style.color = '#57534e';
+          toggle.style.cursor = 'pointer';
+          toggle.style.opacity = '1';
+          toggle.dataset.tooltip = `Switch to card year: ${dateRange}`;
+        }
+        toggle.dataset.cardId = selectedCardId;
+      }
+    }
+
+    // Click handler for CY toggle
+    document.getElementById('txnCardYearToggle').addEventListener('click', () => {
+      const toggle = document.getElementById('txnCardYearToggle');
+      const cardId = toggle.dataset.cardId;
+
+      // Only toggle if enabled (has a cardId)
+      if (cardId) {
+        state.txnCardYearToggle = !state.txnCardYearToggle;
+        updateTxnCardYearToggle();
+        const pageSelect = document.getElementById('txnPage');
+        if (pageSelect) pageSelect.value = '1';
+        renderTransactions();
+      }
+    });
+
     document.getElementById('filterYear').addEventListener('change', () => {
-      // Reset page when filter changes
+      // Reset page and card year toggle when filter changes
       const pageSelect = document.getElementById('txnPage');
       if (pageSelect) pageSelect.value = '1';
+      state.txnCardYearToggle = false;
+      updateTxnCardYearToggle();
       renderTransactions();
     });
     document.getElementById('filterMonth').addEventListener('change', () => {
@@ -5873,6 +5987,8 @@ function renderView(view) {
     document.getElementById('filterCard').addEventListener('change', () => {
       const pageSelect = document.getElementById('txnPage');
       if (pageSelect) pageSelect.value = '1';
+      state.txnCardYearToggle = false;
+      updateTxnCardYearToggle();
       renderTransactions();
     });
     document.getElementById('filterCategory').addEventListener('change', () => {

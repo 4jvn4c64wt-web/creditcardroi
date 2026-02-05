@@ -766,10 +766,12 @@ const CARDS = {
     shortName: 'Freedom Unlimited',
     annualFee: 0,
     pointValue: 0.017,
-    multipliers: { 'chase-travel': 5, 'dining': 3, 'drugstore': 3 },
+    multipliers: { 'chase-travel': 5, 'dining': 3, 'drugstore': 3, 'lyft': 5 },
     baseRate: 1.5,
     credits: [],
-    categories: ['chase-travel', 'dining', 'drugstore', 'other']
+    categories: ['chase-travel', 'dining', 'drugstore', 'lyft', 'other'],
+    // Lyft partnership started Jan 12, 2020
+    lyftPartnershipStart: '2020-01-12'
   },
   'chase-sapphire-reserve': {
     name: 'Chase Sapphire Reserve',
@@ -793,13 +795,16 @@ const CARDS = {
       { name: 'Apple Music/TV+', amount: 288, keywords: [], manual: true },
     ],
     categories: ['chase-travel', 'flights-direct', 'hotels-direct', 'dining', 'lyft', 'other'],
+    // Lyft partnership: 10x from Jan 12, 2020 to March 31, 2025, then 5x after
+    lyftPartnershipStart: '2020-01-12',
+    lyft10xEndDate: '2025-04-01', // After this date, CSR gets 5x instead of 10x
     // Legacy CSR (before Oct 26, 2025): different earning structure, lower annual fee
     legacyCutoffDate: '2025-10-26',
     legacyAnnualFee: 550,
     legacy: {
-      multipliers: { 'chase-travel': 10, 'travel': 3, 'dining': 3 },
+      multipliers: { 'chase-travel': 10, 'travel': 3, 'dining': 3, 'lyft': 10 },
       baseRate: 1,
-      categories: ['chase-travel', 'travel', 'dining', 'other']
+      categories: ['chase-travel', 'travel', 'dining', 'lyft', 'other']
     },
     legacyCredits: [
       { name: 'Travel Credit', amount: 300, keywords: ['TRAVEL CREDIT'], manual: false },
@@ -818,7 +823,9 @@ const CARDS = {
       { name: 'DoorDash Grocery Credit', amount: 120, keywords: [], manual: true }, // $10/month in-app
       { name: 'DashPass Membership', amount: 120, keywords: [], manual: true }, // $9.99/month value
     ],
-    categories: ['chase-travel', 'dining', 'streaming', 'online-grocery', 'travel', 'lyft', 'other']
+    categories: ['chase-travel', 'dining', 'streaming', 'online-grocery', 'travel', 'lyft', 'other'],
+    // Lyft partnership started Jan 12, 2020
+    lyftPartnershipStart: '2020-01-12'
   },
   'us-bank-cash-plus': {
     name: 'U.S. Bank Cash+',
@@ -2416,6 +2423,29 @@ function getMultiplier(cardId, category, txnDate = null, merchantDesc = '') {
     return { rate: card.baseRate, reason: `${card.baseRate}x base rate` };
   }
 
+  // Special handling for Chase Lyft partnership (Jan 12, 2020+)
+  // Lyft bonuses apply to CSR, CSP, and CFU - must check before other travel logic
+  if (category === 'lyft' && card.lyftPartnershipStart) {
+    const lyftStart = new Date(card.lyftPartnershipStart);
+    const txnDateObj = txnDate ? new Date(txnDate) : new Date();
+
+    if (txnDateObj >= lyftStart) {
+      // CSR had 10x Lyft until April 1, 2025, then 5x after
+      if (cardId === 'chase-sapphire-reserve' && card.lyft10xEndDate) {
+        const lyft10xEnd = new Date(card.lyft10xEndDate);
+        if (txnDateObj < lyft10xEnd) {
+          return { rate: 10, reason: '10x Lyft (Chase partnership 2020-2025)' };
+        }
+        // After April 1, 2025 - fall through to standard 5x from multipliers
+      }
+      // CSP and CFU get 5x from partnership start - use their defined multiplier
+      if (card.multipliers['lyft']) {
+        return { rate: card.multipliers['lyft'], reason: `${card.multipliers['lyft']}x Lyft (Chase partnership)` };
+      }
+    }
+    // Before partnership start date - Lyft would just be regular transit/travel
+  }
+
   // Special handling for CSR legacy (before Oct 26, 2025)
   if (cardId === 'chase-sapphire-reserve' && card.legacyCutoffDate) {
     const csrCutoff = new Date(card.legacyCutoffDate);
@@ -2428,6 +2458,7 @@ function getMultiplier(cardId, category, txnDate = null, merchantDesc = '') {
 
       // Legacy CSR had 3x on ALL travel — check if category is travel-related
       // Walk up hierarchy to see if this category falls under 'travel'
+      // Note: Lyft is handled above, so won't reach here for Lyft transactions
       let checkCat = category;
       while (checkCat) {
         if (checkCat === 'travel' || checkCat === 'flights-direct' ||

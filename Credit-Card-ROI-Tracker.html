@@ -5582,6 +5582,10 @@ function renderView(view) {
           <label id="needsReviewFilter" style="display:flex;align-items:center;gap:6px;font-size:13px;color:#b45309;cursor:pointer;" title="Show transactions that need manual review">
             <input type="checkbox" id="filterNeedsReview"> 🔍 Needs Review${needsReviewBadge}
           </label>
+          <div class="search-input-wrapper" style="position:relative;margin-left:auto;">
+            <input type="text" id="filterMerchant" class="form-select" placeholder="Search merchants..." style="min-width:180px;padding-right:28px;">
+            <button type="button" id="clearMerchantSearch" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:14px;color:#a8a29e;padding:2px 4px;display:none;" title="Clear search">&times;</button>
+          </div>
         </div>`;
         })()}
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
@@ -5624,6 +5628,8 @@ function renderView(view) {
       document.getElementById('filterCategory').value = '';
       document.getElementById('filterCreditsOnly').checked = false;
       document.getElementById('filterNeedsReview').checked = false;
+      document.getElementById('filterMerchant').value = '';
+      document.getElementById('clearMerchantSearch').style.display = 'none';
       renderTransactions();
     });
     
@@ -5634,9 +5640,10 @@ function renderView(view) {
       const catFilter = document.getElementById('filterCategory').value;
       const creditsOnly = document.getElementById('filterCreditsOnly').checked;
       const needsReview = document.getElementById('filterNeedsReview').checked;
-      
+      const merchantSearch = (document.getElementById('filterMerchant').value || '').toLowerCase().trim();
+
       let txns = r.processed.sort((a, b) => new Date(b.date) - new Date(a.date));
-      
+
       // Apply year filter
       if (yearFilter) {
         txns = txns.filter(t => {
@@ -5648,7 +5655,7 @@ function renderView(view) {
           return year === parseInt(yearFilter);
         });
       }
-      
+
       // Apply month filter
       if (monthFilter !== '') {
         txns = txns.filter(t => {
@@ -5660,9 +5667,14 @@ function renderView(view) {
           return month === parseInt(monthFilter);
         });
       }
-      
+
       if (cardFilter) txns = txns.filter(t => t.cardName === cardFilter);
       if (catFilter) txns = txns.filter(t => t.category === catFilter);
+
+      // Apply merchant search filter
+      if (merchantSearch) {
+        txns = txns.filter(t => (t.merchant || '').toLowerCase().includes(merchantSearch));
+      }
       if (creditsOnly) txns = txns.filter(t => t.isCredit);
       if (needsReview) txns = txns.filter(t => !t.isPayment && t.confidence < CONFIDENCE_THRESHOLD);
       
@@ -5851,6 +5863,8 @@ function renderView(view) {
       document.getElementById('filterCategory').value = f.category;
       document.getElementById('filterCreditsOnly').checked = f.creditsOnly;
       document.getElementById('filterNeedsReview').checked = f.needsReview;
+      document.getElementById('filterMerchant').value = f.merchant || '';
+      document.getElementById('clearMerchantSearch').style.display = f.merchant ? 'block' : 'none';
       // Clear the pending restore
       state.pendingFilterRestore = null;
       // Re-render with restored filters
@@ -5886,6 +5900,26 @@ function renderView(view) {
       renderTransactions();
     });
     document.getElementById('filterNeedsReview').addEventListener('change', () => {
+      const pageSelect = document.getElementById('txnPage');
+      if (pageSelect) pageSelect.value = '1';
+      renderTransactions();
+    });
+
+    // Merchant search input handler
+    const merchantInput = document.getElementById('filterMerchant');
+    const clearSearchBtn = document.getElementById('clearMerchantSearch');
+
+    merchantInput.addEventListener('input', () => {
+      const pageSelect = document.getElementById('txnPage');
+      if (pageSelect) pageSelect.value = '1';
+      // Show/hide clear button based on input content
+      clearSearchBtn.style.display = merchantInput.value ? 'block' : 'none';
+      renderTransactions();
+    });
+
+    clearSearchBtn.addEventListener('click', () => {
+      merchantInput.value = '';
+      clearSearchBtn.style.display = 'none';
       const pageSelect = document.getElementById('txnPage');
       if (pageSelect) pageSelect.value = '1';
       renderTransactions();
@@ -6199,9 +6233,10 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
       category: document.getElementById('filterCategory')?.value || '',
       creditsOnly: document.getElementById('filterCreditsOnly')?.checked || false,
       needsReview: document.getElementById('filterNeedsReview')?.checked || false,
+      merchant: document.getElementById('filterMerchant')?.value || '',
       page: document.getElementById('txnPage')?.value || '1'
     };
-    
+
     // Store filter state globally so renderView can use it
     state.pendingFilterRestore = filterState;
     
@@ -6224,9 +6259,10 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
         category: document.getElementById('filterCategory')?.value || '',
         creditsOnly: document.getElementById('filterCreditsOnly')?.checked || false,
         needsReview: document.getElementById('filterNeedsReview')?.checked || false,
+        merchant: document.getElementById('filterMerchant')?.value || '',
         page: document.getElementById('txnPage')?.value || '1'
       };
-      
+
       // Store filter state globally so renderView can use it
       state.pendingFilterRestore = filterState;
 
@@ -6251,12 +6287,13 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
         category: document.getElementById('filterCategory')?.value || '',
         creditsOnly: document.getElementById('filterCreditsOnly')?.checked || false,
         needsReview: document.getElementById('filterNeedsReview')?.checked || false,
+        merchant: document.getElementById('filterMerchant')?.value || '',
         page: document.getElementById('txnPage')?.value || '1'
       };
-      
+
       // Store filter state globally so renderView can use it
       state.pendingFilterRestore = filterState;
-      
+
       delete state.confirmedTransactions[txnId];
       safeLocalStorageSet('ccTracker_confirmedTxns', state.confirmedTransactions);
       modal.classList.add('hidden');

@@ -819,11 +819,7 @@ const CARDS = {
       multipliers: { 'chase-travel': 10, 'travel': 3, 'dining': 3, 'lyft': 10 },
       baseRate: 1,
       categories: ['chase-travel', 'travel', 'dining', 'lyft', 'other']
-    },
-    legacyCredits: [
-      { name: 'Travel Credit', amount: 300, keywords: ['TRAVEL CREDIT'], manual: false },
-      { name: 'Global Entry/TSA PreCheck', amount: 120, keywords: ['GLOBAL ENTRY', 'TSA PRECHECK', 'KNOWN TRAVELER', 'TRUSTED TRAVELER'], manual: false }
-    ]
+    }
   },
   'chase-sapphire-preferred': {
     name: 'Chase Sapphire Preferred',
@@ -2718,16 +2714,7 @@ function detectCredit(merchant, originalStatement, cardId, txnId, txnDate = null
   const card = CARDS[cardId];
   if (!card || !card.credits) return null;
 
-  // For CSR legacy (before Oct 26, 2025), use legacy credits if available
-  let credits = card.credits;
-  if (cardId === 'chase-sapphire-reserve' && card.legacyCutoffDate && card.legacyCredits) {
-    const cutoff = new Date(card.legacyCutoffDate);
-    const txnDateObj = txnDate ? new Date(txnDate) : new Date();
-    if (txnDateObj < cutoff) {
-      credits = card.legacyCredits;
-    }
-  }
-
+  const credits = card.credits;
   const upper = (merchant + ' ' + originalStatement).toUpperCase();
   const disabled = state.disabledCredits[cardId] || [];
 
@@ -4377,14 +4364,8 @@ function showCardConfigEditor(preselectedCardId = null) {
       const availableYears = txnYears.length > 0 ? txnYears : [currentYear];
       const selectedCreditYear = state.selectedCreditYear || availableYears[0];
 
-      // Check if this card has legacy credits (like CSR)
-      const hasLegacyCredits = card.legacyCredits && card.legacyCredits.length > 0 && card.legacyCutoffDate;
-
       // Build credits grid HTML
-      const currentCreditsHtml = card.credits.map(cr => renderCreditRow(cr, selectedCreditYear)).join('');
-      const legacyCreditsHtml = hasLegacyCredits
-        ? card.legacyCredits.map(cr => renderCreditRow(cr, selectedCreditYear)).join('')
-        : '';
+      const creditsHtml = card.credits.map(cr => renderCreditRow(cr, selectedCreditYear)).join('');
 
       creditsSection = `
         <div id="configCreditsSection">
@@ -4396,20 +4377,9 @@ function showCardConfigEditor(preselectedCardId = null) {
           </div>
           <p style="font-size:12px;color:#78716c;margin-bottom:4px;">Toggle credits on/off to include/exclude from ROI calculation.</p>
           <p style="font-size:11px;color:#a8a29e;margin-bottom:12px;">⚡ = Credits your account automatically (like Uber Cash). Click months you've received to track them.</p>
-          ${hasLegacyCredits ? `
-            <div style="font-size:12px;font-weight:600;color:#0369a1;margin-bottom:8px;">Current Benefits (Oct 26, 2025+)</div>
-            <div id="creditsGrid" style="display:grid;gap:12px;">
-              ${currentCreditsHtml}
-            </div>
-            <div style="font-size:12px;font-weight:600;color:#78716c;margin-bottom:8px;margin-top:16px;padding-top:12px;border-top:1px solid #e7e5e4;">Pre-Refresh Benefits (before Oct 26, 2025)</div>
-            <div id="legacyCreditsGrid" style="display:grid;gap:12px;">
-              ${legacyCreditsHtml}
-            </div>
-          ` : `
-            <div id="creditsGrid" style="display:grid;gap:12px;">
-              ${currentCreditsHtml}
-            </div>
-          `}
+          <div id="creditsGrid" style="display:grid;gap:12px;">
+            ${creditsHtml}
+          </div>
         </div>
       `;
     } else {

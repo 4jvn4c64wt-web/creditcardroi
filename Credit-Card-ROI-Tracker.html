@@ -5560,6 +5560,10 @@ function renderView(view) {
           const needsReviewBadge = lowConfCount > 0 ? `<span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:10px;font-size:11px;font-weight:600;margin-left:4px;">${lowConfCount}</span>` : '';
           return `
         <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+          <div class="search-input-wrapper" style="position:relative;">
+            <input type="text" id="filterMerchant" class="form-select" placeholder="Search merchants..." style="min-width:180px;padding-right:28px;">
+            <button type="button" id="clearMerchantSearch" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:14px;color:#a8a29e;padding:2px 4px;display:none;" title="Clear search">&times;</button>
+          </div>
           <select id="filterYear" class="form-select" style="min-width:100px;">
             <option value="">All Years</option>
             ${uniqueYears.map(y => `<option value="${y}">${y}</option>`).join('')}
@@ -5582,10 +5586,6 @@ function renderView(view) {
           <label id="needsReviewFilter" style="display:flex;align-items:center;gap:6px;font-size:13px;color:#b45309;cursor:pointer;" title="Show transactions that need manual review">
             <input type="checkbox" id="filterNeedsReview"> 🔍 Needs Review${needsReviewBadge}
           </label>
-          <div class="search-input-wrapper" style="position:relative;margin-left:auto;">
-            <input type="text" id="filterMerchant" class="form-select" placeholder="Search merchants..." style="min-width:180px;padding-right:28px;">
-            <button type="button" id="clearMerchantSearch" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:14px;color:#a8a29e;padding:2px 4px;display:none;" title="Clear search">&times;</button>
-          </div>
         </div>`;
         })()}
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">

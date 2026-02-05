@@ -1390,6 +1390,7 @@ let state = {
   // Session state (not persisted)
   transactions: [],
   results: null,
+  detectedAnnualFees: {}, // { cardId: { year: amount } } - detected from transaction data
   activeView: 'summary',
   selectedYear: null,
   selectedCreditYear: null, // For card config credit year selection
@@ -2506,10 +2507,52 @@ function getEffectiveAnnualFee(cardId, transactions = []) {
   const card = CARDS[cardId];
   if (!card) return 0;
 
+  // Determine the year(s) from the transactions for this card
+  const cardTxns = transactions.filter(t => t.cardId === cardId);
+  const txnYears = new Set();
+  for (const t of cardTxns) {
+    let year;
+    if (t.date.includes('-')) {
+      year = parseInt(t.date.split('-')[0]);
+    } else if (t.date.includes('/')) {
+      year = parseInt(t.date.split('/')[2]);
+      if (year < 100) year += 2000;
+    }
+    if (year) txnYears.add(year);
+  }
+
+  // Check for detected annual fee from transaction data
+  // If we have a detected fee for the relevant year, use it
+  const detectedFees = state.detectedAnnualFees[cardId];
+  if (detectedFees) {
+    // If there's only one year in the transactions, use that year's detected fee
+    const yearsArray = Array.from(txnYears);
+    if (yearsArray.length === 1 && detectedFees[yearsArray[0]]) {
+      return detectedFees[yearsArray[0]];
+    }
+    // If multiple years, use the most recent year's detected fee if available
+    if (yearsArray.length > 1) {
+      const sortedYears = yearsArray.sort((a, b) => b - a);
+      for (const year of sortedYears) {
+        if (detectedFees[year]) {
+          return detectedFees[year];
+        }
+      }
+    }
+    // If no year filter, use the most recent detected fee
+    if (yearsArray.length === 0) {
+      const detectedYears = Object.keys(detectedFees).sort((a, b) => b - a);
+      if (detectedYears.length > 0) {
+        return detectedFees[detectedYears[0]];
+      }
+    }
+  }
+
+  // Fall back to card definition logic
+
   // Special handling for CSR legacy annual fee
   if (cardId === 'chase-sapphire-reserve' && card.legacyCutoffDate) {
     const cutoff = new Date(card.legacyCutoffDate);
-    const cardTxns = transactions.filter(t => t.cardId === cardId);
 
     // Check if any transaction is after the cutoff date
     const hasPostCutoff = cardTxns.some(t => {
@@ -3331,6 +3374,30 @@ async function processTransactions(transactions) {
     let isSkipTransaction = false;
     for (const pattern of skipPatterns) {
       if (combinedText.includes(pattern)) {
+        // Detect annual fee transactions before skipping
+        // Annual fees typically appear as negative amounts (charges) on statements
+        if ((pattern === 'annual membership fee' || pattern === 'annual fee') && txn.amount < 0) {
+          const cardId = state.cardMappings[txn.last4];
+          if (cardId && cardId !== 'skip') {
+            // Extract year from transaction date
+            let txnYear;
+            if (txn.date.includes('-')) {
+              txnYear = parseInt(txn.date.split('-')[0]);
+            } else if (txn.date.includes('/')) {
+              txnYear = parseInt(txn.date.split('/')[2]);
+              if (txnYear < 100) txnYear += 2000; // Handle 2-digit years
+            } else {
+              txnYear = new Date().getFullYear();
+            }
+
+            // Store detected fee (use absolute value since fees are negative in CSV)
+            if (!state.detectedAnnualFees[cardId]) {
+              state.detectedAnnualFees[cardId] = {};
+            }
+            state.detectedAnnualFees[cardId][txnYear] = Math.abs(txn.amount);
+          }
+        }
+
         classifications[txn.id] = {
           subcategory: 'skip',
           source: 'skip-pattern',
@@ -6998,6 +7065,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       state.transactions = [];
       state.savedTransactions = [];
       state.results = null;
+      state.detectedAnnualFees = {}; // Clear detected fees
       localStorage.removeItem('ccTracker_transactions');
       updateStoredTxnCount();
       document.getElementById('resultsSection').classList.add('hidden');
@@ -7052,6 +7120,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
       state.transactions = state.savedTransactions;
       safeLocalStorageSet('ccTracker_transactions', state.savedTransactions);
+
+      // Clear detected annual fees for the deleted year
+      for (const cardId of Object.keys(state.detectedAnnualFees)) {
+        if (state.detectedAnnualFees[cardId][year]) {
+          delete state.detectedAnnualFees[cardId][year];
+        }
+      }
       
       const deleted = beforeCount - state.savedTransactions.length;
       alert(`Deleted ${deleted} transactions from ${year}.`);
@@ -7135,7 +7210,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           state.savedTransactions = [];
           state.transactions = [];
           state.results = null;
-          
+          state.detectedAnnualFees = {}; // Clear detected fees
+
           // Clear all localStorage
           const keysToRemove = [];
           for (let i = 0; i < localStorage.length; i++) {

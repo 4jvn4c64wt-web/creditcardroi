@@ -2841,6 +2841,69 @@ function getCardYearManualCredits(cardId, startDate, endDate) {
   return total;
 }
 
+/**
+ * Get credits used by credit name within a card year period (for dropdown display)
+ * @param {string} cardId - Card ID
+ * @param {Date} startDate - Start of period
+ * @param {Date} endDate - End of period
+ * @param {Array} allTransactions - All transactions
+ * @returns {Object} Map of credit name to amount used
+ */
+function getCardYearCreditsUsed(cardId, startDate, endDate, allTransactions) {
+  const result = {};
+
+  // Get transaction-detected credits within the date range
+  allTransactions.forEach(txn => {
+    if (txn.cardId !== cardId) return;
+    if (!txn.isCredit || !txn.creditMatch) return;
+
+    const parsed = parseDateString(txn.date);
+    if (!parsed) return;
+
+    const txnDate = parsed.date;
+    if (txnDate >= startDate && txnDate < endDate) {
+      if (!result[txn.creditMatch]) result[txn.creditMatch] = 0;
+      result[txn.creditMatch] += Math.abs(txn.amount);
+    }
+  });
+
+  // Add manual credits claimed within the period
+  const card = CARDS[cardId];
+  if (!card) return result;
+
+  const monthlyForCard = state.monthlyCredits[cardId] || {};
+
+  for (const credit of (card.credits || [])) {
+    if (!credit.manual) continue;
+
+    const yearData = monthlyForCard[credit.name];
+    if (!yearData) continue;
+
+    const monthlyAmount = credit.amount / 12;
+    const isDisabled = (state.disabledCredits[cardId] || []).includes(credit.name);
+    if (isDisabled) continue;
+
+    // Check each year's claimed months
+    const yearsToCheck = typeof yearData === 'object' && !Array.isArray(yearData) ? yearData : {};
+
+    for (const [yearStr, months] of Object.entries(yearsToCheck)) {
+      const year = parseInt(yearStr);
+      if (!Array.isArray(months)) continue;
+
+      for (const monthIndex of months) {
+        // Create date for the claimed month (use 15th as middle of month)
+        const claimDate = new Date(year, monthIndex, 15);
+        if (claimDate >= startDate && claimDate < endDate) {
+          if (!result[credit.name]) result[credit.name] = 0;
+          result[credit.name] += monthlyAmount;
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
 // Determine badge color based on whether this is the optimal choice
 // Green = best/tied for best option, Yellow = good but better exists, Red = suboptimal
 function getCategoryBadgeStyle(txn, returnTooltip = false) {
@@ -5275,7 +5338,7 @@ function renderView(view) {
               ${cards.map(c => {
                 const cardDef = CARDS[c.cardId];
                 const availableCredits = cardDef?.credits || [];
-                const usedCredits = creditsUsedByCard[c.cardId] || {};
+                let displayCreditsUsed = creditsUsedByCard[c.cardId] || {};
                 const hasCredits = availableCredits.length > 0;
 
                 const hasPointsBreakdown = Object.keys(c.pointsByCategory || {}).length > 0;
@@ -5308,6 +5371,8 @@ function renderView(view) {
                         netValue: cyNetValue,
                         pointsByCategory: cyMetrics.pointsByCategory
                       };
+                      // Also calculate credits used by name for the dropdown
+                      displayCreditsUsed = getCardYearCreditsUsed(c.cardId, cardYearPeriod.startDate, cardYearPeriod.endDate, r.processed);
                     }
                   }
                 }
@@ -5318,11 +5383,11 @@ function renderView(view) {
                   ? `Showing card year active Jan 1, ${displayYear} (${cardYearPeriod.startMonth} – ${cardYearPeriod.endMonth})`
                   : '';
 
-                // Toggle indicator HTML - small dot to the right of the card name
+                // Toggle indicator HTML - small CY text to the right of the card name
                 const toggleHtml = showCardYearToggle ? `
                   <span class="card-year-toggle tooltip tooltip-multiline" data-card-id="${c.cardId}"
                     data-tooltip="${isCardYearActive ? cardYearTooltip : 'Switch to card anniversary year'}"
-                    style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${isCardYearActive ? '#4b6bfb' : '#d6d3d1'};cursor:pointer;margin-left:6px;vertical-align:middle;flex-shrink:0;"></span>
+                    style="display:inline-block;font-size:9px;font-weight:600;padding:1px 4px;border-radius:3px;background:${isCardYearActive ? '#4b6bfb' : '#e7e5e4'};color:${isCardYearActive ? '#fff' : '#a8a29e'};cursor:pointer;margin-left:6px;vertical-align:middle;flex-shrink:0;">CY</span>
                 ` : '';
 
                 return `<tr data-row-id="${rowId}" style="${cardYearRowStyle}">
@@ -5358,7 +5423,7 @@ function renderView(view) {
                           ${availableCredits.map(cr => {
                             const disabled = (state.disabledCredits[c.cardId] || []).includes(cr.name);
                             const isManual = cr.manual === true;
-                            const used = disabled ? 0 : (usedCredits[cr.name] || 0);
+                            const used = disabled ? 0 : (displayCreditsUsed[cr.name] || 0);
                             const pct = Math.min(100, (used / cr.amount) * 100);
                             return `
                               <div style="margin-bottom:6px;${disabled ? 'opacity:0.4;' : ''}">

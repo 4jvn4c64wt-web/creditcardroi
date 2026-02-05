@@ -1505,7 +1505,8 @@ function getCardCategories(cardId, txnDate = null) {
     const csrCutoff = new Date(card.legacyCutoffDate);
     const txnDateObj = txnDate ? new Date(txnDate) : new Date();
     if (txnDateObj < csrCutoff) {
-      return ['chase-travel', 'travel', 'dining', 'other'];
+      // Use legacy categories from card definition (includes lyft for Chase partnership)
+      return card.legacy?.categories || ['chase-travel', 'travel', 'dining', 'lyft', 'other'];
     }
   }
 

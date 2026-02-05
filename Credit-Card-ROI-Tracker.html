@@ -70,8 +70,8 @@
     .help-icon { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: #e7e5e4; color: #78716c; font-size: 11px; cursor: help; margin-left: 4px; }
     .help-icon:hover { background: #d6d3d1; }
     .tooltip-multiline:hover::after { white-space: pre-line; text-align: left; min-width: 140px; }
-    .card-year-toggle { transition: background 0.15s, color 0.15s; }
-    .card-year-toggle:hover { opacity: 0.85; }
+    .card-year-toggle { transition: background 0.15s; }
+    .card-year-toggle:hover { transform: scale(1.2); }
     @media (max-width: 900px) { .metrics-grid { grid-template-columns: repeat(2, 1fr); } .metric:nth-child(2), .metric:nth-child(4) { border-right: none; } }
     @media (max-width: 500px) { .metrics-grid { grid-template-columns: 1fr; } .metric { border-right: none; border-bottom: 1px solid #e7e5e4; } .metric:last-child { border-bottom: none; } }
     
@@ -2706,14 +2706,33 @@ function getCardYearPeriod(cardId, calendarYear) {
     }
   }
 
+  // If no fee found before Jan 1, we need to extrapolate backward from the earliest known fee
+  // This handles the case where we only have one detected fee (e.g., March 2025)
+  // and we're viewing that same year - we extrapolate to March 2024
+  if (!startFee && feeDates.length > 0) {
+    const earliestFee = feeDates[0];
+    // Only extrapolate if the earliest fee is in the same year we're viewing
+    // or if jan1 is before the earliest fee
+    if (jan1 < earliestFee.date) {
+      // Extrapolate backward by one year
+      const extrapolatedYear = earliestFee.year - 1;
+      startFee = {
+        year: extrapolatedYear,
+        date: new Date(extrapolatedYear, earliestFee.month - 1, earliestFee.day),
+        month: earliestFee.month,
+        day: earliestFee.day
+      };
+    }
+  }
+
   if (!startFee) {
-    // No fee posted before Jan 1 of this year - can't determine card year
+    // Still can't determine - Jan 1 is after all known fees
     return null;
   }
 
   // The end of the card year is approximately one year after the start
   // Use the fee month/day but in the following year
-  const startDate = new Date(startFee.date);
+  const startDate = new Date(startFee.year, startFee.month - 1, startFee.day);
   const endDate = new Date(startFee.year + 1, startFee.month - 1, startFee.day);
 
   // Format month names
@@ -5251,7 +5270,6 @@ function renderView(view) {
               <th class="text-right sortable" data-sort="credits">Credits${sortState.column === 'credits' ? `<span class="sort-arrow">${sortState.direction === 'asc' ? '▲' : '▼'}</span>` : ''}</th>
               <th class="text-right sortable" data-sort="annualFee">Ann. Fee${sortState.column === 'annualFee' ? `<span class="sort-arrow">${sortState.direction === 'asc' ? '▲' : '▼'}</span>` : ''}</th>
               <th class="text-right sortable" data-sort="netValue">Net Value${sortState.column === 'netValue' ? `<span class="sort-arrow">${sortState.direction === 'asc' ? '▲' : '▼'}</span>` : ''}</th>
-              <th style="width:32px;"></th>
             </tr></thead>
             <tbody>
               ${cards.map(c => {
@@ -5300,17 +5318,15 @@ function renderView(view) {
                   ? `Showing card year active Jan 1, ${displayYear} (${cardYearPeriod.startMonth} – ${cardYearPeriod.endMonth})`
                   : '';
 
-                // Toggle button HTML
+                // Toggle indicator HTML - small dot to the right of the card name
                 const toggleHtml = showCardYearToggle ? `
-                  <button class="card-year-toggle tooltip tooltip-multiline" data-card-id="${c.cardId}"
+                  <span class="card-year-toggle tooltip tooltip-multiline" data-card-id="${c.cardId}"
                     data-tooltip="${isCardYearActive ? cardYearTooltip : 'Switch to card anniversary year'}"
-                    style="background:${isCardYearActive ? '#4b6bfb' : '#e7e5e4'};color:${isCardYearActive ? '#fff' : '#57534e'};border:none;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;">
-                    CY
-                  </button>
+                    style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${isCardYearActive ? '#4b6bfb' : '#d6d3d1'};cursor:pointer;margin-left:6px;vertical-align:middle;flex-shrink:0;"></span>
                 ` : '';
 
                 return `<tr data-row-id="${rowId}" style="${cardYearRowStyle}">
-                  <td>${c.cardName}</td>
+                  <td style="white-space:nowrap;"><span style="display:inline-flex;align-items:center;">${c.cardName}${toggleHtml}</span></td>
                   <td class="text-right mono">${formatCurrencyPrecise(displayMetrics.spend)}</td>
                   <td class="text-right mono">
                     ${hasDetails ? `
@@ -5362,7 +5378,6 @@ function renderView(view) {
                   </td>
                   <td class="text-right mono" style="color:#dc2626;">-$${c.annualFee}</td>
                   <td class="text-right mono" style="font-weight:600;color:${displayMetrics.netValue >= 0 ? '#166534' : '#dc2626'};">${formatCurrencyPrecise(displayMetrics.netValue)}</td>
-                  <td style="text-align:center;vertical-align:middle;">${toggleHtml}</td>
                 </tr>`
               }).join('')}
             </tbody>

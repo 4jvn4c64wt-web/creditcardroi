@@ -5701,6 +5701,36 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
         return { rate: mult || card?.baseRate || 1, bonus: !!mult };
       }
     }
+    // CSR legacy mode (before Oct 26, 2025)
+    if (cardId === 'chase-sapphire-reserve' && card.legacyCutoffDate) {
+      let txnDateObj;
+      if (txn?.date) {
+        if (txn.date.includes('-')) {
+          const [year, month, day] = txn.date.split('-').map(Number);
+          txnDateObj = new Date(year, month - 1, day);
+        } else if (txn.date.includes('/')) {
+          const parts = txn.date.split('/');
+          const month = parseInt(parts[0]);
+          const day = parseInt(parts[1]);
+          let year = parseInt(parts[2]);
+          if (year < 100) year += 2000;
+          txnDateObj = new Date(year, month - 1, day);
+        } else {
+          txnDateObj = new Date(txn.date);
+        }
+      } else {
+        txnDateObj = new Date();
+      }
+      const cutoffParts = card.legacyCutoffDate.split('-').map(Number);
+      const cutoffDate = new Date(cutoffParts[0], cutoffParts[1] - 1, cutoffParts[2]);
+      const isLegacy = txnDateObj < cutoffDate;
+
+      if (isLegacy) {
+        // CSR Legacy: 10x chase-travel, 3x travel, 3x dining, 10x lyft, 1x base
+        const legacyMult = card.legacy?.multipliers?.[cat];
+        return { rate: legacyMult || card.legacy?.baseRate || 1, bonus: !!legacyMult };
+      }
+    }
     const mult = card?.multipliers?.[cat];
     return { rate: mult || card?.baseRate || 1, bonus: !!mult };
   }

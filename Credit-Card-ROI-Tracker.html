@@ -2681,6 +2681,10 @@ function isPaymentTransaction(txn) {
          (txn.monarchCategory || '').toLowerCase().includes('credit card payment');
 }
 
+// Returns: { name: string, disabled: boolean } | null
+// - { name, disabled: false } = credit matched and enabled
+// - { name, disabled: true } = credit matched but disabled in card config
+// - null = no credit matched (true refund)
 function detectCredit(merchant, originalStatement, cardId, txnId, txnDate = null) {
   // Check for manual override first
   if (state.creditOverrides[txnId]) {
@@ -2688,8 +2692,10 @@ function detectCredit(merchant, originalStatement, cardId, txnId, txnDate = null
     if (override === 'refund') return null; // Marked as refund, not a credit
     // Check if this credit is disabled
     const disabled = state.disabledCredits[cardId] || [];
-    if (disabled.includes(override)) return null;
-    return override; // Return the manually assigned credit name
+    if (disabled.includes(override)) {
+      return { name: override, disabled: true };
+    }
+    return { name: override, disabled: false };
   }
 
   const card = CARDS[cardId];
@@ -2717,31 +2723,28 @@ function detectCredit(merchant, originalStatement, cardId, txnId, txnDate = null
   for (const credit of credits) {
     // Skip manual credits (they have no keywords to match)
     if (credit.manual || !credit.keywords || credit.keywords.length === 0) continue;
-    
+
     // Check if any keyword matches
     for (const kw of credit.keywords) {
       if (upper.includes(kw)) {
-        // Found a match! But is this credit disabled?
-        if (disabled.includes(credit.name)) {
-          // Credit is disabled - return null (don't count it at all)
-          return null;
-        }
-        return credit.name;
+        // Found a match! Return with disabled status
+        const isDisabled = disabled.includes(credit.name);
+        return { name: credit.name, disabled: isDisabled };
       }
     }
   }
-  
+
   // No specific credit matched. Check for rewards redemption patterns.
   if (upper.includes('REWARD') && (upper.includes('REDEEM') || upper.includes('STATEMENT'))) {
-    return 'Rewards Redemption';
+    return { name: 'Rewards Redemption', disabled: false };
   }
   if (upper.includes('CASHBACK') || upper.includes('CASH BACK')) {
-    return 'Cash Back Redemption';
+    return { name: 'Cash Back Redemption', disabled: false };
   }
 
   // If this looks like a generic statement credit, return that
   if (upper.includes('CREDIT') && !upper.includes('CREDIT CARD')) {
-    return 'Statement Credit';
+    return { name: 'Statement Credit', disabled: false };
   }
 
   // No match found - this is just a refund, not a statement credit
@@ -3632,22 +3635,33 @@ async function processTransactions(transactions) {
       } else if (isCredit) {
         creditMatch = detectCredit(txn.merchant, txn.original, cardId, txn.id, txn.date);
         if (creditMatch) {
-          // Credit was successfully identified — update confidence and reason
-          // to reflect this, replacing the merchant classification result
-          if (creditMatch === 'Statement Credit') {
+          // Credit was identified — update confidence and reason
+          const creditName = creditMatch.name;
+
+          if (creditName === 'Statement Credit') {
             // Generic fallback - we know it's a credit but not which specific one
             cls.confidence = 50;
             cls.reason = 'Statement credit (unmatched — assign manually)';
-          } else {
-            // Specific credit matched
+          } else if (creditMatch.disabled) {
+            // Specific credit matched but is disabled - still high confidence
             cls.confidence = 100;
-            cls.reason = `Credit: ${creditMatch}`;
+            cls.reason = `Credit: ${creditName} (disabled in config)`;
+          } else {
+            // Specific credit matched and enabled
+            cls.confidence = 100;
+            cls.reason = `Credit: ${creditName}`;
           }
 
-          // Statement credit - also calculate what points would have been earned
-          // so we can subtract them (credits reduce points like refunds)
-          const categoryMult = getMultiplier(cardId, cardCategory, txn.date, merchantDesc);
-          multiplier = { rate: categoryMult.rate, reason: `Credit: ${creditMatch} (-${categoryMult.rate}x)` };
+          if (creditMatch.disabled) {
+            // Disabled credit - treat as refund (don't count toward credit tracking)
+            isRefund = true;
+            const categoryMult = getMultiplier(cardId, cardCategory, txn.date, merchantDesc);
+            multiplier = { rate: categoryMult.rate, reason: `Credit: ${creditName} (disabled) -${categoryMult.rate}x` };
+          } else {
+            // Active credit - calculate points to subtract
+            const categoryMult = getMultiplier(cardId, cardCategory, txn.date, merchantDesc);
+            multiplier = { rate: categoryMult.rate, reason: `Credit: ${creditName} (-${categoryMult.rate}x)` };
+          }
         } else {
           // This is a refund - apply same multiplier as a charge would get, but negative
           isRefund = true;
@@ -3672,6 +3686,10 @@ async function processTransactions(transactions) {
     
     const pointsValue = points * getPointValue(cardId);
     
+    // For creditMatch: store just the name (string) for backward compatibility
+    // Only store for active credits (not disabled ones) so credit tracking works correctly
+    const creditMatchName = creditMatch && !creditMatch.disabled ? creditMatch.name : null;
+
     return {
       ...txn,
       cardId,
@@ -3688,7 +3706,7 @@ async function processTransactions(transactions) {
       isCredit,
       isPayment,
       isRefund,
-      creditMatch
+      creditMatch: creditMatchName
     };
   });
   

@@ -4135,6 +4135,48 @@ function showCardConfigEditor(preselectedCardId = null) {
     
     // Build credits section with monthly claiming for manual credits - NOW YEAR-SPECIFIC
     let creditsSection = '';
+
+    // Helper function to render a single credit row
+    const renderCreditRow = (cr, selectedCreditYear) => {
+      const isDisabled = disabled.includes(cr.name);
+      const isManual = cr.manual === true;
+      const monthlyAmount = cr.amount / 12;
+      // Year-specific claimed months
+      const yearCredits = state.monthlyCredits?.[cardId]?.[cr.name];
+      const claimedMonths = (typeof yearCredits === 'object' && !Array.isArray(yearCredits))
+        ? (yearCredits[selectedCreditYear] || [])
+        : (Array.isArray(yearCredits) ? yearCredits : []); // Legacy support
+      const totalClaimed = isManual ? claimedMonths.length * monthlyAmount : 0;
+
+      let monthsHtml = '';
+      if (isManual && !isDisabled) {
+        monthsHtml = MONTHS.map((month, idx) => `
+          <label style="display:flex;align-items:center;justify-content:center;width:42px;padding:6px 0;border:1px solid #e7e5e4;border-radius:4px;cursor:pointer;font-size:11px;background:${claimedMonths.includes(idx) ? '#dcfce7' : '#fff'};" title="Click to mark ${month} as claimed">
+            <input type="checkbox" class="month-claim" data-credit="${cr.name}" data-month="${idx}" ${claimedMonths.includes(idx) ? 'checked' : ''} style="display:none;">
+            ${month}
+          </label>
+        `).join('');
+      }
+
+      return `
+        <div class="${isManual && !isDisabled ? 'manual-credit-row' : ''}" style="padding:12px;background:${isDisabled ? '#fafaf9' : '#fff'};border:1px solid #e7e5e4;border-radius:8px;${isDisabled ? 'opacity:0.5;' : ''}">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:${isManual && !isDisabled ? '12px' : '0'};">
+            <input type="checkbox" class="credit-toggle-checkbox" data-credit-name="${cr.name}" ${!isDisabled ? 'checked' : ''} title="Include this credit in ROI calculation">
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:500;${isDisabled ? 'text-decoration:line-through;' : ''}">${cr.name}${isManual ? ' ⚡' : ''}</div>
+              <div style="font-size:11px;color:#78716c;">$${cr.amount}/yr${isManual ? ` (~$${monthlyAmount.toFixed(0)}/mo)` : ' — Auto-detected from transactions'}</div>
+            </div>
+            ${isManual && !isDisabled ? `<span style="font-size:12px;color:#059669;font-weight:500;">$${totalClaimed.toFixed(0)} claimed</span>` : ''}
+          </div>
+          ${isManual && !isDisabled ? `
+            <div style="display:flex;flex-wrap:wrap;gap:4px;padding-top:8px;border-top:1px solid #f5f5f4;">
+              ${monthsHtml}
+            </div>
+          ` : ''}
+        </div>
+      `;
+    };
+
     if (card.credits && card.credits.length > 0) {
       // Get available years from transactions
       const txnYears = [...new Set(state.transactions.map(t => {
@@ -4146,7 +4188,16 @@ function showCardConfigEditor(preselectedCardId = null) {
       const currentYear = new Date().getFullYear();
       const availableYears = txnYears.length > 0 ? txnYears : [currentYear];
       const selectedCreditYear = state.selectedCreditYear || availableYears[0];
-      
+
+      // Check if this card has legacy credits (like CSR)
+      const hasLegacyCredits = card.legacyCredits && card.legacyCredits.length > 0 && card.legacyCutoffDate;
+
+      // Build credits grid HTML
+      const currentCreditsHtml = card.credits.map(cr => renderCreditRow(cr, selectedCreditYear)).join('');
+      const legacyCreditsHtml = hasLegacyCredits
+        ? card.legacyCredits.map(cr => renderCreditRow(cr, selectedCreditYear)).join('')
+        : '';
+
       creditsSection = `
         <div id="configCreditsSection">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
@@ -4157,42 +4208,20 @@ function showCardConfigEditor(preselectedCardId = null) {
           </div>
           <p style="font-size:12px;color:#78716c;margin-bottom:4px;">Toggle credits on/off to include/exclude from ROI calculation.</p>
           <p style="font-size:11px;color:#a8a29e;margin-bottom:12px;">⚡ = Credits your account automatically (like Uber Cash). Click months you've received to track them.</p>
-          <div id="creditsGrid" style="display:grid;gap:12px;">
-            ${card.credits.map(cr => {
-              const isDisabled = disabled.includes(cr.name);
-              const isManual = cr.manual === true;
-              const monthlyAmount = cr.amount / 12;
-              // Year-specific claimed months
-              const yearCredits = state.monthlyCredits?.[cardId]?.[cr.name];
-              const claimedMonths = (typeof yearCredits === 'object' && !Array.isArray(yearCredits)) 
-                ? (yearCredits[selectedCreditYear] || [])
-                : (Array.isArray(yearCredits) ? yearCredits : []); // Legacy support
-              const totalClaimed = isManual ? claimedMonths.length * monthlyAmount : 0;
-              
-              return `
-                <div class="${isManual && !isDisabled ? 'manual-credit-row' : ''}" style="padding:12px;background:${isDisabled ? '#fafaf9' : '#fff'};border:1px solid #e7e5e4;border-radius:8px;${isDisabled ? 'opacity:0.5;' : ''}">
-                  <div style="display:flex;align-items:center;gap:12px;margin-bottom:${isManual && !isDisabled ? '12px' : '0'};">
-                    <input type="checkbox" class="credit-toggle-checkbox" data-credit-name="${cr.name}" ${!isDisabled ? 'checked' : ''} title="Include this credit in ROI calculation">
-                    <div style="flex:1;">
-                      <div style="font-size:13px;font-weight:500;${isDisabled ? 'text-decoration:line-through;' : ''}">${cr.name}${isManual ? ' ⚡' : ''}</div>
-                      <div style="font-size:11px;color:#78716c;">$${cr.amount}/yr${isManual ? ` (~$${monthlyAmount.toFixed(0)}/mo)` : ' — Auto-detected from transactions'}</div>
-                    </div>
-                    ${isManual && !isDisabled ? `<span style="font-size:12px;color:#059669;font-weight:500;">$${totalClaimed.toFixed(0)} claimed</span>` : ''}
-                  </div>
-                  ${isManual && !isDisabled ? `
-                    <div style="display:flex;flex-wrap:wrap;gap:4px;padding-top:8px;border-top:1px solid #f5f5f4;">
-                      ${MONTHS.map((month, idx) => `
-                        <label style="display:flex;align-items:center;justify-content:center;width:42px;padding:6px 0;border:1px solid #e7e5e4;border-radius:4px;cursor:pointer;font-size:11px;background:${claimedMonths.includes(idx) ? '#dcfce7' : '#fff'};" title="Click to mark ${month} as claimed">
-                          <input type="checkbox" class="month-claim" data-credit="${cr.name}" data-month="${idx}" ${claimedMonths.includes(idx) ? 'checked' : ''} style="display:none;">
-                          ${month}
-                        </label>
-                      `).join('')}
-                    </div>
-                  ` : ''}
-                </div>
-              `;
-            }).join('')}
-          </div>
+          ${hasLegacyCredits ? `
+            <div style="font-size:12px;font-weight:600;color:#0369a1;margin-bottom:8px;">Current Benefits (Oct 26, 2025+)</div>
+            <div id="creditsGrid" style="display:grid;gap:12px;">
+              ${currentCreditsHtml}
+            </div>
+            <div style="font-size:12px;font-weight:600;color:#78716c;margin-bottom:8px;margin-top:16px;padding-top:12px;border-top:1px solid #e7e5e4;">Pre-Refresh Benefits (before Oct 26, 2025)</div>
+            <div id="legacyCreditsGrid" style="display:grid;gap:12px;">
+              ${legacyCreditsHtml}
+            </div>
+          ` : `
+            <div id="creditsGrid" style="display:grid;gap:12px;">
+              ${currentCreditsHtml}
+            </div>
+          `}
         </div>
       `;
     } else {

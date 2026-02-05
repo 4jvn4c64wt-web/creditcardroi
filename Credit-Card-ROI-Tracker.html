@@ -766,12 +766,13 @@ const CARDS = {
     shortName: 'Freedom Unlimited',
     annualFee: 0,
     pointValue: 0.017,
-    multipliers: { 'chase-travel': 5, 'dining': 3, 'drugstore': 3, 'lyft': 5 },
+    multipliers: { 'chase-travel': 5, 'dining': 3, 'drugstore': 3, 'lyft': 2 },
     baseRate: 1.5,
     credits: [],
     categories: ['chase-travel', 'dining', 'drugstore', 'lyft', 'other'],
-    // Lyft partnership started Jan 12, 2020
-    lyftPartnershipStart: '2020-01-12'
+    // Lyft partnership: 5x from Jan 12, 2020 to March 31, 2025, then 2x after
+    lyftPartnershipStart: '2020-01-12',
+    lyft5xEndDate: '2025-04-01'
   },
   'chase-sapphire-reserve': {
     name: 'Chase Sapphire Reserve',
@@ -2438,7 +2439,15 @@ function getMultiplier(cardId, category, txnDate = null, merchantDesc = '') {
         }
         // After April 1, 2025 - fall through to standard 5x from multipliers
       }
-      // CSP and CFU get 5x from partnership start - use their defined multiplier
+      // CFU had 5x Lyft until April 1, 2025, then 2x after
+      if (cardId === 'chase-freedom-unlimited' && card.lyft5xEndDate) {
+        const lyft5xEnd = new Date(card.lyft5xEndDate);
+        if (txnDateObj < lyft5xEnd) {
+          return { rate: 5, reason: '5x Lyft (Chase partnership 2020-2025)' };
+        }
+        // After April 1, 2025 - fall through to standard 2x from multipliers
+      }
+      // Use defined multiplier (CSP 5x, CSR 5x post-April 2025, CFU 2x post-April 2025)
       if (card.multipliers['lyft']) {
         return { rate: card.multipliers['lyft'], reason: `${card.multipliers['lyft']}x Lyft (Chase partnership)` };
       }

@@ -2375,9 +2375,28 @@ function getMultiplier(cardId, category, txnDate = null, merchantDesc = '') {
     const cfg = state.biltConfig[cardId] || {};
     // Bilt 2.0 universally starts Feb 7, 2026
     const bilt2StartDate = new Date(2026, 1, 7); // Feb 7, 2026
-    const txnDateObj = txnDate ? new Date(txnDate) : new Date();
+
+    // Parse transaction date explicitly to avoid timezone issues
+    let txnDateObj;
+    if (txnDate) {
+      if (txnDate.includes('-')) {
+        const [year, month, day] = txnDate.split('-').map(Number);
+        txnDateObj = new Date(year, month - 1, day);
+      } else if (txnDate.includes('/')) {
+        const parts = txnDate.split('/');
+        const month = parseInt(parts[0]);
+        const day = parseInt(parts[1]);
+        let year = parseInt(parts[2]);
+        if (year < 100) year += 2000;
+        txnDateObj = new Date(year, month - 1, day);
+      } else {
+        txnDateObj = new Date(txnDate);
+      }
+    } else {
+      txnDateObj = new Date();
+    }
     const isLegacy = txnDateObj < bilt2StartDate;
-    
+
     // LEGACY MODE (before Feb 7, 2026)
     // All Bilt cards had identical rates: 3x dining, 2x travel, 1x everything else
     if (isLegacy) {
@@ -2388,6 +2407,7 @@ function getMultiplier(cardId, category, txnDate = null, merchantDesc = '') {
       // Legacy category multipliers (same for all old Bilt cards)
       if (category === 'dining') return { rate: 3, reason: '3x dining (Legacy Bilt)' };
       if (category === 'travel') return { rate: 2, reason: '2x travel (Legacy Bilt)' };
+      // Everything else is 1x in legacy mode (no matter which Bilt card)
       return { rate: 1, reason: '1x base (Legacy Bilt)' };
     }
     
@@ -5638,13 +5658,47 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
       if (cashPlusSelected.twoPercent === cat) return { rate: 2, bonus: true };
       return { rate: 1, bonus: false };
     }
-    // Bilt cards: rent multiplier depends on configuration
-    if (card?.isBilt && cat === 'rent') {
-      const cfg = state.biltConfig[cardId] || {};
-      if (cfg.rewardOption === 'housing-only') {
-        return { rate: 'up to 1.25', bonus: true, isVariable: true };
+    // Bilt cards: check for legacy mode (before Feb 7, 2026)
+    if (card?.isBilt) {
+      const bilt2StartDate = new Date(2026, 1, 7); // Feb 7, 2026
+      let txnDateObj;
+      if (txn?.date) {
+        if (txn.date.includes('-')) {
+          const [year, month, day] = txn.date.split('-').map(Number);
+          txnDateObj = new Date(year, month - 1, day);
+        } else if (txn.date.includes('/')) {
+          const parts = txn.date.split('/');
+          const month = parseInt(parts[0]);
+          const day = parseInt(parts[1]);
+          let year = parseInt(parts[2]);
+          if (year < 100) year += 2000;
+          txnDateObj = new Date(year, month - 1, day);
+        } else {
+          txnDateObj = new Date(txn.date);
+        }
       } else {
-        return { rate: 'up to 1', bonus: true, isVariable: true };
+        txnDateObj = new Date();
+      }
+      const isLegacy = txnDateObj < bilt2StartDate;
+
+      if (isLegacy) {
+        // Legacy Bilt: 3x dining, 2x travel, 1x everything else (including rent)
+        if (cat === 'rent') return { rate: 1, bonus: false };
+        const legacyMult = card.legacy?.multipliers?.[cat];
+        return { rate: legacyMult || card.legacy?.baseRate || 1, bonus: !!legacyMult };
+      } else {
+        // Bilt 2.0: rent has variable "up to" rate
+        if (cat === 'rent') {
+          const cfg = state.biltConfig[cardId] || {};
+          if (cfg.rewardOption === 'housing-only') {
+            return { rate: 'up to 1.25', bonus: true, isVariable: true };
+          } else {
+            return { rate: 'up to 1', bonus: true, isVariable: true };
+          }
+        }
+        // Bilt 2.0: use current multipliers/baseRate
+        const mult = card?.multipliers?.[cat];
+        return { rate: mult || card?.baseRate || 1, bonus: !!mult };
       }
     }
     const mult = card?.multipliers?.[cat];

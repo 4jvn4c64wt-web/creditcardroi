@@ -2735,12 +2735,17 @@ function getCardYearPeriod(cardId, calendarYear) {
   const startDate = new Date(startFee.year, startFee.month - 1, startFee.day);
   const endDate = new Date(startFee.year + 1, startFee.month - 1, startFee.day);
 
-  // Format month names
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const startMonth = `${monthNames[startDate.getMonth()]} ${startDate.getFullYear()}`;
-  const endMonth = `${monthNames[endDate.getMonth()]} ${endDate.getFullYear()}`;
+  // Calculate the last included day (day before endDate) for display
+  const lastIncludedDate = new Date(endDate);
+  lastIncludedDate.setDate(lastIncludedDate.getDate() - 1);
 
-  return { startDate, endDate, startMonth, endMonth };
+  // Format full dates for tooltip (e.g., "Feb 15, 2024 – Feb 14, 2025")
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const formatDate = (d) => `${monthNames[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+  const startFormatted = formatDate(startDate);
+  const endFormatted = formatDate(lastIncludedDate);
+
+  return { startDate, endDate, startFormatted, endFormatted };
 }
 
 /**
@@ -5380,7 +5385,7 @@ function renderView(view) {
                 // Row styling for card year mode
                 const cardYearRowStyle = isCardYearActive ? 'color:#4b6bfb;' : '';
                 const cardYearTooltip = cardYearPeriod
-                  ? `Showing card year active Jan 1, ${displayYear} (${cardYearPeriod.startMonth} – ${cardYearPeriod.endMonth})`
+                  ? `Showing card year active Jan 1, ${displayYear} (${cardYearPeriod.startFormatted} – ${cardYearPeriod.endFormatted})`
                   : '';
 
                 // Toggle indicator HTML - small CY text to the right of the card name

@@ -1024,7 +1024,23 @@ const KNOWN_MERCHANTS = {
   // Shipping/Mail
   'usps': 'shipping',
 
+  // Government Services (TSA PreCheck, Global Entry, passports, customs, etc.)
+  'trusted travel': 'government-services', 'uscustoms': 'government-services', 'us customs': 'government-services',
+  'cbp ': 'government-services', 'cbp.gov': 'government-services', // Customs and Border Protection
+  'state dept': 'government-services', 'state department': 'government-services',
+  'us passport': 'government-services', 'passport services': 'government-services',
+  'tsa precheck': 'government-services', 'tsa pre': 'government-services',
+  'global entry': 'government-services', 'goes ': 'government-services', // Global Online Enrollment System
+  'irs ': 'government-services', 'irs.gov': 'government-services',
+  'dmv ': 'government-services', 'dept of motor': 'government-services',
+  'usps.com': 'government-services', 'postal service': 'government-services',
+  'ssa ': 'government-services', 'social security': 'government-services',
+  'uscis': 'government-services', 'immigration': 'government-services',
+  'nyc.gov': 'government-services', 'ny.gov': 'government-services', 'ca.gov': 'government-services',
+  'pay.gov': 'government-services', 'gov fee': 'government-services', 'govt fee': 'government-services',
+
   // Travel (for credit detection - Global Entry/TSA PreCheck)
+  // Note: 'trusted traveler' kept separate for credit detection matching
   'trusted traveler': 'travel',
 
   // Streaming & Subscriptions (ultra-safe, confidence: 100)
@@ -1195,6 +1211,7 @@ const CATEGORY_HIERARCHY = {
   'tax': 'other',
   'education': 'other',
   'charity': 'other',
+  'government-services': 'other',
 
   // Parent categories (null = top-level, no further rollup)
   'dining': null,

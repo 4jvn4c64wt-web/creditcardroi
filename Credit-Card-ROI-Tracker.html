@@ -707,8 +707,13 @@ const CARDS = {
     credits: [],
     categories: ['rent', 'other'],
     isBilt: true,
-    // Legacy (before Feb 7, 2026): 1x rent (with 5 txns), 3x dining, 2x travel, 1x other
-    legacy: { multipliers: { 'rent': 1, 'dining': 3, 'travel': 2 }, baseRate: 1 }
+    // Legacy (before Feb 7, 2026): 3x dining, 2x travel, 1x everything else (including rent)
+    // Note: rent is 1x (same as baseRate) - no special rent multiplier before 2.0
+    legacy: {
+      multipliers: { 'dining': 3, 'travel': 2 },
+      baseRate: 1,
+      categories: ['dining', 'travel', 'rent', 'other']
+    }
   },
   'bilt-obsidian': {
     name: 'Bilt Obsidian',
@@ -722,8 +727,12 @@ const CARDS = {
     categories: ['rent', 'dining', 'grocery', 'travel', 'other'],
     isBilt: true,
     hasObsidianBonus: true, // Can choose 3x dining OR grocery
-    // Legacy: same structure, 1x-1.25x rent based on spend
-    legacy: { multipliers: { 'rent': 1.25, 'dining': 3, 'travel': 2 }, baseRate: 1 }
+    // Legacy (before Feb 7, 2026): same as all Bilt cards - 3x dining, 2x travel, 1x everything else
+    legacy: {
+      multipliers: { 'dining': 3, 'travel': 2 },
+      baseRate: 1,
+      categories: ['dining', 'travel', 'rent', 'other']
+    }
   },
   'bilt-palladium': {
     name: 'Bilt Palladium',
@@ -738,8 +747,12 @@ const CARDS = {
     ],
     categories: ['rent', 'other'],
     isBilt: true,
-    // Legacy: 4x dining OR grocery, 3x travel, 2x other, 1.25x rent
-    legacy: { multipliers: { 'rent': 1.25, 'dining': 4, 'travel': 3 }, baseRate: 2 }
+    // Legacy (before Feb 7, 2026): same as all Bilt cards - 3x dining, 2x travel, 1x everything else
+    legacy: {
+      multipliers: { 'dining': 3, 'travel': 2 },
+      baseRate: 1,
+      categories: ['dining', 'travel', 'rent', 'other']
+    }
   },
   'chase-freedom-flex': {
     name: 'Chase Freedom Flex',
@@ -1508,6 +1521,17 @@ function getCardCategories(cardId, txnDate = null) {
     if (txnDateObj < csrCutoff) {
       // Use legacy categories from card definition (includes lyft for Chase partnership)
       return card.legacy?.categories || ['chase-travel', 'travel', 'dining', 'lyft', 'other'];
+    }
+  }
+
+  // Special handling for Bilt legacy (before Feb 7, 2026)
+  // Before Bilt 2.0, all Bilt cards had the same categories: dining, travel, rent, other
+  if (card.isBilt) {
+    const bilt2StartDate = new Date(2026, 1, 7); // Feb 7, 2026
+    const txnDateObj = txnDate ? new Date(txnDate) : new Date();
+    if (txnDateObj < bilt2StartDate) {
+      // Use legacy categories - same for all Bilt cards before 2.0
+      return card.legacy?.categories || ['dining', 'travel', 'rent', 'other'];
     }
   }
 
@@ -2355,15 +2379,16 @@ function getMultiplier(cardId, category, txnDate = null, merchantDesc = '') {
     const isLegacy = txnDateObj < bilt2StartDate;
     
     // LEGACY MODE (before Feb 7, 2026)
+    // All Bilt cards had identical rates: 3x dining, 2x travel, 1x everything else
     if (isLegacy) {
       if (category === 'rent') {
-        // Legacy rent: 1x with 5 transactions requirement
-        return { rate: 1, reason: 'Rent: 1x (Legacy Bilt - 5 txn rule)' };
+        // Legacy rent: 1x with 5 transactions requirement (no special rent multiplier)
+        return { rate: 1, reason: '1x rent (Legacy Bilt — 5 txn requirement)' };
       }
       // Legacy category multipliers (same for all old Bilt cards)
-      if (category === 'dining') return { rate: 3, reason: '3x dining (Legacy)' };
-      if (category === 'travel') return { rate: 2, reason: '2x travel (Legacy)' };
-      return { rate: 1, reason: '1x base (Legacy)' };
+      if (category === 'dining') return { rate: 3, reason: '3x dining (Legacy Bilt)' };
+      if (category === 'travel') return { rate: 2, reason: '2x travel (Legacy Bilt)' };
+      return { rate: 1, reason: '1x base (Legacy Bilt)' };
     }
     
     // BILT 2.0 MODE (Feb 7, 2026+)

@@ -70,6 +70,8 @@
     .help-icon { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: #e7e5e4; color: #78716c; font-size: 11px; cursor: help; margin-left: 4px; }
     .help-icon:hover { background: #d6d3d1; }
     .tooltip-multiline:hover::after { white-space: pre-line; text-align: left; min-width: 140px; }
+    .card-year-toggle { transition: background 0.15s, color 0.15s; }
+    .card-year-toggle:hover { opacity: 0.85; }
     @media (max-width: 900px) { .metrics-grid { grid-template-columns: repeat(2, 1fr); } .metric:nth-child(2), .metric:nth-child(4) { border-right: none; } }
     @media (max-width: 500px) { .metrics-grid { grid-template-columns: 1fr; } .metric { border-right: none; border-bottom: 1px solid #e7e5e4; } .metric:last-child { border-bottom: none; } }
     
@@ -1409,6 +1411,7 @@ let state = {
   cffCategories: safeLocalStorageGet('ccTracker_cffCategories', {}),
   cffPaypalDecemberOnly: safeLocalStorageGet('ccTracker_cffPaypalDecemberOnly', {}), // Tracks PayPal December-only for Q4 by year
   biltConfig: safeLocalStorageGet('ccTracker_biltConfig', {}),
+  cardYearToggles: safeLocalStorageGet('ccTracker_cardYearToggles', {}), // { cardId: true } - tracks which cards show card year instead of calendar year
   columnMappings: safeLocalStorageGet('ccTracker_columnMappings', {}), // Remembers mappings by CSV shape
   pendingCSVData: null, // Temporarily holds CSV data during column mapping
   savedTransactions: safeLocalStorageGet('ccTracker_transactions', []),
@@ -2583,17 +2586,20 @@ function getEffectiveAnnualFee(cardId, transactions = []) {
   // If we have a detected fee for the relevant year, use it
   const detectedFees = state.detectedAnnualFees[cardId];
   if (detectedFees) {
+    // Helper to extract amount from detected fee (handles both old number format and new object format)
+    const getFeeAmount = (fee) => typeof fee === 'object' ? fee.amount : fee;
+
     // If there's only one year in the transactions, use that year's detected fee
     const yearsArray = Array.from(txnYears);
     if (yearsArray.length === 1 && detectedFees[yearsArray[0]]) {
-      return detectedFees[yearsArray[0]];
+      return getFeeAmount(detectedFees[yearsArray[0]]);
     }
     // If multiple years, use the most recent year's detected fee if available
     if (yearsArray.length > 1) {
       const sortedYears = yearsArray.sort((a, b) => b - a);
       for (const year of sortedYears) {
         if (detectedFees[year]) {
-          return detectedFees[year];
+          return getFeeAmount(detectedFees[year]);
         }
       }
     }
@@ -2601,7 +2607,7 @@ function getEffectiveAnnualFee(cardId, transactions = []) {
     if (yearsArray.length === 0) {
       const detectedYears = Object.keys(detectedFees).sort((a, b) => b - a);
       if (detectedYears.length > 0) {
-        return detectedFees[detectedYears[0]];
+        return getFeeAmount(detectedFees[detectedYears[0]]);
       }
     }
   }
@@ -2622,6 +2628,198 @@ function getEffectiveAnnualFee(cardId, transactions = []) {
   }
 
   return card.annualFee || 0;
+}
+
+// =============================================================================
+// CARD YEAR TOGGLE FUNCTIONS
+// =============================================================================
+
+/**
+ * Check if a card can show the card year toggle
+ * Requirements: card has annual fee > 0 AND we have at least one detected fee with a date
+ * @param {string} cardId - Card ID
+ * @returns {boolean} True if toggle should be shown
+ */
+function canShowCardYearToggle(cardId) {
+  const card = CARDS[cardId];
+  if (!card || !card.annualFee || card.annualFee <= 0) {
+    return false;
+  }
+
+  const detectedFees = state.detectedAnnualFees[cardId];
+  if (!detectedFees) {
+    return false;
+  }
+
+  // Check if we have at least one fee with a date
+  for (const year of Object.keys(detectedFees)) {
+    const fee = detectedFees[year];
+    if (typeof fee === 'object' && fee.date) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Get the card year period that was active on January 1 of the given calendar year
+ * Example: CSR fee posts March. For calendar year 2025, card year is March 2024 - March 2025
+ * @param {string} cardId - Card ID
+ * @param {number} calendarYear - The calendar year being viewed
+ * @returns {{startDate: Date, endDate: Date, startMonth: string, endMonth: string}|null} Card year period or null
+ */
+function getCardYearPeriod(cardId, calendarYear) {
+  const detectedFees = state.detectedAnnualFees[cardId];
+  if (!detectedFees) return null;
+
+  // Get all fee dates sorted chronologically
+  const feeDates = [];
+  for (const year of Object.keys(detectedFees)) {
+    const fee = detectedFees[year];
+    if (typeof fee === 'object' && fee.date) {
+      const parsed = parseDateString(fee.date);
+      if (parsed) {
+        feeDates.push({ year: parseInt(year), date: parsed.date, month: parsed.month, day: parsed.day });
+      }
+    }
+  }
+
+  if (feeDates.length === 0) return null;
+
+  // Sort by date
+  feeDates.sort((a, b) => a.date - b.date);
+
+  // Find the card year active on Jan 1 of the calendar year
+  const jan1 = new Date(calendarYear, 0, 1);
+
+  // The card year active on Jan 1 is the one that started BEFORE Jan 1 and ends AFTER Jan 1
+  // Fee date marks the START of a new card year
+
+  // Find the most recent fee date before Jan 1 of calendarYear
+  let startFee = null;
+  for (const fee of feeDates) {
+    if (fee.date < jan1) {
+      startFee = fee;
+    } else {
+      break;
+    }
+  }
+
+  if (!startFee) {
+    // No fee posted before Jan 1 of this year - can't determine card year
+    return null;
+  }
+
+  // The end of the card year is approximately one year after the start
+  // Use the fee month/day but in the following year
+  const startDate = new Date(startFee.date);
+  const endDate = new Date(startFee.year + 1, startFee.month - 1, startFee.day);
+
+  // Format month names
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const startMonth = `${monthNames[startDate.getMonth()]} ${startDate.getFullYear()}`;
+  const endMonth = `${monthNames[endDate.getMonth()]} ${endDate.getFullYear()}`;
+
+  return { startDate, endDate, startMonth, endMonth };
+}
+
+/**
+ * Calculate card metrics for a specific date range (card year)
+ * @param {string} cardId - Card ID
+ * @param {Date} startDate - Start of period
+ * @param {Date} endDate - End of period
+ * @param {Array} allTransactions - All transactions
+ * @returns {{spend: number, points: number, pointsValue: number, credits: number, pointsByCategory: Object}} Metrics
+ */
+function calculateCardYearMetrics(cardId, startDate, endDate, allTransactions) {
+  const card = CARDS[cardId];
+  if (!card) return null;
+
+  // Filter transactions for this card within the date range
+  const filteredTxns = allTransactions.filter(t => {
+    if (t.cardId !== cardId) return false;
+    if (t.isPayment) return false;
+
+    const parsed = parseDateString(t.date);
+    if (!parsed) return false;
+
+    const txnDate = parsed.date;
+    return txnDate >= startDate && txnDate < endDate;
+  });
+
+  // Calculate metrics
+  const result = {
+    spend: 0,
+    points: 0,
+    pointsValue: 0,
+    credits: 0,
+    pointsByCategory: {}
+  };
+
+  filteredTxns.forEach(t => {
+    if (t.isCredit && !t.isRefund) {
+      result.credits += Math.abs(t.amount);
+    } else if (!t.isCredit) {
+      result.spend += Math.abs(t.amount);
+      result.points += t.points || 0;
+      result.pointsValue += t.pointsValue || 0;
+
+      // Track points by category
+      const cat = t.category || 'other';
+      if (!result.pointsByCategory[cat]) {
+        result.pointsByCategory[cat] = { points: 0, spend: 0 };
+      }
+      result.pointsByCategory[cat].points += t.points || 0;
+      result.pointsByCategory[cat].spend += Math.abs(t.amount);
+    }
+  });
+
+  return result;
+}
+
+/**
+ * Get manual credits claimed within a card year period
+ * @param {string} cardId - Card ID
+ * @param {Date} startDate - Start of period
+ * @param {Date} endDate - End of period
+ * @returns {number} Total manual credits value
+ */
+function getCardYearManualCredits(cardId, startDate, endDate) {
+  const card = CARDS[cardId];
+  if (!card) return 0;
+
+  const monthlyForCard = state.monthlyCredits[cardId] || {};
+  let total = 0;
+
+  for (const credit of (card.credits || [])) {
+    if (!credit.manual) continue;
+
+    const yearData = monthlyForCard[credit.name];
+    if (!yearData) continue;
+
+    const monthlyAmount = credit.amount / 12;
+    const isDisabled = (state.disabledCredits[cardId] || []).includes(credit.name);
+    if (isDisabled) continue;
+
+    // Check each year's claimed months
+    const yearsToCheck = typeof yearData === 'object' && !Array.isArray(yearData) ? yearData : {};
+
+    for (const [yearStr, months] of Object.entries(yearsToCheck)) {
+      const year = parseInt(yearStr);
+      if (!Array.isArray(months)) continue;
+
+      for (const monthIndex of months) {
+        // Create date for the claimed month (use 15th as middle of month)
+        const claimDate = new Date(year, monthIndex, 15);
+        if (claimDate >= startDate && claimDate < endDate) {
+          total += monthlyAmount;
+        }
+      }
+    }
+  }
+
+  return total;
 }
 
 // Determine badge color based on whether this is the optimal choice
@@ -3442,11 +3640,15 @@ async function processTransactions(transactions) {
               txnYear = new Date().getFullYear();
             }
 
-            // Store detected fee (use absolute value since fees are negative in CSV)
+            // Store detected fee with full date (use absolute value since fees are negative in CSV)
             if (!state.detectedAnnualFees[cardId]) {
               state.detectedAnnualFees[cardId] = {};
             }
-            state.detectedAnnualFees[cardId][txnYear] = Math.abs(txn.amount);
+            // Store both amount and date for card year calculations
+            state.detectedAnnualFees[cardId][txnYear] = {
+              amount: Math.abs(txn.amount),
+              date: txn.date
+            };
           }
         }
 
@@ -5049,6 +5251,7 @@ function renderView(view) {
               <th class="text-right sortable" data-sort="credits">Credits${sortState.column === 'credits' ? `<span class="sort-arrow">${sortState.direction === 'asc' ? '▲' : '▼'}</span>` : ''}</th>
               <th class="text-right sortable" data-sort="annualFee">Ann. Fee${sortState.column === 'annualFee' ? `<span class="sort-arrow">${sortState.direction === 'asc' ? '▲' : '▼'}</span>` : ''}</th>
               <th class="text-right sortable" data-sort="netValue">Net Value${sortState.column === 'netValue' ? `<span class="sort-arrow">${sortState.direction === 'asc' ? '▲' : '▼'}</span>` : ''}</th>
+              <th style="width:32px;"></th>
             </tr></thead>
             <tbody>
               ${cards.map(c => {
@@ -5056,22 +5259,67 @@ function renderView(view) {
                 const availableCredits = cardDef?.credits || [];
                 const usedCredits = creditsUsedByCard[c.cardId] || {};
                 const hasCredits = availableCredits.length > 0;
-                
+
                 const hasPointsBreakdown = Object.keys(c.pointsByCategory || {}).length > 0;
                 const hasDetails = hasPointsBreakdown || hasCredits;
                 const rowId = c.cardId.replace(/[^a-z0-9]/gi, '-');
-                
-                return `<tr data-row-id="${rowId}">
+
+                // Card year toggle logic
+                const showCardYearToggle = displayYear && canShowCardYearToggle(c.cardId);
+                const isCardYearActive = showCardYearToggle && state.cardYearToggles[c.cardId];
+                let cardYearPeriod = null;
+                let displayMetrics = c; // Default to calendar year metrics
+
+                if (isCardYearActive && displayYear) {
+                  cardYearPeriod = getCardYearPeriod(c.cardId, displayYear);
+                  if (cardYearPeriod) {
+                    // Calculate card year metrics
+                    const cyMetrics = calculateCardYearMetrics(c.cardId, cardYearPeriod.startDate, cardYearPeriod.endDate, r.processed);
+                    if (cyMetrics) {
+                      // Get manual credits for card year period
+                      const cyManualCredits = getCardYearManualCredits(c.cardId, cardYearPeriod.startDate, cardYearPeriod.endDate);
+                      const cyTotalCredits = cyMetrics.credits + cyManualCredits;
+                      const cyNetValue = cyMetrics.pointsValue + cyTotalCredits - c.annualFee;
+                      displayMetrics = {
+                        ...c,
+                        spend: cyMetrics.spend,
+                        points: cyMetrics.points,
+                        pointsValue: cyMetrics.pointsValue,
+                        credits: cyMetrics.credits,
+                        totalCredits: cyTotalCredits,
+                        netValue: cyNetValue,
+                        pointsByCategory: cyMetrics.pointsByCategory
+                      };
+                    }
+                  }
+                }
+
+                // Row styling for card year mode
+                const cardYearRowStyle = isCardYearActive ? 'color:#4b6bfb;' : '';
+                const cardYearTooltip = cardYearPeriod
+                  ? `Showing card year active Jan 1, ${displayYear} (${cardYearPeriod.startMonth} – ${cardYearPeriod.endMonth})`
+                  : '';
+
+                // Toggle button HTML
+                const toggleHtml = showCardYearToggle ? `
+                  <button class="card-year-toggle tooltip tooltip-multiline" data-card-id="${c.cardId}"
+                    data-tooltip="${isCardYearActive ? cardYearTooltip : 'Switch to card anniversary year'}"
+                    style="background:${isCardYearActive ? '#4b6bfb' : '#e7e5e4'};color:${isCardYearActive ? '#fff' : '#57534e'};border:none;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;">
+                    CY
+                  </button>
+                ` : '';
+
+                return `<tr data-row-id="${rowId}" style="${cardYearRowStyle}">
                   <td>${c.cardName}</td>
-                  <td class="text-right mono">${formatCurrencyPrecise(c.spend)}</td>
+                  <td class="text-right mono">${formatCurrencyPrecise(displayMetrics.spend)}</td>
                   <td class="text-right mono">
                     ${hasDetails ? `
                       <div class="detail-toggle" data-row="${rowId}" style="cursor:pointer;display:flex;align-items:center;justify-content:flex-end;gap:4px;">
-                        ${formatNumber(c.points)} <span class="toggle-arrow" style="font-size:10px;">▼</span>
+                        ${formatNumber(displayMetrics.points)} <span class="toggle-arrow" style="font-size:10px;">▼</span>
                       </div>
                       <div class="detail-panel points-panel" data-row="${rowId}" style="display:none;text-align:left;font-size:11px;margin-top:8px;padding:8px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;">
-                        ${hasPointsBreakdown ? `
-                          ${Object.entries(c.pointsByCategory || {})
+                        ${Object.keys(displayMetrics.pointsByCategory || {}).length > 0 ? `
+                          ${Object.entries(displayMetrics.pointsByCategory || {})
                             .sort((a, b) => b[1].points - a[1].points)
                             .map(([cat, data]) => `
                               <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
@@ -5081,13 +5329,13 @@ function renderView(view) {
                             `).join('')}
                         ` : '<div style="color:#78716c;">No category breakdown</div>'}
                       </div>
-                    ` : formatNumber(c.points)}
+                    ` : formatNumber(displayMetrics.points)}
                   </td>
-                  <td class="text-right mono">${formatCurrencyPrecise(c.pointsValue)}</td>
+                  <td class="text-right mono">${formatCurrencyPrecise(displayMetrics.pointsValue)}</td>
                   <td class="text-right mono">
                     ${hasDetails ? `
                       <div class="detail-toggle" data-row="${rowId}" style="cursor:pointer;display:flex;align-items:center;justify-content:flex-end;gap:4px;">
-                        ${formatCurrencyPrecise(c.totalCredits)} <span class="toggle-arrow" style="font-size:10px;">▼</span>
+                        ${formatCurrencyPrecise(displayMetrics.totalCredits)} <span class="toggle-arrow" style="font-size:10px;">▼</span>
                       </div>
                       <div class="detail-panel credits-panel" data-row="${rowId}" style="display:none;text-align:left;font-size:11px;margin-top:8px;padding:8px;background:#f5f5f4;border:1px solid #e7e5e4;border-radius:6px;">
                         ${hasCredits ? `
@@ -5110,10 +5358,11 @@ function renderView(view) {
                           }).join('')}
                         ` : '<div style="color:#78716c;">No credits available</div>'}
                       </div>
-                    ` : formatCurrencyPrecise(c.totalCredits)}
+                    ` : formatCurrencyPrecise(displayMetrics.totalCredits)}
                   </td>
                   <td class="text-right mono" style="color:#dc2626;">-$${c.annualFee}</td>
-                  <td class="text-right mono" style="font-weight:600;color:${c.netValue >= 0 ? '#166534' : '#dc2626'};">${formatCurrencyPrecise(c.netValue)}</td>
+                  <td class="text-right mono" style="font-weight:600;color:${displayMetrics.netValue >= 0 ? '#166534' : '#dc2626'};">${formatCurrencyPrecise(displayMetrics.netValue)}</td>
+                  <td style="text-align:center;vertical-align:middle;">${toggleHtml}</td>
                 </tr>`
               }).join('')}
             </tbody>
@@ -5124,7 +5373,15 @@ function renderView(view) {
     
     // Add year filter event listener
     document.getElementById('summaryYearFilter').addEventListener('change', (e) => {
-      state.selectedYear = e.target.value ? parseInt(e.target.value) : null;
+      const newYear = e.target.value ? parseInt(e.target.value) : null;
+
+      // Reset card year toggles when calendar year changes
+      if (newYear !== state.selectedYear) {
+        state.cardYearToggles = {};
+        safeLocalStorageSet('ccTracker_cardYearToggles', state.cardYearToggles);
+      }
+
+      state.selectedYear = newYear;
       renderView('summary');
     });
     
@@ -5135,7 +5392,7 @@ function renderView(view) {
         const panels = document.querySelectorAll(`.detail-panel[data-row="${rowId}"]`);
         const arrows = document.querySelectorAll(`.detail-toggle[data-row="${rowId}"] .toggle-arrow`);
         const isOpen = panels[0]?.style.display !== 'none';
-        
+
         panels.forEach(panel => {
           panel.style.display = isOpen ? 'none' : 'block';
         });
@@ -5144,7 +5401,28 @@ function renderView(view) {
         });
       });
     });
-    
+
+    // Add click handler for card year toggle buttons
+    document.querySelectorAll('.card-year-toggle').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const cardId = btn.dataset.cardId;
+
+        // Toggle the card year state
+        if (state.cardYearToggles[cardId]) {
+          delete state.cardYearToggles[cardId];
+        } else {
+          state.cardYearToggles[cardId] = true;
+        }
+
+        // Persist to localStorage
+        safeLocalStorageSet('ccTracker_cardYearToggles', state.cardYearToggles);
+
+        // Re-render the summary view
+        renderView('summary');
+      });
+    });
+
     // Add sortable column click handlers
     document.querySelectorAll('#summaryTable th.sortable').forEach(th => {
       th.addEventListener('click', () => {

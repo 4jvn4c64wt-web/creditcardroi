@@ -4674,7 +4674,25 @@ function showCardConfigEditor(preselectedCardId = null) {
     } else {
       creditsSection = '';
     }
-    
+
+    // Card Year section - always show with appropriate state
+    const hasAnnualFee = card.annualFee && card.annualFee > 0;
+    const canToggleCY = canShowCardYearToggle(cardId);
+    const isCardYearActive = state.cardYearToggles[cardId] || false;
+    const cyPeriod = canToggleCY ? getCardYearPeriod(cardId, state.selectedYear || new Date().getFullYear()) : null;
+    const cyPeriodText = cyPeriod ? (cyPeriod.startFormatted + ' – ' + cyPeriod.endFormatted) : '';
+
+    let cardYearInner = '';
+    if (!hasAnnualFee) {
+      cardYearInner = '<div style="padding:12px;background:#fafaf9;border:1px solid #e7e5e4;border-radius:8px;opacity:0.6;"><div style="font-size:13px;color:#78716c;">Not applicable for this card</div><div style="font-size:11px;color:#a8a29e;margin-top:4px;">Card Year view is only available for cards with annual fees.</div></div>';
+    } else if (canToggleCY) {
+      cardYearInner = '<div style="padding:12px;background:#f5f5f4;border:1px solid #e7e5e4;border-radius:8px;"><label style="display:flex;align-items:center;gap:10px;cursor:pointer;"><input type="checkbox" id="configCardYearToggle"' + (isCardYearActive ? ' checked' : '') + '><div><div style="font-size:13px;font-weight:500;">Use card anniversary year</div><div style="font-size:11px;color:#78716c;">' + cyPeriodText + '</div></div></label></div><p style="font-size:11px;color:#a8a29e;margin-top:8px;">When enabled, credit caps are applied per card year. In calendar view, credits are uncapped.</p>';
+    } else {
+      cardYearInner = '<div style="padding:12px;background:#fafaf9;border:1px solid #e7e5e4;border-radius:8px;opacity:0.7;"><label style="display:flex;align-items:center;gap:10px;cursor:not-allowed;"><input type="checkbox" id="configCardYearToggle" disabled><div><div style="font-size:13px;font-weight:500;">Use card anniversary year</div><div style="font-size:11px;color:#78716c;">Waiting for annual fee transaction</div></div></label></div><p style="font-size:11px;color:#b45309;margin-top:8px;">Upload transactions including your annual fee to enable this feature.</p>';
+    }
+
+    const cardYearSection = '<div id="cardYearSection"><h3 style="font-size:14px;font-weight:600;margin-bottom:8px;">Card Year View</h3><p style="font-size:12px;color:#78716c;margin-bottom:12px;">View data by card anniversary year instead of calendar year.</p>' + cardYearInner + '</div>';
+
     document.getElementById('cardConfigContent').innerHTML = `
       <div style="display:grid;gap:24px;">
         <!-- Point Value -->
@@ -4682,17 +4700,18 @@ function showCardConfigEditor(preselectedCardId = null) {
           <h3 style="font-size:14px;font-weight:600;margin-bottom:12px;">Point Value</h3>
           <div class="card-mapping-row">
             <span style="min-width:120px;">Value per point:</span>
-            <input type="number" step="0.1" min="0" max="10" value="${currentPointValue.toFixed(1)}" 
+            <input type="number" step="0.1" min="0" max="10" value="${currentPointValue.toFixed(1)}"
                    id="configPointValue" class="form-select" style="width:100px;">
             <span style="font-size:13px;color:#78716c;">¢</span>
             <span style="font-size:12px;color:#a8a29e;">(default: ${defaultPointValue.toFixed(1)}¢)</span>
           </div>
         </div>
-        
+
+        ${cardYearSection}
         ${cashPlusSection}
         ${cffSection}
         ${biltSection}
-        
+
         <!-- Multipliers (read-only) -->
         <div>
           <h3 style="font-size:14px;font-weight:600;margin-bottom:12px;">Earning Rates</h3>
@@ -4723,7 +4742,16 @@ function showCardConfigEditor(preselectedCardId = null) {
         label.style.background = cb.checked ? '#dcfce7' : '#fff';
       });
     });
-    
+
+    // Card Year toggle
+    const cyToggle = document.getElementById('configCardYearToggle');
+    if (cyToggle && !cyToggle.disabled) {
+      cyToggle.addEventListener('change', () => {
+        state.cardYearToggles[select.value] = cyToggle.checked;
+        safeLocalStorageSet('ccTracker_cardYearToggles', state.cardYearToggles);
+      });
+    }
+
     // CFF 5% category selection
     if (isCFF) {
       document.querySelectorAll('.cff-5').forEach(cb => {
@@ -6975,6 +7003,16 @@ const TOUR_STEPS = [
     target: '#configCreditsSection',
     title: 'Statement Credits 💳',
     content: 'Toggle credits <strong>ON</strong> to track them in your ROI, or <strong>OFF</strong> to exclude them. Only enabled credits will appear when categorizing transactions.',
+    position: 'top',
+    clickRequired: false
+  },
+  {
+    type: 'spotlight',
+    phase: 'card-config-tour',
+    id: 'config-card-year',
+    target: '#cardYearSection',
+    title: 'Card Year View 📅',
+    content: 'For cards with annual fees, you can view data by card anniversary year instead of calendar year. This affects how credit caps are calculated.',
     position: 'top',
     clickRequired: false
   },

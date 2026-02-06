@@ -5228,7 +5228,52 @@ function renderView(view) {
     };
     
     cards.sort(sortFn);
-    
+
+    // Pre-calculate card year display metrics for each card
+    // This is needed to properly calculate top-level totals that respect CY capping
+    const cardDisplayData = {};
+    cards.forEach(c => {
+      const cardDef = CARDS[c.cardId];
+      const availableCredits = cardDef?.credits || [];
+      const showCardYearToggle = displayYear && canShowCardYearToggle(c.cardId);
+      const isCardYearActive = showCardYearToggle && state.cardYearToggles[c.cardId];
+
+      if (isCardYearActive && displayYear) {
+        const cardYearPeriod = getCardYearPeriod(c.cardId, displayYear);
+        if (cardYearPeriod) {
+          const cyMetrics = calculateCardYearMetrics(c.cardId, cardYearPeriod.startDate, cardYearPeriod.endDate, r.processed);
+          if (cyMetrics) {
+            const cyCreditsUsed = getCardYearCreditsUsed(c.cardId, cardYearPeriod.startDate, cardYearPeriod.endDate, r.processed);
+            // Apply annual caps in card year mode
+            let cyTotalCredits = 0;
+            for (const cr of availableCredits) {
+              const disabled = (state.disabledCredits[c.cardId] || []).includes(cr.name);
+              if (disabled) continue;
+              const used = cyCreditsUsed[cr.name] || 0;
+              cyTotalCredits += Math.min(used, cr.amount);
+            }
+            const cyNetValue = cyMetrics.pointsValue + cyTotalCredits - c.annualFee;
+            cardDisplayData[c.cardId] = {
+              isCardYearActive: true,
+              cardYearPeriod,
+              creditsUsed: cyCreditsUsed,
+              displayMetrics: {
+                ...c,
+                spend: cyMetrics.spend,
+                points: cyMetrics.points,
+                pointsValue: cyMetrics.pointsValue,
+                credits: cyMetrics.credits,
+                totalCredits: cyTotalCredits,
+                netValue: cyNetValue,
+                pointsByCategory: cyMetrics.pointsByCategory
+              }
+            };
+          }
+        }
+      }
+      // If not CY active or CY failed, use calendar year metrics (no entry in cardDisplayData)
+    });
+
     // Update top metrics
     document.getElementById('metricSpend').textContent = formatCurrency(filteredTotals.spend);
     document.getElementById('metricPoints').textContent = formatNumber(filteredTotals.points);
@@ -5296,9 +5341,26 @@ function renderView(view) {
       totalAnnualFees += getEffectiveAnnualFee(cardId, filteredProcessed);
     });
     
-    const totalCreditsWithManual = filteredTotals.credits + totalManualCredits;
-    const netValue = filteredTotals.pointsValue + totalCreditsWithManual - totalAnnualFees;
-    document.getElementById('metricCredits').textContent = formatCurrency(totalCreditsWithManual);
+    // Calculate total credits, respecting CY capping for toggled cards
+    // For CY-active cards, use their capped totalCredits from cardDisplayData
+    // For other cards, use their uncapped totalCredits
+    let adjustedTotalCredits = 0;
+    let adjustedTotalPointsValue = 0;
+    cards.forEach(c => {
+      const cyData = cardDisplayData[c.cardId];
+      if (cyData) {
+        // Card has CY active - use capped values
+        adjustedTotalCredits += cyData.displayMetrics.totalCredits;
+        adjustedTotalPointsValue += cyData.displayMetrics.pointsValue;
+      } else {
+        // Card using calendar year - use uncapped values
+        adjustedTotalCredits += c.totalCredits;
+        adjustedTotalPointsValue += c.pointsValue;
+      }
+    });
+
+    const netValue = adjustedTotalPointsValue + adjustedTotalCredits - totalAnnualFees;
+    document.getElementById('metricCredits').textContent = formatCurrency(adjustedTotalCredits);
     const netEl = document.getElementById('metricNetValue');
     netEl.textContent = formatCurrency(netValue);
     netEl.className = `metric-value ${netValue >= 0 ? 'positive' : 'negative'}`;
@@ -5343,44 +5405,19 @@ function renderView(view) {
               ${cards.map(c => {
                 const cardDef = CARDS[c.cardId];
                 const availableCredits = cardDef?.credits || [];
-                let displayCreditsUsed = creditsUsedByCard[c.cardId] || {};
                 const hasCredits = availableCredits.length > 0;
 
                 const hasPointsBreakdown = Object.keys(c.pointsByCategory || {}).length > 0;
                 const hasDetails = hasPointsBreakdown || hasCredits;
                 const rowId = c.cardId.replace(/[^a-z0-9]/gi, '-');
 
-                // Card year toggle logic
+                // Use pre-calculated card year data if available
+                const cyData = cardDisplayData[c.cardId];
                 const showCardYearToggle = displayYear && canShowCardYearToggle(c.cardId);
-                const isCardYearActive = showCardYearToggle && state.cardYearToggles[c.cardId];
-                let cardYearPeriod = null;
-                let displayMetrics = c; // Default to calendar year metrics
-
-                if (isCardYearActive && displayYear) {
-                  cardYearPeriod = getCardYearPeriod(c.cardId, displayYear);
-                  if (cardYearPeriod) {
-                    // Calculate card year metrics
-                    const cyMetrics = calculateCardYearMetrics(c.cardId, cardYearPeriod.startDate, cardYearPeriod.endDate, r.processed);
-                    if (cyMetrics) {
-                      // Get manual credits for card year period
-                      const cyManualCredits = getCardYearManualCredits(c.cardId, cardYearPeriod.startDate, cardYearPeriod.endDate);
-                      const cyTotalCredits = cyMetrics.credits + cyManualCredits;
-                      const cyNetValue = cyMetrics.pointsValue + cyTotalCredits - c.annualFee;
-                      displayMetrics = {
-                        ...c,
-                        spend: cyMetrics.spend,
-                        points: cyMetrics.points,
-                        pointsValue: cyMetrics.pointsValue,
-                        credits: cyMetrics.credits,
-                        totalCredits: cyTotalCredits,
-                        netValue: cyNetValue,
-                        pointsByCategory: cyMetrics.pointsByCategory
-                      };
-                      // Also calculate credits used by name for the dropdown
-                      displayCreditsUsed = getCardYearCreditsUsed(c.cardId, cardYearPeriod.startDate, cardYearPeriod.endDate, r.processed);
-                    }
-                  }
-                }
+                const isCardYearActive = cyData?.isCardYearActive || false;
+                const cardYearPeriod = cyData?.cardYearPeriod || null;
+                const displayCreditsUsed = cyData?.creditsUsed || creditsUsedByCard[c.cardId] || {};
+                const displayMetrics = cyData?.displayMetrics || c;
 
                 // Row styling for card year mode
                 const cardYearRowStyle = isCardYearActive ? 'color:#4b6bfb;' : '';
@@ -5429,16 +5466,21 @@ function renderView(view) {
                             const disabled = (state.disabledCredits[c.cardId] || []).includes(cr.name);
                             const isManual = cr.manual === true;
                             const used = disabled ? 0 : (displayCreditsUsed[cr.name] || 0);
-                            const pct = Math.min(100, (used / cr.amount) * 100);
+                            // Only show cap/progress in card year mode
+                            const showCap = isCardYearActive;
+                            const pct = showCap ? Math.min(100, (used / cr.amount) * 100) : 100;
+                            const amountDisplay = showCap ? `$${used.toFixed(0)} / $${cr.amount}` : `$${used.toFixed(0)}`;
                             return `
                               <div style="margin-bottom:6px;${disabled ? 'opacity:0.4;' : ''}">
                                 <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
                                   <span style="${disabled ? 'text-decoration:line-through;' : ''}">${cr.name}${disabled ? ' (off)' : ''}${isManual && !disabled ? ' ⚡' : ''}</span>
-                                  <span>$${used.toFixed(0)} / $${cr.amount}</span>
+                                  <span>${amountDisplay}</span>
                                 </div>
+                                ${showCap ? `
                                 <div style="background:#e7e5e4;border-radius:2px;height:4px;">
                                   <div style="background:${disabled ? '#a8a29e' : (pct >= 100 ? '#166534' : '#f59e0b')};width:${pct}%;height:100%;border-radius:2px;"></div>
                                 </div>
+                                ` : ''}
                               </div>
                             `;
                           }).join('')}

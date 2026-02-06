@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; form-action 'none'; base-uri 'self';">
   <title>Credit Card Value Tracker</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💳</text></svg>">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -598,41 +598,6 @@ function generateTransactionId(date, merchant, amount, last4, existingIds = new 
     uniqueId = `${baseId}-${seq}`;
   }
   return uniqueId;
-}
-
-/**
- * Debounce function to limit rapid-fire events
- * @param {Function} func - Function to debounce
- * @param {number} wait - Milliseconds to wait
- * @returns {Function} Debounced function
- */
-function debounce(func, wait) {
-  let timeout;
-  return function executedFunction(...args) {
-    const later = () => {
-      clearTimeout(timeout);
-      func(...args);
-    };
-    clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
-  };
-}
-
-/**
- * Throttle function to limit execution frequency
- * @param {Function} func - Function to throttle
- * @param {number} limit - Minimum milliseconds between calls
- * @returns {Function} Throttled function
- */
-function throttle(func, limit) {
-  let inThrottle;
-  return function executedFunction(...args) {
-    if (!inThrottle) {
-      func(...args);
-      inThrottle = true;
-      setTimeout(() => inThrottle = false, limit);
-    }
-  };
 }
 
 // =============================================================================
@@ -1620,15 +1585,15 @@ function mapToCardCategory(genericCategory, cardId, txnDate = null) {
 }
 
 function formatCurrency(val) {
-  return '$' + Math.abs(val).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  return '$' + Math.abs(val || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
 function formatCurrencyPrecise(val) {
-  return '$' + Math.abs(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return '$' + Math.abs(val || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function formatNumber(val) {
-  return val.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  return (val || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
 /**
@@ -2166,7 +2131,7 @@ function calculateBiltRentPoints(cardId, rentAmount, everydaySpend, billingMonth
   if (!card || !card.isBilt) return { points: 0, rate: 0, reason: 'Not a Bilt card' };
   
   // Check if this is legacy period
-  const bilt2StartDate = new Date('2026-02-07');
+  const bilt2StartDate = new Date(2026, 1, 7);
   const cycleDate = new Date(billingYear, billingMonth - 1, 15); // Mid-month as proxy
   if (cycleDate < bilt2StartDate) {
     // Legacy: flat rate based on card
@@ -2966,19 +2931,6 @@ function getCategoryBadgeStyle(txn, returnTooltip = false) {
   }
 }
 
-// Helper to check if transaction is a payment or statement balance line
-function isPaymentTransaction(txn) {
-  const upper = (txn.merchant + ' ' + (txn.original || '')).toUpperCase();
-  return upper.includes('AUTOMATIC PAYMENT') ||
-         upper.includes('PAYMENT - THANK') ||
-         upper.includes('ONLINE PAYMENT') ||
-         upper.includes('AUTOPAY') ||
-         upper.includes('LAST STATEMENT BAL') ||
-         upper.includes('STATEMENT BALANCE') ||
-         upper.includes('PREVIOUS BALANCE') ||
-         (txn.monarchCategory || '').toLowerCase().includes('credit card payment');
-}
-
 // Returns: { name: string, disabled: boolean } | null
 // - { name, disabled: false } = credit matched and enabled
 // - { name, disabled: true } = credit matched but disabled in card config
@@ -3040,9 +2992,6 @@ function detectCredit(merchant, originalStatement, cardId, txnId, txnDate = null
   return null;
 }
 
-// =============================================================================
-// CSV PARSER
-// =============================================================================
 // =============================================================================
 // CSV PARSING WITH COLUMN MAPPING
 // =============================================================================
@@ -3872,7 +3821,7 @@ async function processTransactions(transactions) {
   const processed = transactions
     .filter(txn => {
       // Filter out bank accounts
-      const acctLower = txn.account.toLowerCase();
+      const acctLower = (txn.account || '').toLowerCase();
       if (SKIP_ACCOUNTS.some(skip => acctLower.includes(skip))) return false;
       // Filter out skipped cards
       if (state.cardMappings[txn.last4] === 'skip') return false;
@@ -4065,7 +4014,7 @@ function showMapping(allLast4s) {
   const creditCardLast4s = allLast4s.filter(last4 => {
     const txn = state.transactions.find(t => t.last4 === last4);
     if (!txn) return true;
-    const acctLower = txn.account.toLowerCase();
+    const acctLower = (txn.account || '').toLowerCase();
     return !SKIP_ACCOUNTS.some(skip => acctLower.includes(skip));
   });
   
@@ -4117,7 +4066,7 @@ function showCardConfigEditor(preselectedCardId = null) {
   select.innerHTML = usedCardIds.map(cardId => {
     const card = CARDS[cardId];
     const selected = preselectedCardId === cardId ? 'selected' : '';
-    return `<option value="${cardId}" ${selected}>${card?.name || cardId}</option>`;
+    return `<option value="${escapeHtml(cardId)}" ${selected}>${escapeHtml(card?.name || cardId)}</option>`;
   }).join('');
   
   // If preselectedCardId provided, make sure it's selected
@@ -4260,15 +4209,10 @@ function showCardConfigEditor(preselectedCardId = null) {
     const isCFF = cardId === 'chase-freedom-flex';
     
     // Get available years from transactions
-    const txnYears = [...new Set(state.transactions.map(t => {
-      const dateStr = t.date;
-      if (dateStr.includes('-')) return parseInt(dateStr.split('-')[0]);
-      if (dateStr.includes('/')) return parseInt(dateStr.split('/')[2]);
-      return new Date(dateStr).getFullYear();
-    }))].sort().reverse();
+    const txnYears = [...new Set(state.transactions.map(t => getYearFromDateString(t.date)))].sort().reverse();
     const currentYear = new Date().getFullYear();
     const availableYears = txnYears.length > 0 ? txnYears : [currentYear];
-    
+
     // Cash+ quarterly section - WITH YEAR SELECTOR
     let cashPlusSection = '';
     if (isCashPlus) {
@@ -4408,7 +4352,7 @@ function showCardConfigEditor(preselectedCardId = null) {
       const selectedBiltYear = state.selectedYear || 'all';
       
       // Calculate Bilt Cash earned (4% of non-rent Bilt card spend for selected year, post-Feb 7 2026)
-      const bilt20Date = new Date('2026-02-07');
+      const bilt20Date = new Date(2026, 1, 7);
       const biltNonRentSpend = state.transactions
         .filter(t => {
           if (!t.cardId || !t.cardId.startsWith('bilt-')) return false;
@@ -4643,12 +4587,7 @@ function showCardConfigEditor(preselectedCardId = null) {
 
     if (card.credits && card.credits.length > 0) {
       // Get available years from transactions
-      const txnYears = [...new Set(state.transactions.map(t => {
-        const dateStr = t.date;
-        if (dateStr.includes('-')) return parseInt(dateStr.split('-')[0]);
-        if (dateStr.includes('/')) return parseInt(dateStr.split('/')[2]);
-        return new Date(dateStr).getFullYear();
-      }))].sort().reverse();
+      const txnYears = [...new Set(state.transactions.map(t => getYearFromDateString(t.date)))].sort().reverse();
       const currentYear = new Date().getFullYear();
       const availableYears = txnYears.length > 0 ? txnYears : [currentYear];
       const selectedCreditYear = state.selectedCreditYear || availableYears[0];
@@ -4699,7 +4638,7 @@ function showCardConfigEditor(preselectedCardId = null) {
           <div style="display:grid;gap:8px;">
             ${Object.keys(card.multipliers).length > 0 ? Object.entries(card.multipliers).map(([cat, rate]) => `
               <div style="display:flex;justify-content:space-between;padding:8px 12px;background:#f5f5f4;border-radius:6px;">
-                <span style="font-size:13px;">${cat}</span>
+                <span style="font-size:13px;">${escapeHtml(cat)}</span>
                 <span style="font-size:13px;font-weight:600;">${rate}x</span>
               </div>
             `).join('') : (isCashPlus ? '<div style="font-size:12px;color:#78716c;font-style:italic;">Based on quarterly selections above</div>' : '')}
@@ -5185,7 +5124,7 @@ function renderView(view) {
       if (cardDef?.isBilt) {
         const biltCfg = state.biltConfig[c.cardId] || {};
         if (biltCfg.countBiltCashAsCredit !== false && biltCfg.rewardOption !== 'housing-only') {
-          const bilt20Date = new Date('2026-02-07');
+          const bilt20Date = new Date(2026, 1, 7);
           // Calculate Bilt Cash earned for this card's transactions in the display period
           const biltTxns = state.transactions.filter(t => {
             if (t.cardId !== c.cardId) return false;
@@ -5369,11 +5308,7 @@ function renderView(view) {
     document.getElementById('transactionCount').textContent = `${filteredProcessed.length} transactions`;
     
     // Get available years for filter
-    const summaryYears = state.availableYears.length > 0 ? state.availableYears : [...new Set(r.processed.map(t => {
-      if (t.date.includes('-')) return parseInt(t.date.split('-')[0]);
-      if (t.date.includes('/')) return parseInt(t.date.split('/')[2]);
-      return new Date().getFullYear();
-    }))].sort((a, b) => b - a);
+    const summaryYears = state.availableYears.length > 0 ? state.availableYears : [...new Set(r.processed.map(t => getYearFromDateString(t.date)))].sort((a, b) => b - a);
     
     container.innerHTML = `
       <div class="card">
@@ -5433,7 +5368,7 @@ function renderView(view) {
                 ` : '';
 
                 return `<tr data-row-id="${rowId}" style="${cardYearRowStyle}">
-                  <td style="white-space:nowrap;"><span style="display:inline-flex;align-items:center;">${c.cardName}${toggleHtml}</span></td>
+                  <td style="white-space:nowrap;"><span style="display:inline-flex;align-items:center;">${escapeHtml(c.cardName)}${toggleHtml}</span></td>
                   <td class="text-right mono">${formatCurrencyPrecise(displayMetrics.spend)}</td>
                   <td class="text-right mono">
                     ${hasDetails ? `
@@ -5446,7 +5381,7 @@ function renderView(view) {
                             .sort((a, b) => b[1].points - a[1].points)
                             .map(([cat, data]) => `
                               <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
-                                <span style="text-transform:capitalize;">${cat}</span>
+                                <span style="text-transform:capitalize;">${escapeHtml(cat)}</span>
                                 <span style="font-weight:500;">${formatNumber(data.points)} pts</span>
                               </div>
                             `).join('')}
@@ -5576,12 +5511,7 @@ function renderView(view) {
     const uniqueCategories = [...new Set(r.processed.map(t => t.category))].sort();
     
     // Get unique years and months for time filters
-    const uniqueYears = [...new Set(r.processed.map(t => {
-      const dateStr = t.date;
-      if (dateStr.includes('-')) return parseInt(dateStr.split('-')[0]);
-      if (dateStr.includes('/')) return parseInt(dateStr.split('/')[2]);
-      return new Date(dateStr).getFullYear();
-    }))].sort().reverse();
+    const uniqueYears = [...new Set(r.processed.map(t => getYearFromDateString(t.date)))].sort().reverse();
     
     const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 
                          'July', 'August', 'September', 'October', 'November', 'December'];
@@ -5616,11 +5546,11 @@ function renderView(view) {
           </select>
           <select id="filterCard" class="form-select" style="min-width:180px;">
             <option value="">All Cards</option>
-            ${uniqueCards.map(c => `<option value="${c}">${c}</option>`).join('')}
+            ${uniqueCards.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}
           </select>
           <select id="filterCategory" class="form-select" style="min-width:180px;">
             <option value="">All Categories</option>
-            ${uniqueCategories.map(c => `<option value="${c}">${c}</option>`).join('')}
+            ${uniqueCategories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}
           </select>
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#78716c;">
             <input type="checkbox" id="filterCreditsOnly"> Credits
@@ -5684,18 +5614,11 @@ function renderView(view) {
       const needsReview = document.getElementById('filterNeedsReview').checked;
       const merchantSearch = (document.getElementById('filterMerchant').value || '').toLowerCase().trim();
 
-      let txns = r.processed.sort((a, b) => new Date(b.date) - new Date(a.date));
+      let txns = [...r.processed].sort((a, b) => new Date(b.date) - new Date(a.date));
 
       // Apply year filter
       if (yearFilter) {
-        txns = txns.filter(t => {
-          const dateStr = t.date;
-          let year;
-          if (dateStr.includes('-')) year = parseInt(dateStr.split('-')[0]);
-          else if (dateStr.includes('/')) year = parseInt(dateStr.split('/')[2]);
-          else year = new Date(dateStr).getFullYear();
-          return year === parseInt(yearFilter);
-        });
+        txns = txns.filter(t => getYearFromDateString(t.date) === parseInt(yearFilter));
       }
 
       // Apply month filter
@@ -5749,17 +5672,26 @@ function renderView(view) {
         // Use date-aware annual fee calculation for cards like CSR with legacy rates
         totalAnnualFees += getEffectiveAnnualFee(cardId, txns);
 
-        // Add manual credits
+        // Add manual credits - respect year filter if active
         const monthlyForCard = state.monthlyCredits[cardId] || {};
         for (const cr of (cardDef.credits || [])) {
           if (cr.manual) {
             const yearData = monthlyForCard[cr.name];
             let claimedMonths = [];
             if (Array.isArray(yearData)) {
-              claimedMonths = yearData;
+              // Legacy format - only include if no year filter or matching current year
+              if (!yearFilter || parseInt(yearFilter) === new Date().getFullYear()) {
+                claimedMonths = yearData;
+              }
             } else if (typeof yearData === 'object') {
-              for (const yr of Object.keys(yearData)) {
-                claimedMonths = claimedMonths.concat(yearData[yr] || []);
+              if (yearFilter) {
+                // Only include claimed months for the filtered year
+                claimedMonths = yearData[yearFilter] || [];
+              } else {
+                // No year filter - sum all years
+                for (const yr of Object.keys(yearData)) {
+                  claimedMonths = claimedMonths.concat(yearData[yr] || []);
+                }
               }
             }
             const isDisabled = (state.disabledCredits[cardId] || []).includes(cr.name);
@@ -6400,6 +6332,19 @@ function exportAsCSV() {
   // Build CSV header - include both Subcategory and Card Category to match table display
   const headers = ['Date', 'Merchant', 'Account', 'Amount', 'Card', 'Subcategory', 'Card Category', 'Multiplier', 'Points Earned', 'Confidence', 'Reason'];
 
+  // Sanitize a CSV cell to prevent formula injection in spreadsheet apps
+  function sanitizeCSVCell(val) {
+    const str = String(val ?? '');
+    if (/^[=+\-@\t\r]/.test(str)) return "'" + str;
+    return str;
+  }
+
+  // Wrap and escape a string CSV field (quote + double internal quotes + sanitize)
+  function csvString(val) {
+    const s = sanitizeCSVCell(val);
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+
   // Build CSV rows using processed transaction data
   const rows = transactions.map(t => {
     // Use the already-computed values from processTransactions
@@ -6408,21 +6353,19 @@ function exportAsCSV() {
     const multiplier = t.multiplier || 1;
     const pointsEarned = Math.round(t.points || 0);
     const confidence = t.confidence || 0;
-    // Escape reason for CSV: wrap in quotes and escape internal quotes by doubling
-    const reason = `"${(t.classificationReason || '').replace(/"/g, '""')}"`;
 
     return [
-      t.date,
-      `"${(t.merchant || '').replace(/"/g, '""')}"`,
-      t.account || '',
+      csvString(t.date),
+      csvString(t.merchant || ''),
+      csvString(t.account || ''),
       t.amount,
-      t.cardName || 'Unknown',
-      subcategory,
-      cardCategory,
+      csvString(t.cardName || 'Unknown'),
+      csvString(subcategory),
+      csvString(cardCategory),
       multiplier,
       t.isPayment ? 0 : pointsEarned,
       confidence,
-      reason
+      csvString(t.classificationReason || '')
     ].join(',');
   });
 
@@ -6468,12 +6411,7 @@ function updateStoredTxnCount() {
   // This function is now simplified since we don't have a separate data management section
   // Just update state.availableYears for use elsewhere
   if (state.savedTransactions.length > 0) {
-    state.availableYears = [...new Set(state.savedTransactions.map(t => {
-      const dateStr = t.date;
-      if (dateStr.includes('-')) return parseInt(dateStr.split('-')[0]);
-      if (dateStr.includes('/')) return parseInt(dateStr.split('/')[2]);
-      return new Date(dateStr).getFullYear();
-    }))].sort((a, b) => b - a);
+    state.availableYears = [...new Set(state.savedTransactions.map(t => getYearFromDateString(t.date)))].sort((a, b) => b - a);
   } else {
     state.availableYears = [];
   }
@@ -6576,7 +6514,7 @@ async function handleFile(file) {
       }
       if (backup.confirmedTransactions) {
         state.confirmedTransactions = backup.confirmedTransactions;
-        safeLocalStorageSet('ccTracker_confirmedTransactions', backup.confirmedTransactions);
+        safeLocalStorageSet('ccTracker_confirmedTxns', backup.confirmedTransactions);
       }
       if (backup.cashPlusCategories) {
         state.cashPlusCategories = backup.cashPlusCategories;
@@ -6611,7 +6549,8 @@ async function handleFile(file) {
       
     } catch (e) {
       showLoading(false);
-      alert('Error reading backup file: ' + e.message);
+      console.error('Backup restore error:', e);
+      alert('Error reading backup file. Please ensure it is a valid JSON backup exported from this app.');
     }
     return;
   }
@@ -7653,12 +7592,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('clearByYear').addEventListener('click', () => {
     manageDataDropdown.classList.add('hidden');
     // Get available years
-    const years = [...new Set(state.savedTransactions.map(t => {
-      const dateStr = t.date;
-      if (dateStr.includes('-')) return parseInt(dateStr.split('-')[0]);
-      if (dateStr.includes('/')) return parseInt(dateStr.split('/')[2]);
-      return new Date(dateStr).getFullYear();
-    }))].sort((a, b) => b - a);
+    const years = [...new Set(state.savedTransactions.map(t => getYearFromDateString(t.date)))].sort((a, b) => b - a);
     
     if (years.length === 0) {
       alert('No transactions to delete.');
@@ -7676,14 +7610,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     if (confirm(`Are you sure you want to delete all transactions from ${year}? This cannot be undone.`)) {
       const beforeCount = state.savedTransactions.length;
-      state.savedTransactions = state.savedTransactions.filter(t => {
-        const dateStr = t.date;
-        let txnYear;
-        if (dateStr.includes('-')) txnYear = parseInt(dateStr.split('-')[0]);
-        else if (dateStr.includes('/')) txnYear = parseInt(dateStr.split('/')[2]);
-        else txnYear = new Date(dateStr).getFullYear();
-        return txnYear !== year;
-      });
+      state.savedTransactions = state.savedTransactions.filter(t => getYearFromDateString(t.date) !== year);
       state.transactions = state.savedTransactions;
       safeLocalStorageSet('ccTracker_transactions', state.savedTransactions);
 
@@ -7729,10 +7656,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       state.monthlyCredits = {};
       state.merchantRules = {};
       state.merchantCache = {};
+      state.confirmedTransactions = {};
       state.cashPlusCategories = {};
       state.cffCategories = {};
+      state.cffPaypalDecemberOnly = {};
+      state.biltConfig = {};
       state.columnMappings = {};
-      
+      state.cardYearToggles = {};
+
       localStorage.removeItem('ccTracker_cardMappings');
       localStorage.removeItem('ccTracker_pointValues');
       localStorage.removeItem('ccTracker_creditOverrides');
@@ -7740,10 +7671,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       localStorage.removeItem('ccTracker_monthlyCredits');
       localStorage.removeItem('ccTracker_merchantRules');
       localStorage.removeItem('ccTracker_merchantCache');
+      localStorage.removeItem('ccTracker_confirmedTxns');
       localStorage.removeItem('ccTracker_cashPlusCategories');
       localStorage.removeItem('ccTracker_cffCategories');
+      localStorage.removeItem('ccTracker_cffPaypalDecemberOnly');
+      localStorage.removeItem('ccTracker_biltConfig');
       localStorage.removeItem('ccTracker_columnMappings');
-      
+      localStorage.removeItem('ccTracker_cardYearToggles');
+
       alert('All settings cleared. You will need to re-map your cards.');
       
       if (state.transactions.length > 0) {

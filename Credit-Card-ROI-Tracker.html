@@ -6965,6 +6965,16 @@ const TOUR_STEPS = [
   {
     type: 'spotlight',
     phase: 'summary-tour',
+    id: 'card-year-toggle',
+    target: '.card-year-toggle',
+    title: 'Card Year View 📅',
+    content: 'For cards with annual fees, click <strong>CY</strong> to switch between calendar year and card anniversary year. This affects how credits are calculated — in card year mode, annual caps apply.',
+    position: 'left',
+    clickRequired: false
+  },
+  {
+    type: 'spotlight',
+    phase: 'summary-tour',
     id: 'card-config-btn',
     target: '#cardConfigBtn',
     title: 'Card Configuration ⚙️',
@@ -6994,16 +7004,6 @@ const TOUR_STEPS = [
     title: 'Point Valuation 💰',
     content: 'Adjust how much you value each point (in cents). This affects all ROI calculations. The default is based on typical redemption values, but adjust if you redeem differently.',
     position: 'right',
-    clickRequired: false
-  },
-  {
-    type: 'spotlight',
-    phase: 'card-config-tour',
-    id: 'config-card-year',
-    target: '#cardYearSection',
-    title: 'Card Year View 📅',
-    content: 'For cards with annual fees, you can view data by card anniversary year instead of calendar year. This affects how credit caps are calculated.',
-    position: 'top',
     clickRequired: false
   },
   {

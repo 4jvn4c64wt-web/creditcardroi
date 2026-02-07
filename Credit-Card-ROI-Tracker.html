@@ -1393,6 +1393,7 @@ let state = {
   selectedBiltYear: null, // For Bilt config year selection (separate from summary year)
   availableYears: [],
   summarySortState: { column: 'cardName', direction: 'asc' }, // For summary table sorting
+  txnSortState: { column: 'date', direction: 'desc' }, // For transaction table sorting
 
   // Tour state
   tourComplete: localStorage.getItem('ccTracker_tourComplete') === 'true',
@@ -5567,11 +5568,24 @@ function renderView(view) {
         <div style="overflow-x:auto;">
           <table>
             <thead><tr>
-              <th>Date</th><th>Merchant</th><th>Card</th><th>Category</th>
-              <th class="text-right">Amount</th>
-              <th class="text-right" title="Points multiplier for this category">Multi</th>
-              <th class="text-right" title="Points earned (negative for refunds/credits)">Points</th>
-              <th title="How the category/multiplier was determined">Reason</th>
+              ${(() => {
+                const ss = state.txnSortState;
+                const cols = [
+                  { key: 'date', label: 'Date', cls: '' },
+                  { key: 'merchant', label: 'Merchant', cls: '' },
+                  { key: 'card', label: 'Card', cls: '' },
+                  { key: 'category', label: 'Category', cls: '' },
+                  { key: 'amount', label: 'Amount', cls: ' class="text-right"' },
+                  { key: 'multiplier', label: 'Multi', cls: ' class="text-right"', title: 'Points multiplier for this category' },
+                  { key: 'points', label: 'Points', cls: ' class="text-right"', title: 'Points earned (negative for refunds/credits)' },
+                  { key: 'reason', label: 'Reason', cls: '', title: 'How the category/multiplier was determined' }
+                ];
+                return cols.map(c => {
+                  const arrow = ss.column === c.key ? (ss.direction === 'asc' ? ' ▲' : ' ▼') : '';
+                  const titleAttr = c.title ? ` title="${c.title}"` : '';
+                  return `<th${c.cls} data-sort="${c.key}"${titleAttr} style="cursor:pointer;user-select:none;white-space:nowrap;">${c.label}${arrow}</th>`;
+                }).join('');
+              })()}
             </tr></thead>
             <tbody id="transactionsBody"></tbody>
           </table>
@@ -5614,7 +5628,7 @@ function renderView(view) {
       const needsReview = document.getElementById('filterNeedsReview').checked;
       const merchantSearch = (document.getElementById('filterMerchant').value || '').toLowerCase().trim();
 
-      let txns = [...r.processed].sort((a, b) => new Date(b.date) - new Date(a.date));
+      let txns = [...r.processed];
 
       // Apply year filter
       if (yearFilter) {
@@ -5642,7 +5656,49 @@ function renderView(view) {
       }
       if (creditsOnly) txns = txns.filter(t => t.isCredit);
       if (needsReview) txns = txns.filter(t => !t.isPayment && t.confidence < CONFIDENCE_THRESHOLD);
-      
+
+      // Sort filtered transactions
+      const sort = state.txnSortState;
+      const dir = sort.direction === 'asc' ? 1 : -1;
+
+      function compareDates(a, b) {
+        return new Date(a.date) - new Date(b.date);
+      }
+      function compareMerchants(a, b) {
+        return (a.merchant || '').localeCompare(b.merchant || '');
+      }
+      function compareStrings(keyFn) {
+        return (a, b) => (keyFn(a) || '').localeCompare(keyFn(b) || '');
+      }
+      function compareNumbers(keyFn) {
+        return (a, b) => (keyFn(a) || 0) - (keyFn(b) || 0);
+      }
+
+      const primaryComparators = {
+        date: compareDates,
+        merchant: compareMerchants,
+        card: compareStrings(t => t.cardName),
+        category: compareStrings(t => t.category),
+        amount: compareNumbers(t => Math.abs(t.amount)),
+        multiplier: compareNumbers(t => t.multiplier),
+        points: compareNumbers(t => t.points),
+        reason: compareStrings(t => t.reason)
+      };
+
+      const primaryCmp = primaryComparators[sort.column] || compareDates;
+
+      txns.sort((a, b) => {
+        const primary = primaryCmp(a, b) * dir;
+        if (primary !== 0) return primary;
+        // Secondary sort: Date primary → Merchant asc; all others → Date desc, then Merchant asc
+        if (sort.column === 'date') {
+          return compareMerchants(a, b);
+        }
+        const byDate = compareDates(a, b) * -1; // desc
+        if (byDate !== 0) return byDate;
+        return compareMerchants(a, b);
+      });
+
       // Update top metrics based on filtered transactions
       const filteredTotals = txns.reduce((acc, t) => {
         if (!t.isPayment) {
@@ -5897,6 +5953,32 @@ function renderView(view) {
       const pageSelect = document.getElementById('txnPage');
       if (pageSelect) pageSelect.value = '1';
       renderTransactions();
+    });
+
+    // Column sort click handlers
+    document.querySelectorAll('thead th[data-sort]').forEach(th => {
+      th.addEventListener('click', () => {
+        const col = th.dataset.sort;
+        const cur = state.txnSortState;
+        if (cur.column === col) {
+          cur.direction = cur.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+          // Default to desc for numeric / date, asc for text
+          cur.column = col;
+          cur.direction = (col === 'date' || col === 'amount' || col === 'multiplier' || col === 'points') ? 'desc' : 'asc';
+        }
+        // Preserve current filter state across re-render
+        state.pendingFilterRestore = {
+          year: document.getElementById('filterYear')?.value || '',
+          month: document.getElementById('filterMonth')?.value || '',
+          card: document.getElementById('filterCard')?.value || '',
+          category: document.getElementById('filterCategory')?.value || '',
+          creditsOnly: document.getElementById('filterCreditsOnly')?.checked || false,
+          needsReview: document.getElementById('filterNeedsReview')?.checked || false,
+          merchant: document.getElementById('filterMerchant')?.value || ''
+        };
+        renderView('transactions');
+      });
     });
   }
 }

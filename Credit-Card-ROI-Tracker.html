@@ -822,6 +822,44 @@ const CARDS = {
       ],
       twoPercent: ['gas', 'grocery', 'dining']
     }
+  },
+  'capital-one-venture-rewards': {
+    name: 'Capital One Venture Rewards',
+    shortName: 'Venture Rewards',
+    annualFee: 95,
+    // Point value varies by redemption: ~0.01 for statement credit, ~0.015+ for travel transfers/portal.
+    // 0.015 is a reasonable default for "miles" style points.
+    pointValue: 0.015,
+    multipliers: { 'capital-one-travel': 5, 'capital-one-entertainment': 5 },
+    baseRate: 2,
+    credits: [
+      { name: 'Global Entry/TSA PreCheck', amount: 120, keywords: ['GLOBAL ENTRY', 'TSA PRECHECK', 'KNOWN TRAVELER', 'TRUSTED TRAVELER'], manual: false },
+      // Note: Lifestyle Collection credit may not appear as a statement credit depending on how Capital One applies it.
+      { name: 'Lifestyle Collection Credit', amount: 50, keywords: ['LIFESTYLE COLLECTION', 'CAPITAL ONE LIFESTYLE', 'CAPITAL ONE TRAVEL', 'EXPERIENCE CREDIT'], manual: false }
+    ],
+    categories: ['capital-one-travel', 'capital-one-entertainment', 'other']
+  },
+  'capital-one-venture-x': {
+    name: 'Capital One Venture X',
+    shortName: 'Venture X',
+    annualFee: 395,
+    // Point value varies by redemption: ~0.01 for statement credit, ~0.015+ for travel transfers/portal.
+    // 0.015 is a reasonable default for "miles" style points.
+    pointValue: 0.015,
+    // Capital One Travel portal: 10x on hotels & rental cars, 5x on flights & vacation rentals.
+    // Default to 5x (conservative); getMultiplier() upgrades to 10x when hotel/rental car keywords detected.
+    multipliers: { 'capital-one-travel': 5 },
+    baseRate: 2,
+    credits: [
+      // Note: Descriptor may vary (e.g., "CAPITAL ONE TRAVEL CREDIT", "C1 TRAVEL CREDIT", or generic "TRAVEL CREDIT").
+      // Keywords cast a wider net; some false positives are possible with generic "TRAVEL CREDIT".
+      { name: 'Capital One Travel Credit', amount: 300, keywords: ['CAPITAL ONE TRAVEL CREDIT', 'C1 TRAVEL CREDIT', 'CAPITAL ONE TRAVEL', 'TRAVEL CREDIT'], manual: false },
+      // Typically once every ~4 years, but treated as annualized value for ROI purposes.
+      { name: 'Global Entry / TSA PreCheck', amount: 120, keywords: ['GLOBAL ENTRY', 'TSA PRECHECK', 'KNOWN TRAVELER', 'TRUSTED TRAVELER'], manual: false }
+    ],
+    categories: ['capital-one-travel', 'other'],
+    // 10,000 bonus miles awarded each cardholder anniversary (not a statement credit)
+    annualBonusPoints: 10000
   }
 };
 
@@ -961,7 +999,15 @@ const KNOWN_MERCHANTS = {
   'amex trv': 'amex-travel', 'americanexpresscomtravel': 'amex-travel',
   // Bilt Travel portal - "bilt.com/travel" -> "biltcomtravel"
   'bilt travel': 'bilt-travel', 'bilttravel': 'bilt-travel', 'biltcomtravel': 'bilt-travel',
-  
+
+  // Capital One Travel portal - patterns must match normalized text (special chars removed)
+  'capital one travel': 'capital-one-travel', 'capitalonetravel': 'capital-one-travel',
+  'capitalone travel': 'capital-one-travel', 'capone travel': 'capital-one-travel',
+  'c1 travel': 'capital-one-travel',
+  // Capital One Entertainment
+  'capital one entertainment': 'capital-one-entertainment', 'capitaloneentertainment': 'capital-one-entertainment',
+  'c1 entertainment': 'capital-one-entertainment',
+
   // Groceries - supermarkets (qualify for Amex Gold 4x)
   'trader joe': 'grocery', 'safeway': 'grocery', 'kroger': 'grocery', 'publix': 'grocery',
   'aldi': 'grocery', 'wegmans': 'grocery', 'stop shop': 'grocery', 'stop & shop': 'grocery',
@@ -1191,6 +1237,8 @@ const CATEGORY_HIERARCHY = {
   'travel': null,
   'flights-direct': 'travel',
   'hotels-direct': 'travel',
+  'capital-one-travel': 'travel', // Capital One Travel portal (child of travel)
+  'capital-one-entertainment': 'entertainment', // Capital One Entertainment (child of entertainment)
   'rent': null,
   'ground-transport': 'transit',
   'other': null
@@ -1376,6 +1424,7 @@ let state = {
   cffCategories: safeLocalStorageGet('ccTracker_cffCategories', {}),
   cffPaypalDecemberOnly: safeLocalStorageGet('ccTracker_cffPaypalDecemberOnly', {}), // Tracks PayPal December-only for Q4 by year
   biltConfig: safeLocalStorageGet('ccTracker_biltConfig', {}),
+  customAnnualBonusPoints: safeLocalStorageGet('ccTracker_annualBonusPoints', {}),
   cardYearToggles: safeLocalStorageGet('ccTracker_cardYearToggles', {}), // { cardId: true } - tracks which cards show card year instead of calendar year
   columnMappings: safeLocalStorageGet('ccTracker_columnMappings', {}), // Remembers mappings by CSV shape
   pendingCSVData: null, // Temporarily holds CSV data during column mapping
@@ -1556,6 +1605,8 @@ function mapToCardCategory(genericCategory, cardId, txnDate = null) {
     'chase-travel': ['chase-travel', 'travel', 'other'],
     'amex-travel': ['amex-travel', 'travel', 'other'],
     'bilt-travel': ['bilt-travel', 'travel', 'other'],
+    'capital-one-travel': ['capital-one-travel', 'travel', 'other'],
+    'capital-one-entertainment': ['capital-one-entertainment', 'entertainment', 'other'],
     'travel-ota': ['travel-ota', 'travel', 'other'],
     'travel': ['travel', 'other'], // Generic travel NEVER maps to card-specific portals
     'car-rental': ['car-rental', 'travel', 'other'],
@@ -2076,6 +2127,13 @@ function classifyTravel(normalizedText, cardId) {
       return { subcategory: 'bilt-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Bilt Travel portal' };
     }
   }
+  // Capital One Travel patterns - must match normalized text
+  const capitalOnePatterns = ['capital one travel', 'capitalonetravel', 'capitalone travel', 'capone travel', 'c1 travel'];
+  for (const pattern of capitalOnePatterns) {
+    if (norm.includes(pattern)) {
+      return { subcategory: 'capital-one-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Capital One Travel portal' };
+    }
+  }
 
   // Check for OTAs (usually no bonus)
   const otas = ['expedia', 'booking.com', 'hotels.com', 'priceline', 'kayak', 'orbitz', 'travelocity'];
@@ -2139,6 +2197,33 @@ function getPointValue(cardId) {
     return state.customPointValues[cardId];
   }
   return CARDS[cardId]?.pointValue || 0.01;
+}
+
+// Get annual bonus points for a card (user-configurable, falls back to card default)
+function getAnnualBonusPoints(cardId) {
+  if (state.customAnnualBonusPoints[cardId] !== undefined) {
+    return state.customAnnualBonusPoints[cardId];
+  }
+  return CARDS[cardId]?.annualBonusPoints || 0;
+}
+
+// Check whether an annual fee was detected in transaction data for this card.
+// If year is specified, checks only that year; otherwise checks any year.
+function hasDetectedAnnualFee(cardId, year = null) {
+  const fees = state.detectedAnnualFees[cardId];
+  if (!fees) return false;
+  if (year) return !!fees[year];
+  return Object.keys(fees).length > 0;
+}
+
+// Get the dollar value of the annual bonus points for a card.
+// Only returns a value if an annual fee was actually detected in the transaction data,
+// so the bonus is tied to the card anniversary (when the fee posts).
+// Pass year=null for "all years" (any fee detected), or a specific year.
+function getAnnualBonusValue(cardId, year = null) {
+  if (getAnnualBonusPoints(cardId) <= 0) return 0;
+  if (!hasDetectedAnnualFee(cardId, year)) return 0;
+  return getAnnualBonusPoints(cardId) * getPointValue(cardId);
 }
 
 // Calculate Bilt rent points for a billing cycle based on spending ratio or Bilt Cash
@@ -2531,6 +2616,31 @@ function getMultiplier(cardId, category, txnDate = null, merchantDesc = '') {
       return { rate: 1, reason: '1x base (Legacy CSR)' };
     }
     // If after cutoff, fall through to standard multiplier logic below
+  }
+
+  // Capital One Venture X: portal bookings earn 10x on hotels & rental cars, 5x on everything else.
+  // Check the merchant description for travel sub-type keywords to decide 10x vs 5x.
+  if (cardId === 'capital-one-venture-x' && category === 'capital-one-travel' && merchantDesc) {
+    const normDesc = merchantDesc.toLowerCase().replace(/[^a-z0-9\s]/g, '');
+    // Hotel keywords (same as classifyTravel hotels list)
+    const hotelKeywords = ['marriott', 'hilton', 'hyatt', 'ihg', 'wyndham', 'best western', 'radisson',
+      'sheraton', 'westin', 'ritz', 'four seasons', 'mgm', 'caesars', 'flamingo',
+      'venetian', 'bellagio', 'cosmopolitan'];
+    // Car rental keywords (same as classifyTravel car rentals list)
+    const carRentalKeywords = ['hertz', 'enterprise', 'avis', 'budget', 'national car', 'alamo',
+      'dollar rent', 'thrifty', 'sixt', 'zipcar'];
+    for (const kw of hotelKeywords) {
+      if (normDesc.includes(kw)) {
+        return { rate: 10, reason: `10x Capital One Travel (hotel: ${kw})` };
+      }
+    }
+    for (const kw of carRentalKeywords) {
+      if (normDesc.includes(kw)) {
+        return { rate: 10, reason: `10x Capital One Travel (rental car: ${kw})` };
+      }
+    }
+    // Flights, vacation rentals, and anything unrecognized default to 5x (conservative)
+    return { rate: 5, reason: '5x Capital One Travel (default — flights/vacation rentals/unknown)' };
   }
 
   // Use hierarchy to find the best matching category for this card
@@ -4647,6 +4757,26 @@ function showCardConfigEditor(preselectedCardId = null) {
           </div>
         </div>
 
+        ${card.annualBonusPoints ? `
+        <!-- Anniversary Bonus Points -->
+        <div>
+          <h3 style="font-size:14px;font-weight:600;margin-bottom:12px;">Anniversary Bonus Miles</h3>
+          <p style="font-size:12px;color:#78716c;margin-bottom:8px;">Bonus miles awarded each cardholder anniversary (not a statement credit). Included in ROI calculation.</p>
+          <div class="card-mapping-row">
+            <span style="min-width:120px;">Bonus points:</span>
+            <input type="number" step="1000" min="0" max="999999" value="${getAnnualBonusPoints(cardId)}"
+                   id="configAnnualBonusPoints" class="form-select" style="width:120px;">
+            <span style="font-size:12px;color:#a8a29e;">(default: ${formatNumber(card.annualBonusPoints)})</span>
+          </div>
+          <div style="font-size:12px;color:#059669;margin-top:4px;">
+            Value: ${formatCurrencyPrecise(getAnnualBonusPoints(cardId) * getPointValue(cardId))} (${formatNumber(getAnnualBonusPoints(cardId))} pts × ${(getPointValue(cardId) * 100).toFixed(1)}¢)
+          </div>
+          <div style="font-size:11px;color:#78716c;margin-top:2px;">
+            ${hasDetectedAnnualFee(cardId) ? '✓ Annual fee detected — bonus included in ROI' : 'Bonus is included in ROI only when an annual fee is detected in your transactions.'}
+          </div>
+        </div>
+        ` : ''}
+
         ${cashPlusSection}
         ${cffSection}
         ${biltSection}
@@ -5158,8 +5288,13 @@ function renderView(view) {
         }
       }
       
+      // Add anniversary bonus points value (e.g., Venture X 10,000 bonus miles)
+      // Only included when an annual fee was detected in the transaction data for this period
+      const annualBonusValue = getAnnualBonusValue(c.cardId, displayYear);
+      totalCredits += annualBonusValue;
+
       const netValue = c.pointsValue + totalCredits - c.annualFee;
-      return { ...c, totalCredits, netValue, biltCashCredit };
+      return { ...c, totalCredits, netValue, biltCashCredit, annualBonusValue };
     });
     
     // Apply sort based on sortState
@@ -5209,6 +5344,8 @@ function renderView(view) {
               const used = cyCreditsUsed[cr.name] || 0;
               cyTotalCredits += Math.min(used, cr.amount);
             }
+            // Include anniversary bonus in card year mode (tied to annual fee detection)
+            cyTotalCredits += getAnnualBonusValue(c.cardId, displayYear);
             const cyNetValue = cyMetrics.pointsValue + cyTotalCredits - c.annualFee;
             cardDisplayData[c.cardId] = {
               isCardYearActive: true,
@@ -5358,7 +5495,7 @@ function renderView(view) {
               ${cards.map(c => {
                 const cardDef = CARDS[c.cardId];
                 const availableCredits = cardDef?.credits || [];
-                const hasCredits = availableCredits.length > 0;
+                const hasCredits = availableCredits.length > 0 || (cardDef?.annualBonusPoints || 0) > 0;
 
                 const hasPointsBreakdown = Object.keys(c.pointsByCategory || {}).length > 0;
                 const hasDetails = hasPointsBreakdown || hasCredits;
@@ -5438,6 +5575,15 @@ function renderView(view) {
                             `;
                           }).join('')}
                         ` : '<div style="color:#78716c;">No credits available</div>'}
+                        ${(displayMetrics.annualBonusValue || 0) > 0 ? `
+                          <div style="margin-top:6px;padding-top:6px;border-top:1px dashed #d6d3d1;">
+                            <div style="display:flex;justify-content:space-between;">
+                              <span style="color:#4b6bfb;">Anniversary bonus miles</span>
+                              <span style="font-weight:500;color:#4b6bfb;">$${(displayMetrics.annualBonusValue).toFixed(0)}</span>
+                            </div>
+                            <div style="font-size:10px;color:#78716c;">${formatNumber(getAnnualBonusPoints(c.cardId))} pts × ${(getPointValue(c.cardId) * 100).toFixed(1)}¢</div>
+                          </div>
+                        ` : ''}
                       </div>
                     ` : formatCurrencyPrecise(displayMetrics.totalCredits)}
                   </td>
@@ -5448,7 +5594,7 @@ function renderView(view) {
             </tbody>
           </table>
         </div>
-        <div style="margin-top:16px;font-size:12px;color:#78716c;">Net Value = Points Value + Credits Used - Annual Fee</div>
+        <div style="margin-top:16px;font-size:12px;color:#78716c;">Net Value = Points Value + Credits Used${cards.some(c => (c.annualBonusValue || 0) > 0) ? ' + Anniversary Bonus' : ''} - Annual Fee</div>
       </div>`;
     
     // Add year filter event listener
@@ -5775,8 +5921,15 @@ function renderView(view) {
         }
       }
       
-      const netValue = filteredTotals.pointsValue + filteredTotals.credits + totalManualCredits - totalAnnualFees;
-      
+      // Add anniversary bonus points value for applicable cards (tied to annual fee detection)
+      const bonusYear = yearFilter ? parseInt(yearFilter) : null;
+      let totalAnnualBonus = 0;
+      for (const cardId of filteredCardIds) {
+        totalAnnualBonus += getAnnualBonusValue(cardId, bonusYear);
+      }
+
+      const netValue = filteredTotals.pointsValue + filteredTotals.credits + totalManualCredits + totalAnnualBonus - totalAnnualFees;
+
       document.getElementById('metricSpend').textContent = formatCurrency(filteredTotals.spend);
       document.getElementById('metricPoints').textContent = formatNumber(filteredTotals.points);
       document.getElementById('metricPointsValue').textContent = formatCurrency(filteredTotals.pointsValue);
@@ -6415,7 +6568,8 @@ function buildExportData() {
     cashPlusCategories: state.cashPlusCategories,
     cffCategories: state.cffCategories,
     biltConfig: state.biltConfig,
-    columnMappings: state.columnMappings
+    columnMappings: state.columnMappings,
+    customAnnualBonusPoints: state.customAnnualBonusPoints
   };
 }
 
@@ -6630,6 +6784,10 @@ async function handleFile(file) {
       if (backup.columnMappings) {
         state.columnMappings = backup.columnMappings;
         safeLocalStorageSet('ccTracker_columnMappings', backup.columnMappings);
+      }
+      if (backup.customAnnualBonusPoints) {
+        state.customAnnualBonusPoints = backup.customAnnualBonusPoints;
+        safeLocalStorageSet('ccTracker_annualBonusPoints', backup.customAnnualBonusPoints);
       }
 
       showLoading(false);
@@ -7760,6 +7918,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       state.cffCategories = {};
       state.cffPaypalDecemberOnly = {};
       state.biltConfig = {};
+      state.customAnnualBonusPoints = {};
       state.columnMappings = {};
       state.cardYearToggles = {};
 
@@ -7775,6 +7934,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       localStorage.removeItem('ccTracker_cffCategories');
       localStorage.removeItem('ccTracker_cffPaypalDecemberOnly');
       localStorage.removeItem('ccTracker_biltConfig');
+      localStorage.removeItem('ccTracker_annualBonusPoints');
       localStorage.removeItem('ccTracker_columnMappings');
       localStorage.removeItem('ccTracker_cardYearToggles');
 
@@ -7806,6 +7966,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           state.cashPlusCategories = {};
           state.cffCategories = {};
           state.biltConfig = {};
+          state.customAnnualBonusPoints = {};
           state.columnMappings = {};
           state.savedTransactions = [];
           state.transactions = [];
@@ -7960,7 +8121,19 @@ document.addEventListener('DOMContentLoaded', async () => {
       state.customPointValues[cardId] = pointVal;
       safeLocalStorageSet('ccTracker_pointValues', state.customPointValues);
     }
-    
+
+    // Save annual bonus points override (if applicable)
+    const bonusInput = document.getElementById('configAnnualBonusPoints');
+    if (bonusInput) {
+      const bonusVal = parseInt(bonusInput.value);
+      if (!isNaN(bonusVal) && bonusVal >= 0) {
+        state.customAnnualBonusPoints[cardId] = bonusVal;
+      } else {
+        delete state.customAnnualBonusPoints[cardId];
+      }
+      safeLocalStorageSet('ccTracker_annualBonusPoints', state.customAnnualBonusPoints);
+    }
+
     // Save disabled credits
     const disabledList = [];
     document.querySelectorAll('.credit-toggle-checkbox').forEach(cb => {

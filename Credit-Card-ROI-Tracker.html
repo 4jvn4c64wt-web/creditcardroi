@@ -2205,8 +2205,22 @@ function getAnnualBonusPoints(cardId) {
   return CARDS[cardId]?.annualBonusPoints || 0;
 }
 
-// Get the dollar value of the annual bonus points for a card
-function getAnnualBonusValue(cardId) {
+// Check whether an annual fee was detected in transaction data for this card.
+// If year is specified, checks only that year; otherwise checks any year.
+function hasDetectedAnnualFee(cardId, year = null) {
+  const fees = state.detectedAnnualFees[cardId];
+  if (!fees) return false;
+  if (year) return !!fees[year];
+  return Object.keys(fees).length > 0;
+}
+
+// Get the dollar value of the annual bonus points for a card.
+// Only returns a value if an annual fee was actually detected in the transaction data,
+// so the bonus is tied to the card anniversary (when the fee posts).
+// Pass year=null for "all years" (any fee detected), or a specific year.
+function getAnnualBonusValue(cardId, year = null) {
+  if (getAnnualBonusPoints(cardId) <= 0) return 0;
+  if (!hasDetectedAnnualFee(cardId, year)) return 0;
   return getAnnualBonusPoints(cardId) * getPointValue(cardId);
 }
 
@@ -4728,7 +4742,10 @@ function showCardConfigEditor(preselectedCardId = null) {
             <span style="font-size:12px;color:#a8a29e;">(default: ${formatNumber(card.annualBonusPoints)})</span>
           </div>
           <div style="font-size:12px;color:#059669;margin-top:4px;">
-            Value: ${formatCurrencyPrecise(getAnnualBonusValue(cardId))} (${formatNumber(getAnnualBonusPoints(cardId))} pts × ${(getPointValue(cardId) * 100).toFixed(1)}¢)
+            Value: ${formatCurrencyPrecise(getAnnualBonusPoints(cardId) * getPointValue(cardId))} (${formatNumber(getAnnualBonusPoints(cardId))} pts × ${(getPointValue(cardId) * 100).toFixed(1)}¢)
+          </div>
+          <div style="font-size:11px;color:#78716c;margin-top:2px;">
+            ${hasDetectedAnnualFee(cardId) ? '✓ Annual fee detected — bonus included in ROI' : 'Bonus is included in ROI only when an annual fee is detected in your transactions.'}
           </div>
         </div>
         ` : ''}
@@ -5245,7 +5262,8 @@ function renderView(view) {
       }
       
       // Add anniversary bonus points value (e.g., Venture X 10,000 bonus miles)
-      const annualBonusValue = getAnnualBonusValue(c.cardId);
+      // Only included when an annual fee was detected in the transaction data for this period
+      const annualBonusValue = getAnnualBonusValue(c.cardId, displayYear);
       totalCredits += annualBonusValue;
 
       const netValue = c.pointsValue + totalCredits - c.annualFee;
@@ -5299,8 +5317,8 @@ function renderView(view) {
               const used = cyCreditsUsed[cr.name] || 0;
               cyTotalCredits += Math.min(used, cr.amount);
             }
-            // Include anniversary bonus in card year mode
-            cyTotalCredits += getAnnualBonusValue(c.cardId);
+            // Include anniversary bonus in card year mode (tied to annual fee detection)
+            cyTotalCredits += getAnnualBonusValue(c.cardId, displayYear);
             const cyNetValue = cyMetrics.pointsValue + cyTotalCredits - c.annualFee;
             cardDisplayData[c.cardId] = {
               isCardYearActive: true,
@@ -5876,10 +5894,11 @@ function renderView(view) {
         }
       }
       
-      // Add anniversary bonus points value for applicable cards
+      // Add anniversary bonus points value for applicable cards (tied to annual fee detection)
+      const bonusYear = yearFilter ? parseInt(yearFilter) : null;
       let totalAnnualBonus = 0;
       for (const cardId of filteredCardIds) {
-        totalAnnualBonus += getAnnualBonusValue(cardId);
+        totalAnnualBonus += getAnnualBonusValue(cardId, bonusYear);
       }
 
       const netValue = filteredTotals.pointsValue + filteredTotals.credits + totalManualCredits + totalAnnualBonus - totalAnnualFees;

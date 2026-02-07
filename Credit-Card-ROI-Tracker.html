@@ -771,7 +771,7 @@ const CARDS = {
       { name: 'DoorDash Grocery Credit', amount: 240, keywords: [], manual: true }, // 2x $10/month in-app
       { name: 'DashPass Membership', amount: 120, keywords: [], manual: true }, // $9.99/month value
       { name: 'StubHub', amount: 300, keywords: ['STUBHUB', 'VIAGOGO'], manual: false },
-      { name: 'Lyft Pink', amount: 120, keywords: [], manual: true },
+      { name: 'Lyft Credit', amount: 120, keywords: [], manual: true },
       { name: 'Peloton', amount: 120, keywords: ['PELOTON'], manual: false },
       { name: 'Apple Music/TV+', amount: 288, keywords: [], manual: true },
     ],
@@ -1401,6 +1401,23 @@ let state = {
   tourActive: false,
   featureEducation: safeLocalStorageGet('ccTracker_featureEducation', {}) // tracks which feature tutorials have been shown
 };
+
+// Migrate "Lyft Pink" → "Lyft Credit" in persisted credit settings
+(function migrateLyftPinkName() {
+  const oldName = 'Lyft Pink', newName = 'Lyft Credit';
+  let changed = false;
+  for (const cardId in state.disabledCredits) {
+    const arr = state.disabledCredits[cardId];
+    const idx = arr.indexOf(oldName);
+    if (idx !== -1) { arr[idx] = newName; changed = true; }
+  }
+  if (changed) safeLocalStorageSet('ccTracker_disabledCredits', state.disabledCredits);
+  changed = false;
+  for (const txnId in state.creditOverrides) {
+    if (state.creditOverrides[txnId] === oldName) { state.creditOverrides[txnId] = newName; changed = true; }
+  }
+  if (changed) safeLocalStorageSet('ccTracker_creditOverrides', state.creditOverrides);
+})();
 
 // =============================================================================
 // UTILITY FUNCTIONS

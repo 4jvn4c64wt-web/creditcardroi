@@ -113,7 +113,6 @@
       <h1>Credit Card Value Tracker <span style="display:inline-block;font-size:11px;font-weight:600;background:#f59e0b;color:#fff;padding:2px 8px;border-radius:9999px;vertical-align:middle;letter-spacing:0.04em;position:relative;top:-2px;">BETA</span></h1>
       <p>Upload your transaction CSV to calculate net value per card</p>
       <p style="font-size:12px;color:#059669;margin-top:8px;">🔒 Your data stays on your device. Nothing is sent to any server.</p>
-      <p style="font-size:12px;color:#78716c;margin-top:6px;">This tool is in beta — features may change and bugs may exist. Feedback welcome: <span id="feedbackEmail" style="color:#2563eb;cursor:pointer;text-decoration:underline;" title="Click to send feedback"></span></p>
     </div>
 
     <!-- Upload Section (only shown when no transactions) -->
@@ -5145,10 +5144,15 @@ function showResults(results, isNewUpload = false) {
     ? `<span style="color:#b45309;"> • ${lowConfidenceCount} need review</span>` 
     : '';
   document.getElementById('statsFooter').innerHTML = `
-    <strong>Stats:</strong> ${Object.keys(state.merchantCache).length} merchants cached • 
+    <strong>Stats:</strong> ${Object.keys(state.merchantCache).length} merchants cached •
     ${results.cards.length} cards tracked${lowConfBadge}
+    <div style="margin-top:10px;padding-top:10px;border-top:1px dashed #d6d3d1;">
+      <span style="background:#f59e0b;color:#fff;font-size:10px;font-weight:600;padding:1px 6px;border-radius:9999px;letter-spacing:0.04em;">BETA</span>
+      <span style="margin-left:6px;">This tool is in beta — features may change and bugs may exist. Feedback welcome: <span id="feedbackEmail" style="color:#2563eb;cursor:pointer;text-decoration:underline;" title="Click to send feedback"></span></span>
+    </div>
   `;
-  
+  initFeedbackEmail();
+
   renderView('summary');
   
   // Show low-confidence review modal on new upload if there are items to review
@@ -8282,7 +8286,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // Assemble feedback email dynamically to prevent scraping
-(function() {
+function initFeedbackEmail() {
   var u = 'cardvaluetracker';
   var d = 'gmail';
   var t = 'com';
@@ -8290,11 +8294,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   var el = document.getElementById('feedbackEmail');
   if (el) {
     el.textContent = addr;
-    el.addEventListener('click', function() {
+    el.onclick = function() {
       window.location.href = 'mai' + 'lto:' + addr + '?subject=' + encodeURIComponent('Credit Card Value Tracker Feedback');
-    });
+    };
   }
-})();
+}
 </script>
 </body>
 </html>

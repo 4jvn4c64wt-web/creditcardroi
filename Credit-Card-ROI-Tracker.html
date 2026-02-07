@@ -838,6 +838,26 @@ const CARDS = {
       { name: 'Lifestyle Collection Credit', amount: 50, keywords: ['LIFESTYLE COLLECTION', 'CAPITAL ONE LIFESTYLE', 'CAPITAL ONE TRAVEL', 'EXPERIENCE CREDIT'], manual: false }
     ],
     categories: ['capital-one-travel', 'capital-one-entertainment', 'other']
+  },
+  'capital-one-venture-x': {
+    name: 'Capital One Venture X',
+    shortName: 'Venture X',
+    annualFee: 395,
+    // Point value varies by redemption: ~0.01 for statement credit, ~0.015+ for travel transfers/portal.
+    // 0.015 is a reasonable default for "miles" style points.
+    pointValue: 0.015,
+    multipliers: { 'capital-one-travel': 10 },
+    baseRate: 2,
+    credits: [
+      // Note: Descriptor may vary (e.g., "CAPITAL ONE TRAVEL CREDIT", "C1 TRAVEL CREDIT", or generic "TRAVEL CREDIT").
+      // Keywords cast a wider net; some false positives are possible with generic "TRAVEL CREDIT".
+      { name: 'Capital One Travel Credit', amount: 300, keywords: ['CAPITAL ONE TRAVEL CREDIT', 'C1 TRAVEL CREDIT', 'CAPITAL ONE TRAVEL', 'TRAVEL CREDIT'], manual: false },
+      // Typically once every ~4 years, but treated as annualized value for ROI purposes.
+      { name: 'Global Entry / TSA PreCheck', amount: 120, keywords: ['GLOBAL ENTRY', 'TSA PRECHECK', 'KNOWN TRAVELER', 'TRUSTED TRAVELER'], manual: false }
+    ],
+    categories: ['capital-one-travel', 'other'],
+    // 10,000 bonus miles awarded each cardholder anniversary (not a statement credit)
+    annualBonusPoints: 10000
   }
 };
 
@@ -1402,6 +1422,7 @@ let state = {
   cffCategories: safeLocalStorageGet('ccTracker_cffCategories', {}),
   cffPaypalDecemberOnly: safeLocalStorageGet('ccTracker_cffPaypalDecemberOnly', {}), // Tracks PayPal December-only for Q4 by year
   biltConfig: safeLocalStorageGet('ccTracker_biltConfig', {}),
+  customAnnualBonusPoints: safeLocalStorageGet('ccTracker_annualBonusPoints', {}),
   cardYearToggles: safeLocalStorageGet('ccTracker_cardYearToggles', {}), // { cardId: true } - tracks which cards show card year instead of calendar year
   columnMappings: safeLocalStorageGet('ccTracker_columnMappings', {}), // Remembers mappings by CSV shape
   pendingCSVData: null, // Temporarily holds CSV data during column mapping
@@ -2174,6 +2195,19 @@ function getPointValue(cardId) {
     return state.customPointValues[cardId];
   }
   return CARDS[cardId]?.pointValue || 0.01;
+}
+
+// Get annual bonus points for a card (user-configurable, falls back to card default)
+function getAnnualBonusPoints(cardId) {
+  if (state.customAnnualBonusPoints[cardId] !== undefined) {
+    return state.customAnnualBonusPoints[cardId];
+  }
+  return CARDS[cardId]?.annualBonusPoints || 0;
+}
+
+// Get the dollar value of the annual bonus points for a card
+function getAnnualBonusValue(cardId) {
+  return getAnnualBonusPoints(cardId) * getPointValue(cardId);
 }
 
 // Calculate Bilt rent points for a billing cycle based on spending ratio or Bilt Cash
@@ -4682,6 +4716,23 @@ function showCardConfigEditor(preselectedCardId = null) {
           </div>
         </div>
 
+        ${card.annualBonusPoints ? `
+        <!-- Anniversary Bonus Points -->
+        <div>
+          <h3 style="font-size:14px;font-weight:600;margin-bottom:12px;">Anniversary Bonus Miles</h3>
+          <p style="font-size:12px;color:#78716c;margin-bottom:8px;">Bonus miles awarded each cardholder anniversary (not a statement credit). Included in ROI calculation.</p>
+          <div class="card-mapping-row">
+            <span style="min-width:120px;">Bonus points:</span>
+            <input type="number" step="1000" min="0" max="999999" value="${getAnnualBonusPoints(cardId)}"
+                   id="configAnnualBonusPoints" class="form-select" style="width:120px;">
+            <span style="font-size:12px;color:#a8a29e;">(default: ${formatNumber(card.annualBonusPoints)})</span>
+          </div>
+          <div style="font-size:12px;color:#059669;margin-top:4px;">
+            Value: ${formatCurrencyPrecise(getAnnualBonusValue(cardId))} (${formatNumber(getAnnualBonusPoints(cardId))} pts × ${(getPointValue(cardId) * 100).toFixed(1)}¢)
+          </div>
+        </div>
+        ` : ''}
+
         ${cashPlusSection}
         ${cffSection}
         ${biltSection}
@@ -5193,8 +5244,12 @@ function renderView(view) {
         }
       }
       
+      // Add anniversary bonus points value (e.g., Venture X 10,000 bonus miles)
+      const annualBonusValue = getAnnualBonusValue(c.cardId);
+      totalCredits += annualBonusValue;
+
       const netValue = c.pointsValue + totalCredits - c.annualFee;
-      return { ...c, totalCredits, netValue, biltCashCredit };
+      return { ...c, totalCredits, netValue, biltCashCredit, annualBonusValue };
     });
     
     // Apply sort based on sortState
@@ -5244,6 +5299,8 @@ function renderView(view) {
               const used = cyCreditsUsed[cr.name] || 0;
               cyTotalCredits += Math.min(used, cr.amount);
             }
+            // Include anniversary bonus in card year mode
+            cyTotalCredits += getAnnualBonusValue(c.cardId);
             const cyNetValue = cyMetrics.pointsValue + cyTotalCredits - c.annualFee;
             cardDisplayData[c.cardId] = {
               isCardYearActive: true,
@@ -5393,7 +5450,7 @@ function renderView(view) {
               ${cards.map(c => {
                 const cardDef = CARDS[c.cardId];
                 const availableCredits = cardDef?.credits || [];
-                const hasCredits = availableCredits.length > 0;
+                const hasCredits = availableCredits.length > 0 || (cardDef?.annualBonusPoints || 0) > 0;
 
                 const hasPointsBreakdown = Object.keys(c.pointsByCategory || {}).length > 0;
                 const hasDetails = hasPointsBreakdown || hasCredits;
@@ -5473,6 +5530,15 @@ function renderView(view) {
                             `;
                           }).join('')}
                         ` : '<div style="color:#78716c;">No credits available</div>'}
+                        ${(displayMetrics.annualBonusValue || 0) > 0 ? `
+                          <div style="margin-top:6px;padding-top:6px;border-top:1px dashed #d6d3d1;">
+                            <div style="display:flex;justify-content:space-between;">
+                              <span style="color:#4b6bfb;">Anniversary bonus miles</span>
+                              <span style="font-weight:500;color:#4b6bfb;">$${(displayMetrics.annualBonusValue).toFixed(0)}</span>
+                            </div>
+                            <div style="font-size:10px;color:#78716c;">${formatNumber(getAnnualBonusPoints(c.cardId))} pts × ${(getPointValue(c.cardId) * 100).toFixed(1)}¢</div>
+                          </div>
+                        ` : ''}
                       </div>
                     ` : formatCurrencyPrecise(displayMetrics.totalCredits)}
                   </td>
@@ -5483,7 +5549,7 @@ function renderView(view) {
             </tbody>
           </table>
         </div>
-        <div style="margin-top:16px;font-size:12px;color:#78716c;">Net Value = Points Value + Credits Used - Annual Fee</div>
+        <div style="margin-top:16px;font-size:12px;color:#78716c;">Net Value = Points Value + Credits Used${cards.some(c => (c.annualBonusValue || 0) > 0) ? ' + Anniversary Bonus' : ''} - Annual Fee</div>
       </div>`;
     
     // Add year filter event listener
@@ -5810,8 +5876,14 @@ function renderView(view) {
         }
       }
       
-      const netValue = filteredTotals.pointsValue + filteredTotals.credits + totalManualCredits - totalAnnualFees;
-      
+      // Add anniversary bonus points value for applicable cards
+      let totalAnnualBonus = 0;
+      for (const cardId of filteredCardIds) {
+        totalAnnualBonus += getAnnualBonusValue(cardId);
+      }
+
+      const netValue = filteredTotals.pointsValue + filteredTotals.credits + totalManualCredits + totalAnnualBonus - totalAnnualFees;
+
       document.getElementById('metricSpend').textContent = formatCurrency(filteredTotals.spend);
       document.getElementById('metricPoints').textContent = formatNumber(filteredTotals.points);
       document.getElementById('metricPointsValue').textContent = formatCurrency(filteredTotals.pointsValue);
@@ -6450,7 +6522,8 @@ function buildExportData() {
     cashPlusCategories: state.cashPlusCategories,
     cffCategories: state.cffCategories,
     biltConfig: state.biltConfig,
-    columnMappings: state.columnMappings
+    columnMappings: state.columnMappings,
+    customAnnualBonusPoints: state.customAnnualBonusPoints
   };
 }
 
@@ -6665,6 +6738,10 @@ async function handleFile(file) {
       if (backup.columnMappings) {
         state.columnMappings = backup.columnMappings;
         safeLocalStorageSet('ccTracker_columnMappings', backup.columnMappings);
+      }
+      if (backup.customAnnualBonusPoints) {
+        state.customAnnualBonusPoints = backup.customAnnualBonusPoints;
+        safeLocalStorageSet('ccTracker_annualBonusPoints', backup.customAnnualBonusPoints);
       }
 
       showLoading(false);
@@ -7795,6 +7872,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       state.cffCategories = {};
       state.cffPaypalDecemberOnly = {};
       state.biltConfig = {};
+      state.customAnnualBonusPoints = {};
       state.columnMappings = {};
       state.cardYearToggles = {};
 
@@ -7810,6 +7888,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       localStorage.removeItem('ccTracker_cffCategories');
       localStorage.removeItem('ccTracker_cffPaypalDecemberOnly');
       localStorage.removeItem('ccTracker_biltConfig');
+      localStorage.removeItem('ccTracker_annualBonusPoints');
       localStorage.removeItem('ccTracker_columnMappings');
       localStorage.removeItem('ccTracker_cardYearToggles');
 
@@ -7841,6 +7920,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           state.cashPlusCategories = {};
           state.cffCategories = {};
           state.biltConfig = {};
+          state.customAnnualBonusPoints = {};
           state.columnMappings = {};
           state.savedTransactions = [];
           state.transactions = [];
@@ -7995,7 +8075,19 @@ document.addEventListener('DOMContentLoaded', async () => {
       state.customPointValues[cardId] = pointVal;
       safeLocalStorageSet('ccTracker_pointValues', state.customPointValues);
     }
-    
+
+    // Save annual bonus points override (if applicable)
+    const bonusInput = document.getElementById('configAnnualBonusPoints');
+    if (bonusInput) {
+      const bonusVal = parseInt(bonusInput.value);
+      if (!isNaN(bonusVal) && bonusVal >= 0) {
+        state.customAnnualBonusPoints[cardId] = bonusVal;
+      } else {
+        delete state.customAnnualBonusPoints[cardId];
+      }
+      safeLocalStorageSet('ccTracker_annualBonusPoints', state.customAnnualBonusPoints);
+    }
+
     // Save disabled credits
     const disabledList = [];
     document.querySelectorAll('.credit-toggle-checkbox').forEach(cb => {

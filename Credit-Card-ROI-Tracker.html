@@ -822,6 +822,22 @@ const CARDS = {
       ],
       twoPercent: ['gas', 'grocery', 'dining']
     }
+  },
+  'capital-one-venture-rewards': {
+    name: 'Capital One Venture Rewards',
+    shortName: 'Venture Rewards',
+    annualFee: 95,
+    // Point value varies by redemption: ~0.01 for statement credit, ~0.015+ for travel transfers/portal.
+    // 0.015 is a reasonable default for "miles" style points.
+    pointValue: 0.015,
+    multipliers: { 'capital-one-travel': 5, 'capital-one-entertainment': 5 },
+    baseRate: 2,
+    credits: [
+      { name: 'Global Entry/TSA PreCheck', amount: 120, keywords: ['GLOBAL ENTRY', 'TSA PRECHECK', 'KNOWN TRAVELER', 'TRUSTED TRAVELER'], manual: false },
+      // Note: Lifestyle Collection credit may not appear as a statement credit depending on how Capital One applies it.
+      { name: 'Lifestyle Collection Credit', amount: 50, keywords: ['LIFESTYLE COLLECTION', 'CAPITAL ONE LIFESTYLE', 'CAPITAL ONE TRAVEL', 'EXPERIENCE CREDIT'], manual: false }
+    ],
+    categories: ['capital-one-travel', 'capital-one-entertainment', 'other']
   }
 };
 
@@ -961,7 +977,15 @@ const KNOWN_MERCHANTS = {
   'amex trv': 'amex-travel', 'americanexpresscomtravel': 'amex-travel',
   // Bilt Travel portal - "bilt.com/travel" -> "biltcomtravel"
   'bilt travel': 'bilt-travel', 'bilttravel': 'bilt-travel', 'biltcomtravel': 'bilt-travel',
-  
+
+  // Capital One Travel portal - patterns must match normalized text (special chars removed)
+  'capital one travel': 'capital-one-travel', 'capitalonetravel': 'capital-one-travel',
+  'capitalone travel': 'capital-one-travel', 'capone travel': 'capital-one-travel',
+  'c1 travel': 'capital-one-travel',
+  // Capital One Entertainment
+  'capital one entertainment': 'capital-one-entertainment', 'capitaloneentertainment': 'capital-one-entertainment',
+  'c1 entertainment': 'capital-one-entertainment',
+
   // Groceries - supermarkets (qualify for Amex Gold 4x)
   'trader joe': 'grocery', 'safeway': 'grocery', 'kroger': 'grocery', 'publix': 'grocery',
   'aldi': 'grocery', 'wegmans': 'grocery', 'stop shop': 'grocery', 'stop & shop': 'grocery',
@@ -1191,6 +1215,8 @@ const CATEGORY_HIERARCHY = {
   'travel': null,
   'flights-direct': 'travel',
   'hotels-direct': 'travel',
+  'capital-one-travel': 'travel', // Capital One Travel portal (child of travel)
+  'capital-one-entertainment': 'entertainment', // Capital One Entertainment (child of entertainment)
   'rent': null,
   'ground-transport': 'transit',
   'other': null
@@ -1556,6 +1582,8 @@ function mapToCardCategory(genericCategory, cardId, txnDate = null) {
     'chase-travel': ['chase-travel', 'travel', 'other'],
     'amex-travel': ['amex-travel', 'travel', 'other'],
     'bilt-travel': ['bilt-travel', 'travel', 'other'],
+    'capital-one-travel': ['capital-one-travel', 'travel', 'other'],
+    'capital-one-entertainment': ['capital-one-entertainment', 'entertainment', 'other'],
     'travel-ota': ['travel-ota', 'travel', 'other'],
     'travel': ['travel', 'other'], // Generic travel NEVER maps to card-specific portals
     'car-rental': ['car-rental', 'travel', 'other'],
@@ -2074,6 +2102,13 @@ function classifyTravel(normalizedText, cardId) {
   for (const pattern of biltPatterns) {
     if (norm.includes(pattern)) {
       return { subcategory: 'bilt-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Bilt Travel portal' };
+    }
+  }
+  // Capital One Travel patterns - must match normalized text
+  const capitalOnePatterns = ['capital one travel', 'capitalonetravel', 'capitalone travel', 'capone travel', 'c1 travel'];
+  for (const pattern of capitalOnePatterns) {
+    if (norm.includes(pattern)) {
+      return { subcategory: 'capital-one-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Capital One Travel portal' };
     }
   }
 

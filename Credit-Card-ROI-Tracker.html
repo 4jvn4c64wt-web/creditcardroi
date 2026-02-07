@@ -8036,9 +8036,31 @@ document.addEventListener('DOMContentLoaded', async () => {
       safeLocalStorageSet('ccTracker_cffCategories', state.cffCategories);
     }
     
+    // Save Bilt-specific config from the DOM (matches pattern of other card-specific saves)
+    const card = CARDS[cardId];
+    if (card?.isBilt) {
+      if (!state.biltConfig[cardId]) state.biltConfig[cardId] = {};
+      const cfg = state.biltConfig[cardId];
+      const rewardRadio = document.querySelector(`.bilt-reward-option[data-card="${cardId}"]:checked`);
+      if (rewardRadio) cfg.rewardOption = rewardRadio.value;
+      const rentRadio = document.querySelector(`.bilt-rent-detection[data-card="${cardId}"]:checked`);
+      if (rentRadio) cfg.rentDetection = rentRadio.value;
+      const cashCheckbox = document.querySelector(`.bilt-cash-as-credit[data-card="${cardId}"]`);
+      if (cashCheckbox) cfg.countBiltCashAsCredit = cashCheckbox.checked;
+      const redemptionInput = document.querySelector(`.bilt-monthly-redemption[data-card="${cardId}"]`);
+      if (redemptionInput) cfg.monthlyBiltCashRedemption = parseFloat(redemptionInput.value) || 0;
+      const manualRentInput = document.querySelector(`.bilt-manual-rent[data-card="${cardId}"]`);
+      if (manualRentInput) cfg.manualRentAmount = parseFloat(manualRentInput.value) || 2000;
+      const rentDaySelect = document.querySelector(`.bilt-rent-day[data-card="${cardId}"]`);
+      if (rentDaySelect) cfg.manualRentDay = parseInt(rentDaySelect.value);
+      const keywordInput = document.querySelector(`.bilt-rent-keyword[data-card="${cardId}"]`);
+      if (keywordInput) cfg.rentMerchantKeyword = keywordInput.value.trim();
+      const bonusRadio = document.querySelector(`.bilt-bonus-cat[data-card="${cardId}"]:checked`);
+      if (bonusRadio) cfg.bonusCategory = bonusRadio.value;
+      safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
+    }
+
     // Reprocess transactions without navigating away from config page
-    // (runProcessing calls showResults which resets state.selectedYear and
-    // briefly shows the summary view, causing the config to appear to reset)
     if (state.transactions.length > 0) {
       showLoading(true, 'Processing transactions...');
       try {

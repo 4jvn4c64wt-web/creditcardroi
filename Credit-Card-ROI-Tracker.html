@@ -771,7 +771,7 @@ const CARDS = {
       { name: 'DoorDash Grocery Credit', amount: 240, keywords: [], manual: true }, // 2x $10/month in-app
       { name: 'DashPass Membership', amount: 120, keywords: [], manual: true }, // $9.99/month value
       { name: 'StubHub', amount: 300, keywords: ['STUBHUB', 'VIAGOGO'], manual: false },
-      { name: 'Lyft Pink', amount: 120, keywords: [], manual: true },
+      { name: 'Lyft Credit', amount: 120, keywords: [], manual: true },
       { name: 'Peloton', amount: 120, keywords: ['PELOTON'], manual: false },
       { name: 'Apple Music/TV+', amount: 288, keywords: [], manual: true },
     ],
@@ -1390,8 +1390,10 @@ let state = {
   selectedCreditYear: null, // For card config credit year selection
   selectedCashPlusYear: null, // For Cash+ quarterly category year selection
   selectedCFFYear: null, // For CFF quarterly category year selection
+  selectedBiltYear: null, // For Bilt config year selection (separate from summary year)
   availableYears: [],
   summarySortState: { column: 'cardName', direction: 'asc' }, // For summary table sorting
+  txnSortState: { column: 'date', direction: 'desc' }, // For transaction table sorting
 
   // Tour state
   tourComplete: localStorage.getItem('ccTracker_tourComplete') === 'true',
@@ -1399,6 +1401,23 @@ let state = {
   tourActive: false,
   featureEducation: safeLocalStorageGet('ccTracker_featureEducation', {}) // tracks which feature tutorials have been shown
 };
+
+// Migrate "Lyft Pink" → "Lyft Credit" in persisted credit settings
+(function migrateLyftPinkName() {
+  const oldName = 'Lyft Pink', newName = 'Lyft Credit';
+  let changed = false;
+  for (const cardId in state.disabledCredits) {
+    const arr = state.disabledCredits[cardId];
+    const idx = arr.indexOf(oldName);
+    if (idx !== -1) { arr[idx] = newName; changed = true; }
+  }
+  if (changed) safeLocalStorageSet('ccTracker_disabledCredits', state.disabledCredits);
+  changed = false;
+  for (const txnId in state.creditOverrides) {
+    if (state.creditOverrides[txnId] === oldName) { state.creditOverrides[txnId] = newName; changed = true; }
+  }
+  if (changed) safeLocalStorageSet('ccTracker_creditOverrides', state.creditOverrides);
+})();
 
 // =============================================================================
 // UTILITY FUNCTIONS
@@ -2162,12 +2181,12 @@ function calculateBiltRentPoints(cardId, rentAmount, everydaySpend, billingMonth
   } else {
     // Flexible Bilt Cash: user specifies how much Bilt Cash to redeem
     // $3 Bilt Cash = 100 points on $100 rent (i.e., $30 = 1000 pts on $1000)
-    const monthlyBiltCash = cfg.monthlyBiltCash || 0;
+    const monthlyBiltCash = cfg.monthlyBiltCashRedemption || 0;
     const maxPointsUnlocked = (monthlyBiltCash / 3) * 100;
     const points = Math.min(maxPointsUnlocked, rentAmount); // Cap at 1x rent
     const effectiveRate = rentAmount > 0 ? points / rentAmount : 0;
-    
-    const reason = points > 0 
+
+    const reason = points > 0
       ? `~${(effectiveRate * 100).toFixed(0)}% rent via $${monthlyBiltCash} Bilt Cash`
       : 'No Bilt Cash allocated for rent';
     
@@ -2401,9 +2420,11 @@ function getMultiplier(cardId, category, txnDate = null, merchantDesc = '') {
         const txnMonth = txnDateObj.getMonth();
         const txnYear = txnDateObj.getFullYear();
         const monthTxns = state.transactions.filter(t => {
-          if (!t.cardId || !t.cardId.startsWith('bilt-')) return false;
+          // Raw transactions lack cardId; look up via card mappings
+          const mappedCardId = state.cardMappings[t.last4];
+          if (!mappedCardId || !mappedCardId.startsWith('bilt-')) return false;
           const d = new Date(t.date);
-          return d.getMonth() === txnMonth && d.getFullYear() === txnYear && t.category !== 'rent';
+          return d.getMonth() === txnMonth && d.getFullYear() === txnYear;
         });
         const purchases = monthTxns.filter(t => t.amount < 0).reduce((sum, t) => sum + Math.abs(t.amount), 0);
         const refunds = monthTxns.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
@@ -4339,34 +4360,35 @@ function showCardConfigEditor(preselectedCardId = null) {
       const isFlexible = cfg.rewardOption !== 'housing-only';
       const isManualRent = cfg.rentDetection === 'manual';
       
-      // Get available years from transactions
-      const biltYears = [...new Set(state.transactions
+      // Get available years from processed transactions (raw transactions lack cardId)
+      const processedTxns = state.results?.processed || [];
+      const biltYears = [...new Set(processedTxns
         .filter(t => t.cardId && t.cardId.startsWith('bilt-'))
-        .map(t => new Date(t.date).getFullYear())
+        .map(t => getYearFromDateString(t.date))
       )].sort().reverse();
       const currentYear = new Date().getFullYear();
       const availableBiltYears = biltYears.length > 0 ? biltYears : [currentYear];
-      const selectedBiltYear = state.selectedYear || 'all';
-      
+      const selectedBiltYear = state.selectedBiltYear || 'all';
+
       // Calculate Bilt Cash earned (4% of non-rent Bilt card spend for selected year, post-Feb 7 2026)
       const bilt20Date = new Date(2026, 1, 7);
-      const biltNonRentSpend = state.transactions
+      const biltNonRentSpend = processedTxns
         .filter(t => {
           if (!t.cardId || !t.cardId.startsWith('bilt-')) return false;
           const d = new Date(t.date);
           if (d < bilt20Date) return false; // Only Bilt 2.0 earns Bilt Cash
-          if (selectedBiltYear !== 'all' && d.getFullYear() !== parseInt(selectedBiltYear)) return false;
+          if (selectedBiltYear !== 'all' && getYearFromDateString(t.date) !== parseInt(selectedBiltYear)) return false;
           return t.category !== 'rent' && t.amount < 0; // Purchases only
         })
         .reduce((sum, t) => sum + Math.abs(t.amount), 0);
-      
+
       // Also calculate refunds to subtract (positive amounts on Bilt cards)
-      const biltRefunds = state.transactions
+      const biltRefunds = processedTxns
         .filter(t => {
           if (!t.cardId || !t.cardId.startsWith('bilt-')) return false;
           const d = new Date(t.date);
           if (d < bilt20Date) return false;
-          if (selectedBiltYear !== 'all' && d.getFullYear() !== parseInt(selectedBiltYear)) return false;
+          if (selectedBiltYear !== 'all' && getYearFromDateString(t.date) !== parseInt(selectedBiltYear)) return false;
           return t.category !== 'rent' && t.amount > 0; // Refunds
         })
         .reduce((sum, t) => sum + t.amount, 0);
@@ -4780,7 +4802,7 @@ function showCardConfigEditor(preselectedCardId = null) {
       const biltYearSelect = document.getElementById('biltYearSelect');
       if (biltYearSelect) {
         biltYearSelect.addEventListener('change', () => {
-          state.selectedYear = biltYearSelect.value === 'all' ? 'all' : parseInt(biltYearSelect.value);
+          state.selectedBiltYear = biltYearSelect.value === 'all' ? 'all' : parseInt(biltYearSelect.value);
           renderCardConfig();
         });
       }
@@ -5122,12 +5144,11 @@ function renderView(view) {
         const biltCfg = state.biltConfig[c.cardId] || {};
         if (biltCfg.countBiltCashAsCredit !== false && biltCfg.rewardOption !== 'housing-only') {
           const bilt20Date = new Date(2026, 1, 7);
-          // Calculate Bilt Cash earned for this card's transactions in the display period
-          const biltTxns = state.transactions.filter(t => {
+          // Calculate Bilt Cash earned from processed transactions (which have cardId)
+          const biltTxns = filteredProcessed.filter(t => {
             if (t.cardId !== c.cardId) return false;
             const d = new Date(t.date);
             if (d < bilt20Date) return false; // Only Bilt 2.0 earns Bilt Cash
-            if (displayYear && d.getFullYear() !== displayYear) return false;
             return t.category !== 'rent';
           });
           const purchases = biltTxns.filter(t => t.amount < 0).reduce((sum, t) => sum + Math.abs(t.amount), 0);
@@ -5564,11 +5585,24 @@ function renderView(view) {
         <div style="overflow-x:auto;">
           <table>
             <thead><tr>
-              <th>Date</th><th>Merchant</th><th>Card</th><th>Category</th>
-              <th class="text-right">Amount</th>
-              <th class="text-right" title="Points multiplier for this category">Multi</th>
-              <th class="text-right" title="Points earned (negative for refunds/credits)">Points</th>
-              <th title="How the category/multiplier was determined">Reason</th>
+              ${(() => {
+                const ss = state.txnSortState;
+                const cols = [
+                  { key: 'date', label: 'Date', cls: '' },
+                  { key: 'merchant', label: 'Merchant', cls: '' },
+                  { key: 'card', label: 'Card', cls: '' },
+                  { key: 'category', label: 'Category', cls: '' },
+                  { key: 'amount', label: 'Amount', cls: ' class="text-right"' },
+                  { key: 'multiplier', label: 'Multi', cls: ' class="text-right"', title: 'Points multiplier for this category' },
+                  { key: 'points', label: 'Points', cls: ' class="text-right"', title: 'Points earned (negative for refunds/credits)' },
+                  { key: 'reason', label: 'Reason', cls: '', title: 'How the category/multiplier was determined' }
+                ];
+                return cols.map(c => {
+                  const arrow = ss.column === c.key ? (ss.direction === 'asc' ? ' ▲' : ' ▼') : '';
+                  const titleAttr = c.title ? ` title="${c.title}"` : '';
+                  return `<th${c.cls} data-sort="${c.key}"${titleAttr} style="cursor:pointer;user-select:none;white-space:nowrap;">${c.label}${arrow}</th>`;
+                }).join('');
+              })()}
             </tr></thead>
             <tbody id="transactionsBody"></tbody>
           </table>
@@ -5611,7 +5645,7 @@ function renderView(view) {
       const needsReview = document.getElementById('filterNeedsReview').checked;
       const merchantSearch = (document.getElementById('filterMerchant').value || '').toLowerCase().trim();
 
-      let txns = [...r.processed].sort((a, b) => new Date(b.date) - new Date(a.date));
+      let txns = [...r.processed];
 
       // Apply year filter
       if (yearFilter) {
@@ -5639,7 +5673,49 @@ function renderView(view) {
       }
       if (creditsOnly) txns = txns.filter(t => t.isCredit);
       if (needsReview) txns = txns.filter(t => !t.isPayment && t.confidence < CONFIDENCE_THRESHOLD);
-      
+
+      // Sort filtered transactions
+      const sort = state.txnSortState;
+      const dir = sort.direction === 'asc' ? 1 : -1;
+
+      function compareDates(a, b) {
+        return new Date(a.date) - new Date(b.date);
+      }
+      function compareMerchants(a, b) {
+        return (a.merchant || '').localeCompare(b.merchant || '');
+      }
+      function compareStrings(keyFn) {
+        return (a, b) => (keyFn(a) || '').localeCompare(keyFn(b) || '');
+      }
+      function compareNumbers(keyFn) {
+        return (a, b) => (keyFn(a) || 0) - (keyFn(b) || 0);
+      }
+
+      const primaryComparators = {
+        date: compareDates,
+        merchant: compareMerchants,
+        card: compareStrings(t => t.cardName),
+        category: compareStrings(t => t.category),
+        amount: compareNumbers(t => Math.abs(t.amount)),
+        multiplier: compareNumbers(t => t.multiplier),
+        points: compareNumbers(t => t.points),
+        reason: compareStrings(t => t.reason)
+      };
+
+      const primaryCmp = primaryComparators[sort.column] || compareDates;
+
+      txns.sort((a, b) => {
+        const primary = primaryCmp(a, b) * dir;
+        if (primary !== 0) return primary;
+        // Secondary sort: Date primary → Merchant asc; all others → Date desc, then Merchant asc
+        if (sort.column === 'date') {
+          return compareMerchants(a, b);
+        }
+        const byDate = compareDates(a, b) * -1; // desc
+        if (byDate !== 0) return byDate;
+        return compareMerchants(a, b);
+      });
+
       // Update top metrics based on filtered transactions
       const filteredTotals = txns.reduce((acc, t) => {
         if (!t.isPayment) {
@@ -5894,6 +5970,32 @@ function renderView(view) {
       const pageSelect = document.getElementById('txnPage');
       if (pageSelect) pageSelect.value = '1';
       renderTransactions();
+    });
+
+    // Column sort click handlers
+    document.querySelectorAll('thead th[data-sort]').forEach(th => {
+      th.addEventListener('click', () => {
+        const col = th.dataset.sort;
+        const cur = state.txnSortState;
+        if (cur.column === col) {
+          cur.direction = cur.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+          // Default to desc for numeric / date, asc for text
+          cur.column = col;
+          cur.direction = (col === 'date' || col === 'amount' || col === 'multiplier' || col === 'points') ? 'desc' : 'asc';
+        }
+        // Preserve current filter state across re-render
+        state.pendingFilterRestore = {
+          year: document.getElementById('filterYear')?.value || '',
+          month: document.getElementById('filterMonth')?.value || '',
+          card: document.getElementById('filterCard')?.value || '',
+          category: document.getElementById('filterCategory')?.value || '',
+          creditsOnly: document.getElementById('filterCreditsOnly')?.checked || false,
+          needsReview: document.getElementById('filterNeedsReview')?.checked || false,
+          merchant: document.getElementById('filterMerchant')?.value || ''
+        };
+        renderView('transactions');
+      });
     });
   }
 }
@@ -6491,7 +6593,7 @@ async function handleFile(file) {
       }
       if (backup.customPointValues) {
         state.customPointValues = backup.customPointValues;
-        safeLocalStorageSet('ccTracker_customPointValues', backup.customPointValues);
+        safeLocalStorageSet('ccTracker_pointValues', backup.customPointValues);
       }
       if (backup.creditOverrides) {
         state.creditOverrides = backup.creditOverrides;
@@ -7934,11 +8036,47 @@ document.addEventListener('DOMContentLoaded', async () => {
       safeLocalStorageSet('ccTracker_cffCategories', state.cffCategories);
     }
     
-    // Stay on config page, just reprocess in background
-    await runProcessing();
+    // Save Bilt-specific config from the DOM (matches pattern of other card-specific saves)
+    const card = CARDS[cardId];
+    if (card?.isBilt) {
+      if (!state.biltConfig[cardId]) state.biltConfig[cardId] = {};
+      const cfg = state.biltConfig[cardId];
+      const rewardRadio = document.querySelector(`.bilt-reward-option[data-card="${cardId}"]:checked`);
+      if (rewardRadio) cfg.rewardOption = rewardRadio.value;
+      const rentRadio = document.querySelector(`.bilt-rent-detection[data-card="${cardId}"]:checked`);
+      if (rentRadio) cfg.rentDetection = rentRadio.value;
+      const cashCheckbox = document.querySelector(`.bilt-cash-as-credit[data-card="${cardId}"]`);
+      if (cashCheckbox) cfg.countBiltCashAsCredit = cashCheckbox.checked;
+      const redemptionInput = document.querySelector(`.bilt-monthly-redemption[data-card="${cardId}"]`);
+      if (redemptionInput) cfg.monthlyBiltCashRedemption = parseFloat(redemptionInput.value) || 0;
+      const manualRentInput = document.querySelector(`.bilt-manual-rent[data-card="${cardId}"]`);
+      if (manualRentInput) cfg.manualRentAmount = parseFloat(manualRentInput.value) || 2000;
+      const rentDaySelect = document.querySelector(`.bilt-rent-day[data-card="${cardId}"]`);
+      if (rentDaySelect) cfg.manualRentDay = parseInt(rentDaySelect.value);
+      const keywordInput = document.querySelector(`.bilt-rent-keyword[data-card="${cardId}"]`);
+      if (keywordInput) cfg.rentMerchantKeyword = keywordInput.value.trim();
+      const bonusRadio = document.querySelector(`.bilt-bonus-cat[data-card="${cardId}"]:checked`);
+      if (bonusRadio) cfg.bonusCategory = bonusRadio.value;
+      safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
+    }
+
+    // Reprocess transactions without navigating away from config page
+    if (state.transactions.length > 0) {
+      showLoading(true, 'Processing transactions...');
+      try {
+        const results = await processTransactions(state.transactions);
+        showLoading(false);
+        state.results = results;
+        // Update available years for filters
+        const years = [...new Set(results.processed.map(t => getYearFromDateString(t.date)))].sort((a, b) => b - a);
+        state.availableYears = years;
+      } catch (e) {
+        showLoading(false);
+        alert('Error reprocessing: ' + e.message);
+      }
+    }
     // Re-render config but stay on the same card
-    const currentCardId = cardId; // Save before re-render
-    showCardConfigEditor(currentCardId);
+    showCardConfigEditor(cardId);
   });
   
   document.getElementById('backToSummary').addEventListener('click', () => {

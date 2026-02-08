@@ -23,10 +23,8 @@
     .btn { display: inline-flex; align-items: center; padding: 14px 28px; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.15s; border: none; font-family: inherit; text-decoration: none; }
     .btn-primary { background: #1c1917; color: #fff; }
     .btn-primary:hover { background: #292524; }
-    .btn-pro { background: #059669; color: #fff; }
-    .btn-pro:hover { background: #047857; }
-    .btn-demo { background: #fff; color: #1c1917; border: 1px solid #d6d3d1; }
-    .btn-demo:hover { background: #f5f5f4; }
+    .btn-secondary { background: #fff; color: #1c1917; border: 1px solid #d6d3d1; }
+    .btn-secondary:hover { background: #f5f5f4; }
     .cta-note { font-size: 13px; color: #78716c; margin-top: 16px; }
 
     /* How it works */
@@ -86,6 +84,27 @@
     .card-logos { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
     .card-chip { display: inline-block; background: #f5f5f4; border: 1px solid #e7e5e4; border-radius: 6px; padding: 6px 14px; font-size: 13px; font-weight: 500; color: #57534e; }
 
+    /* Pricing tiers */
+    .pricing-section { padding: 64px 0; }
+    .pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 48px; }
+    .pricing-card { background: #fff; border: 1px solid #e7e5e4; border-radius: 12px; padding: 32px 24px; display: flex; flex-direction: column; }
+    .pricing-card.featured { border-color: #1c1917; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .pricing-tier { font-size: 13px; font-weight: 600; color: #059669; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+    .pricing-name { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 4px; }
+    .pricing-price { font-family: 'IBM Plex Mono', monospace; font-size: 32px; font-weight: 700; margin-bottom: 4px; }
+    .pricing-price .period { font-size: 15px; font-weight: 400; color: #78716c; }
+    .pricing-value-prop { font-size: 14px; color: #57534e; font-style: italic; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e7e5e4; }
+    .pricing-features { list-style: none; padding: 0; margin: 0 0 20px; }
+    .pricing-features li { font-size: 14px; padding: 5px 0; padding-left: 22px; position: relative; color: #44403c; }
+    .pricing-features li::before { content: "✓"; position: absolute; left: 0; color: #059669; font-weight: 600; }
+    .pricing-qa { margin-bottom: 20px; flex-grow: 1; }
+    .pricing-can, .pricing-cant { font-size: 13px; margin-bottom: 8px; line-height: 1.5; }
+    .pricing-can strong, .pricing-cant strong { font-weight: 600; }
+    .pricing-can { color: #166534; }
+    .pricing-cant { color: #78716c; }
+    .pricing-target { font-size: 12px; color: #a8a29e; margin-bottom: 20px; }
+    .pricing-card .btn { width: 100%; justify-content: center; margin-top: auto; }
+
     /* Privacy callout */
     .privacy { text-align: center; padding: 48px 0; }
     .privacy-icon { font-size: 32px; margin-bottom: 12px; }
@@ -111,6 +130,7 @@
       .step:nth-child(even) .step-visual { order: 2; }
       .mock-metrics { grid-template-columns: repeat(3, 1fr); }
       .section-title { font-size: 24px; }
+      .pricing-grid { grid-template-columns: 1fr; max-width: 400px; margin-left: auto; margin-right: auto; }
       .bottom-cta h2 { font-size: 26px; }
       .btn { padding: 12px 22px; font-size: 15px; }
     }
@@ -125,9 +145,9 @@
       <h1>Know Which Cards Are Worth Keeping</h1>
       <p class="subtitle">Upload your credit card transactions, see exactly how much value each card earns you, and decide which annual fees are actually paying off.</p>
       <div class="cta-group">
-        <a href="app.html" class="btn btn-primary">Launch Tracker (Free)</a>
-        <a href="#pro" class="btn btn-pro">Buy Pro &mdash; $29</a>
-        <a href="demo.html" class="btn btn-demo">See a Demo</a>
+        <a href="app.html" class="btn btn-primary">Start Free</a>
+        <a href="demo.html" class="btn btn-secondary">See a Demo</a>
+        <a href="#pricing" class="btn btn-secondary">View Plans</a>
       </div>
       <p class="cta-note">No signup required. Works in your browser.</p>
     </div>
@@ -288,6 +308,70 @@
     </div>
   </section>
 
+  <!-- Pricing -->
+  <section class="pricing-section" id="pricing">
+    <div class="container">
+      <h2 class="section-title">Choose Your Plan</h2>
+      <p class="section-subtitle">Start free. Upgrade when you need a deeper answer.</p>
+
+      <div class="pricing-grid">
+
+        <!-- Free -->
+        <div class="pricing-card">
+          <div class="pricing-tier">Free</div>
+          <div class="pricing-price">$0</div>
+          <div class="pricing-value-prop">"See if tracking is useful"</div>
+          <ul class="pricing-features">
+            <li>Current month only</li>
+            <li>Up to 3 cards</li>
+          </ul>
+          <div class="pricing-qa">
+            <div class="pricing-can"><strong>Can answer:</strong> "Does this tool work?"</div>
+            <div class="pricing-cant"><strong>Can't answer:</strong> "Is my card worth keeping?"</div>
+          </div>
+          <div class="pricing-target">For: Credit card curious, considering a first annual-fee card</div>
+          <a href="app.html" class="btn btn-secondary">Start Free</a>
+        </div>
+
+        <!-- Decision Pass -->
+        <div class="pricing-card featured">
+          <div class="pricing-tier">Decision Pass</div>
+          <div class="pricing-price">$12 <span class="period">/ 7 days</span></div>
+          <div class="pricing-value-prop">"Answer your annual fee question"</div>
+          <ul class="pricing-features">
+            <li>Full year of data</li>
+            <li>Up to 3 cards</li>
+          </ul>
+          <div class="pricing-qa">
+            <div class="pricing-can"><strong>Can answer:</strong> "Is my card worth keeping?"</div>
+            <div class="pricing-cant"><strong>Can't answer:</strong> "What about my other cards?"</div>
+          </div>
+          <div class="pricing-target">For: New annual-fee card holders (1–3 cards)</div>
+          <a href="#" class="btn btn-primary">Get Decision Pass</a>
+        </div>
+
+        <!-- Pro -->
+        <div class="pricing-card">
+          <div class="pricing-tier">Pro</div>
+          <div class="pricing-price">$29 <span class="period">/ year</span></div>
+          <div class="pricing-value-prop">"Optimize your entire portfolio"</div>
+          <ul class="pricing-features">
+            <li>Full year of data</li>
+            <li>Unlimited cards</li>
+            <li>Unlimited uploads</li>
+            <li>Scenario calculator</li>
+          </ul>
+          <div class="pricing-qa">
+            <div class="pricing-can"><strong>Can answer:</strong> "How do I maximize value across all my cards?"</div>
+          </div>
+          <div class="pricing-target">For: Active churners (5+ cards)</div>
+          <a href="#" class="btn btn-primary">Get Pro</a>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
   <!-- Privacy -->
   <section class="privacy">
     <div class="container">
@@ -303,9 +387,9 @@
       <h2>Stop guessing. Start tracking.</h2>
       <p>Find out which cards are actually earning their annual fee.</p>
       <div class="cta-group">
-        <a href="app.html" class="btn btn-primary">Launch Tracker (Free)</a>
-        <a href="#pro" class="btn btn-pro">Buy Pro &mdash; $29</a>
-        <a href="demo.html" class="btn btn-demo">See a Demo</a>
+        <a href="app.html" class="btn btn-primary">Start Free</a>
+        <a href="demo.html" class="btn btn-secondary">See a Demo</a>
+        <a href="#pricing" class="btn btn-secondary">View Plans</a>
       </div>
     </div>
   </section>

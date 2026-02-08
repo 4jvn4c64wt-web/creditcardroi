@@ -90,19 +90,12 @@
     .pricing-card { background: #fff; border: 1px solid #e7e5e4; border-radius: 12px; padding: 32px 24px; display: flex; flex-direction: column; }
     .pricing-card.featured { border-color: #1c1917; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
     .pricing-tier { font-size: 13px; font-weight: 600; color: #059669; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
-    .pricing-name { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 4px; }
     .pricing-price { font-family: 'IBM Plex Mono', monospace; font-size: 32px; font-weight: 700; margin-bottom: 4px; }
     .pricing-price .period { font-size: 15px; font-weight: 400; color: #78716c; }
-    .pricing-value-prop { font-size: 14px; color: #57534e; font-style: italic; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e7e5e4; }
-    .pricing-features { list-style: none; padding: 0; margin: 0 0 20px; }
+    .pricing-headline { font-size: 16px; font-weight: 500; color: #57534e; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e7e5e4; }
+    .pricing-features { list-style: none; padding: 0; margin: 0 0 20px; flex-grow: 1; }
     .pricing-features li { font-size: 14px; padding: 5px 0; padding-left: 22px; position: relative; color: #44403c; }
     .pricing-features li::before { content: "✓"; position: absolute; left: 0; color: #059669; font-weight: 600; }
-    .pricing-qa { margin-bottom: 20px; flex-grow: 1; }
-    .pricing-can, .pricing-cant { font-size: 13px; margin-bottom: 8px; line-height: 1.5; }
-    .pricing-can strong, .pricing-cant strong { font-weight: 600; }
-    .pricing-can { color: #166534; }
-    .pricing-cant { color: #78716c; }
-    .pricing-target { font-size: 12px; color: #a8a29e; margin-bottom: 20px; }
     .pricing-card .btn { width: 100%; justify-content: center; margin-top: auto; }
 
     /* Privacy callout */
@@ -320,16 +313,12 @@
         <div class="pricing-card">
           <div class="pricing-tier">Free</div>
           <div class="pricing-price">$0</div>
-          <div class="pricing-value-prop">"See if tracking is useful"</div>
+          <div class="pricing-headline">Try it out</div>
           <ul class="pricing-features">
-            <li>Current month only</li>
+            <li>Current month's transactions</li>
             <li>Up to 3 cards</li>
+            <li>See how categorization works</li>
           </ul>
-          <div class="pricing-qa">
-            <div class="pricing-can"><strong>Can answer:</strong> "Does this tool work?"</div>
-            <div class="pricing-cant"><strong>Can't answer:</strong> "Is my card worth keeping?"</div>
-          </div>
-          <div class="pricing-target">For: Credit card curious, considering a first annual-fee card</div>
           <a href="app.html" class="btn btn-secondary">Start Free</a>
         </div>
 
@@ -337,34 +326,28 @@
         <div class="pricing-card featured">
           <div class="pricing-tier">Decision Pass</div>
           <div class="pricing-price">$12 <span class="period">/ 7 days</span></div>
-          <div class="pricing-value-prop">"Answer your annual fee question"</div>
+          <div class="pricing-headline">Make your annual fee decision</div>
           <ul class="pricing-features">
-            <li>Full year of data</li>
+            <li>Upload full year of transactions</li>
+            <li>Complete ROI analysis</li>
             <li>Up to 3 cards</li>
+            <li>Perfect for annual fee time</li>
           </ul>
-          <div class="pricing-qa">
-            <div class="pricing-can"><strong>Can answer:</strong> "Is my card worth keeping?"</div>
-            <div class="pricing-cant"><strong>Can't answer:</strong> "What about my other cards?"</div>
-          </div>
-          <div class="pricing-target">For: New annual-fee card holders (1–3 cards)</div>
           <a href="#" class="btn btn-primary">Get Decision Pass</a>
         </div>
 
         <!-- Pro -->
         <div class="pricing-card">
           <div class="pricing-tier">Pro</div>
-          <div class="pricing-price">$29 <span class="period">/ year</span></div>
-          <div class="pricing-value-prop">"Optimize your entire portfolio"</div>
+          <div class="pricing-price">$24 <span class="period">/ year</span></div>
+          <div class="pricing-headline">Track your whole portfolio</div>
           <ul class="pricing-features">
-            <li>Full year of data</li>
             <li>Unlimited cards</li>
-            <li>Unlimited uploads</li>
-            <li>Scenario calculator</li>
+            <li>Unlimited uploads year-round</li>
+            <li>Full historical analysis</li>
+            <li>Scenario calculator to optimize spending</li>
+            <li>Check before every annual fee</li>
           </ul>
-          <div class="pricing-qa">
-            <div class="pricing-can"><strong>Can answer:</strong> "How do I maximize value across all my cards?"</div>
-          </div>
-          <div class="pricing-target">For: Active churners (5+ cards)</div>
           <a href="#" class="btn btn-primary">Get Pro</a>
         </div>
 

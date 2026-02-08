@@ -157,8 +157,9 @@
               <th>Card</th>
               <th>Category</th>
               <th class="text-right">Amount</th>
+              <th class="text-right">Multi</th>
               <th class="text-right">Points</th>
-              <th class="text-right">Pts Value</th>
+              <th>Reason</th>
             </tr></thead>
             <tbody id="txnBody"></tbody>
           </table>
@@ -490,6 +491,28 @@ function fmtNum(n) {
   return Math.round(n).toLocaleString('en-US');
 }
 
+function getReason(t, card) {
+  if (t.isCredit) return 'Statement credit: ' + t.creditName;
+
+  const catLabels = {
+    'dining': 'Dining',
+    'grocery': 'Grocery',
+    'flights': 'Flights (direct)',
+    'hotels': 'Hotels (direct)',
+    'chase-travel': 'Chase Travel portal',
+    'lyft': 'Lyft partnership',
+    'drugstore': 'Drugstore',
+    'quarterly': 'Quarterly 5% category',
+    'amazon': 'Amazon purchase',
+    'whole-foods': 'Whole Foods',
+    'gas': 'Gas station',
+    'transit': 'Transit',
+    'other': 'Base rate'
+  };
+  const catLabel = catLabels[t.category] || t.category;
+  return 'Known merchant: ' + catLabel + ' \u2192 ' + t.mult + 'x';
+}
+
 // =========================================================================
 // RENDER
 // =========================================================================
@@ -634,19 +657,36 @@ function renderTransactions() {
     const card = DEMO_CARDS[t.card];
     const isCredit = t.isCredit;
     const amount = t.amount;
-    const amountClass = amount >= 0 ? 'positive-amount' : '';
-    const points = isCredit ? '' : fmtNum(Math.round(Math.abs(amount) * t.mult));
-    const ptsValue = isCredit ? '' : fmtPrecise(Math.round(Math.abs(amount) * t.mult) * card.pointValue);
-    const catDisplay = isCredit ? 'Credit' : t.category;
+
+    // Amount color: green for credits, red for charges (matching app)
+    let amountColor = '#b91c1c';
+    let amountWeight = '500';
+    if (isCredit) {
+      amountColor = '#059669';
+      amountWeight = '600';
+    }
+
+    // Multiplier display (matching app)
+    const multiDisplay = isCredit ? '\u2014' : t.mult + 'x';
+
+    // Points display
+    const points = isCredit ? '\u2014' : fmtNum(Math.round(Math.abs(amount) * t.mult));
+
+    // Category display
+    const catDisplay = isCredit ? 'credit' : t.category;
+
+    // Reason (matching app's "Reason" column)
+    const reason = getReason(t, card);
 
     return `<tr>
-      <td class="mono" style="white-space:nowrap;">${t.date}</td>
-      <td>${t.merchant}</td>
+      <td style="white-space:nowrap;font-size:12px;">${t.date}</td>
+      <td style="max-width:180px;"><div style="font-weight:500;">${t.merchant}</div></td>
       <td style="font-size:12px;">${card.name}</td>
       <td><span class="badge ${isCredit ? 'badge-green' : 'badge-gray'}" style="text-transform:capitalize;">${catDisplay}</span></td>
-      <td class="text-right mono ${amountClass}">${amount >= 0 ? '+' : '-'}${fmtPrecise(Math.abs(amount))}</td>
+      <td class="text-right mono" style="color:${amountColor};font-weight:${amountWeight};">${isCredit ? '+' : '-'}${fmtPrecise(Math.abs(amount))}</td>
+      <td class="text-right mono">${multiDisplay}</td>
       <td class="text-right mono">${points}</td>
-      <td class="text-right mono">${ptsValue}</td>
+      <td style="font-size:11px;color:#78716c;max-width:180px;">${reason}</td>
     </tr>`;
   }).join('');
 

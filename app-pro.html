@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; form-action 'none'; base-uri 'self';">
-  <title>Credit Card Value Tracker</title>
+  <title>Credit Card Value Tracker — Pro</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💳</text></svg>">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
@@ -110,7 +110,7 @@
 <body>
   <div class="container">
     <div class="header">
-      <h1>Credit Card Value Tracker <span style="display:inline-block;font-size:11px;font-weight:600;background:#f59e0b;color:#fff;padding:2px 8px;border-radius:9999px;vertical-align:middle;letter-spacing:0.04em;position:relative;top:-2px;">BETA</span></h1>
+      <h1>Credit Card Value Tracker <span style="display:inline-block;font-size:11px;font-weight:600;background:#1c1917;color:#fff;padding:2px 8px;border-radius:9999px;vertical-align:middle;letter-spacing:0.04em;position:relative;top:-2px;">PRO</span></h1>
       <p>Upload your transaction CSV to calculate net value per card</p>
       <p style="font-size:12px;color:#059669;margin-top:8px;">🔒 Your data stays on your device. Nothing is sent to any server.</p>
     </div>
@@ -244,7 +244,6 @@
           <span id="transactionCount" style="font-size:13px;color:#78716c;"></span>
         </div>
         <div class="controls-right">
-          <button class="btn btn-secondary" id="upgradeBtn" style="color:#059669;border-color:#bbf7d0;">Upgrade</button>
           <button class="btn btn-secondary" id="helpBtn">❓ Help</button>
           <button class="btn btn-secondary" id="configBtn">⚙️ Card Mapping</button>
           <button class="btn btn-secondary" id="cardConfigBtn">📋 Card Config</button>
@@ -367,118 +366,6 @@
       </div>
     </div>
     
-    <!-- Upgrade Modal -->
-    <div id="upgradeModal" class="loading-overlay hidden" style="cursor:pointer;">
-      <div class="loading-modal" style="cursor:default;max-width:620px;text-align:left;" onclick="event.stopPropagation()">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-          <h3 style="font-size:18px;font-weight:600;margin:0;">Upgrade Your Tracker</h3>
-          <button id="closeUpgradeModal" style="background:none;border:none;font-size:20px;cursor:pointer;color:#78716c;">&times;</button>
-        </div>
-        <p style="font-size:14px;color:#57534e;margin-bottom:20px;">
-          Choose the upgrade that fits your needs:
-        </p>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-          <!-- Decision Pass Option -->
-          <div id="upgradeChoiceDP" style="border:2px solid #e7e5e4;border-radius:12px;padding:20px;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.borderColor='#059669';this.style.background='#ecfdf5'" onmouseout="this.style.borderColor='#e7e5e4';this.style.background='white'">
-            <div style="font-size:13px;font-weight:600;color:#059669;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Decision Pass</div>
-            <div style="font-family:'IBM Plex Mono',monospace;font-size:24px;font-weight:700;margin-bottom:8px;">$12 <span style="font-size:13px;font-weight:400;color:#78716c;">one-time</span></div>
-            <div style="font-size:13px;color:#57534e;line-height:1.5;margin-bottom:12px;">
-              Upgrade one card to 12 months of data. Perfect for annual fee decisions.
-            </div>
-            <ul style="font-size:12px;color:#44403c;list-style:none;padding:0;margin:0;">
-              <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span>1 card, 12 months of data</li>
-              <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span>7 days of access</li>
-              <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span>Works inside your free app</li>
-            </ul>
-          </div>
-          <!-- Pro Option -->
-          <div id="upgradeChoicePro" style="border:2px solid #e7e5e4;border-radius:12px;padding:20px;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.borderColor='#1c1917';this.style.background='#fafaf9'" onmouseout="this.style.borderColor='#e7e5e4';this.style.background='white'">
-            <div style="font-size:13px;font-weight:600;color:#1c1917;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Pro</div>
-            <div style="font-family:'IBM Plex Mono',monospace;font-size:24px;font-weight:700;margin-bottom:8px;">$24 <span style="font-size:13px;font-weight:400;color:#78716c;">/ year</span></div>
-            <div style="font-size:13px;color:#57534e;line-height:1.5;margin-bottom:12px;">
-              Unlimited cards, unlimited history, plus advanced features.
-            </div>
-            <ul style="font-size:12px;color:#44403c;list-style:none;padding:0;margin:0;">
-              <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span>All cards, all time</li>
-              <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span>Unlimited access</li>
-              <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span>Separate Pro experience</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Decision Pass Info Modal -->
-    <div id="dpInfoModal" class="loading-overlay hidden" style="cursor:pointer;">
-      <div class="loading-modal" style="cursor:default;max-width:500px;text-align:left;" onclick="event.stopPropagation()">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-          <h3 style="font-size:18px;font-weight:600;margin:0;">Decision Pass</h3>
-          <button id="closeDPInfoModal" style="background:none;border:none;font-size:20px;cursor:pointer;color:#78716c;">&times;</button>
-        </div>
-        <div style="background:#ecfdf5;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin-bottom:16px;">
-          <div style="font-weight:600;color:#059669;margin-bottom:8px;">How it works</div>
-          <div style="font-size:13px;color:#057a55;line-height:1.6;">
-            Decision Pass plugs directly into your free tracker. Pick one card and its transaction data extends from 3 months to a full year — giving you the complete picture before your annual fee renewal.
-          </div>
-        </div>
-        <div style="background:#f5f5f4;border-radius:8px;padding:16px;margin-bottom:16px;">
-          <div style="font-size:13px;color:#57534e;line-height:1.6;">
-            <strong>Not a new app.</strong> Everything stays the same — your data, your settings, your cards. The only difference is one card now shows 12 months instead of 3. You'll see a green <span style="display:inline-block;font-size:9px;font-weight:600;padding:1px 4px;border-radius:3px;background:#059669;color:#fff;">DP</span> badge next to the upgraded card.
-          </div>
-        </div>
-        <div style="text-align:center;margin-bottom:16px;">
-          <a id="dpGumroadLink" href="#" target="_blank" class="btn btn-primary" style="width:100%;justify-content:center;">Buy Decision Pass — $12</a>
-        </div>
-        <p style="font-size:11px;color:#a8a29e;text-align:center;">
-          After purchase, you'll get a license key. Come back here to activate it.
-        </p>
-        <div style="border-top:1px solid #e7e5e4;margin-top:16px;padding-top:16px;">
-          <div style="font-size:13px;font-weight:500;margin-bottom:8px;">Already have a key?</div>
-          <div style="display:flex;gap:8px;">
-            <input type="text" id="dpKeyInput" placeholder="Paste your license key" class="form-select" style="flex:1;">
-            <button class="btn btn-primary" id="dpActivateBtn">Activate</button>
-          </div>
-          <div id="dpKeyError" style="font-size:12px;color:#dc2626;margin-top:6px;display:none;"></div>
-          <!-- Card selector (shown after key is entered) -->
-          <div id="dpCardSelector" style="display:none;margin-top:12px;">
-            <div style="font-size:13px;font-weight:500;margin-bottom:6px;">Which card should this pass apply to?</div>
-            <select id="dpCardSelect" class="form-select" style="width:100%;margin-bottom:8px;"></select>
-            <button class="btn btn-primary" id="dpConfirmActivation" style="width:100%;justify-content:center;">Activate Decision Pass</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Pro Info Modal -->
-    <div id="proInfoModal" class="loading-overlay hidden" style="cursor:pointer;">
-      <div class="loading-modal" style="cursor:default;max-width:500px;text-align:left;" onclick="event.stopPropagation()">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-          <h3 style="font-size:18px;font-weight:600;margin:0;">Pro</h3>
-          <button id="closeProInfoModal" style="background:none;border:none;font-size:20px;cursor:pointer;color:#78716c;">&times;</button>
-        </div>
-        <div style="background:#fafaf9;border:1px solid #e7e5e4;border-radius:8px;padding:16px;margin-bottom:16px;">
-          <div style="font-weight:600;margin-bottom:8px;">Everything, unlocked</div>
-          <div style="font-size:13px;color:#57534e;line-height:1.6;">
-            Pro is a separate experience with no data restrictions, unlimited cards, unlimited transaction history, and advanced power-user features.
-          </div>
-        </div>
-        <div style="text-align:center;margin-bottom:16px;">
-          <a id="proGumroadLink" href="#" target="_blank" class="btn btn-primary" style="width:100%;justify-content:center;">Get Pro — $24/year</a>
-        </div>
-        <p style="font-size:11px;color:#a8a29e;text-align:center;">
-          After purchase, you'll get a license key. Come back here to activate it.
-        </p>
-        <div style="border-top:1px solid #e7e5e4;margin-top:16px;padding-top:16px;">
-          <div style="font-size:13px;font-weight:500;margin-bottom:8px;">Already have a key?</div>
-          <div style="display:flex;gap:8px;">
-            <input type="text" id="proKeyInput" placeholder="Paste your license key" class="form-select" style="flex:1;">
-            <button class="btn btn-primary" id="proActivateBtn">Activate</button>
-          </div>
-          <div id="proKeyError" style="font-size:12px;color:#dc2626;margin-top:6px;display:none;"></div>
-        </div>
-      </div>
-    </div>
-
     <!-- Tour Elements -->
     <div id="tourOverlay" class="tour-overlay hidden">
       <div class="tour-overlay-bg"></div>
@@ -540,6 +427,35 @@
 <script src="cards/capital-one-venture-x.js"></script>
 
 <script>
+// =============================================================================
+// PRO TIER VALIDATION — must run before anything else
+// =============================================================================
+window.TIER_CONFIG = 'pro';
+
+(function validateProAccess() {
+  try {
+    const raw = localStorage.getItem('ccTracker_proAccess');
+    if (!raw) {
+      window.location.href = 'app.html';
+      return;
+    }
+    const proAccess = JSON.parse(raw);
+    if (!proAccess || !proAccess.activatedAt) {
+      window.location.href = 'app.html';
+      return;
+    }
+    const elapsed = Date.now() - proAccess.activatedAt;
+    if (elapsed > 365 * 24 * 60 * 60 * 1000) {
+      // Pro expired — redirect to Free
+      window.location.href = 'app.html';
+      return;
+    }
+  } catch (e) {
+    window.location.href = 'app.html';
+    return;
+  }
+})();
+
 // =============================================================================
 // UTILITY FUNCTIONS (Commercial-Grade Infrastructure)
 // =============================================================================
@@ -3497,8 +3413,8 @@ function showResults(results, isNewUpload = false) {
     <strong>Stats:</strong> ${Object.keys(state.merchantCache).length} merchants cached •
     ${results.cards.length} cards tracked${lowConfBadge}
     <div style="margin-top:10px;padding-top:10px;border-top:1px dashed #d6d3d1;">
-      <span style="background:#f59e0b;color:#fff;font-size:10px;font-weight:600;padding:1px 6px;border-radius:9999px;letter-spacing:0.04em;">BETA</span>
-      <span style="margin-left:6px;">This tool is in beta — features may change and bugs may exist. Feedback welcome: <span id="feedbackEmail" style="color:#2563eb;cursor:pointer;text-decoration:underline;" title="Click to send feedback"></span></span>
+      <span style="background:#1c1917;color:#fff;font-size:10px;font-weight:600;padding:1px 6px;border-radius:9999px;letter-spacing:0.04em;">PRO</span>
+      <span style="margin-left:6px;">Feedback welcome: <span id="feedbackEmail" style="color:#2563eb;cursor:pointer;text-decoration:underline;" title="Click to send feedback"></span></span>
     </div>
   `;
   initFeedbackEmail();
@@ -3539,8 +3455,8 @@ function renderView(view) {
       filteredProcessed = r.processed.filter(t => getYearFromDate(t.date) === displayYear);
     }
 
-    // Apply per-card tier date filtering (3 months free, 12 months with Decision Pass)
-    const hasAnyActiveDP = getActiveDecisionPasses().length > 0;
+    // Pro: no tier date filtering needed — all data shown
+    const hasAnyActiveDP = false;
     filteredProcessed = applyTierDateFiltering(filteredProcessed, state.dpComparisonMode);
     
     // Recalculate totals for filtered transactions
@@ -3896,12 +3812,8 @@ function renderView(view) {
                     style="display:inline-block;font-size:9px;font-weight:600;padding:1px 4px;border-radius:3px;background:${isCardYearActive ? '#4b6bfb' : '#e7e5e4'};color:${isCardYearActive ? '#fff' : '#a8a29e'};cursor:pointer;margin-left:6px;vertical-align:middle;flex-shrink:0;">CY</span>
                 ` : '';
 
-                // Decision Pass indicator - shows when this card has an active Decision Pass
-                const hasDPActive = hasActiveDecisionPass(c.cardId);
-                const dpBadgeHtml = hasDPActive ? `
-                  <span class="tooltip" data-tooltip="Decision Pass active — showing 12 months of data"
-                    style="display:inline-block;font-size:9px;font-weight:600;padding:1px 4px;border-radius:3px;background:#059669;color:#fff;margin-left:4px;vertical-align:middle;flex-shrink:0;">DP</span>
-                ` : '';
+                // Pro: no Decision Pass badges needed — everything is unlocked
+                const dpBadgeHtml = '';
 
                 return `<tr data-row-id="${rowId}" style="${cardYearRowStyle}">
                   <td style="white-space:nowrap;"><span style="display:inline-flex;align-items:center;">${escapeHtml(c.cardName)}${toggleHtml}${dpBadgeHtml}</span></td>
@@ -5764,138 +5676,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     tab.addEventListener('click', () => renderView(tab.dataset.view));
   });
   
-  // =============================================================================
-  // UPGRADE / TIER MODAL HANDLERS
-  // =============================================================================
-
-  // Upgrade button opens the tier chooser
-  document.getElementById('upgradeBtn').addEventListener('click', () => {
-    document.getElementById('upgradeModal').classList.remove('hidden');
-  });
-
-  // Close upgrade modal
-  document.getElementById('closeUpgradeModal').addEventListener('click', () => {
-    document.getElementById('upgradeModal').classList.add('hidden');
-  });
-  document.getElementById('upgradeModal').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
-  });
-
-  // Decision Pass choice → show DP info modal
-  document.getElementById('upgradeChoiceDP').addEventListener('click', () => {
-    document.getElementById('upgradeModal').classList.add('hidden');
-    document.getElementById('dpInfoModal').classList.remove('hidden');
-    // Reset DP modal state
-    document.getElementById('dpKeyInput').value = '';
-    document.getElementById('dpKeyError').style.display = 'none';
-    document.getElementById('dpCardSelector').style.display = 'none';
-  });
-
-  // Pro choice → show Pro info modal
-  document.getElementById('upgradeChoicePro').addEventListener('click', () => {
-    document.getElementById('upgradeModal').classList.add('hidden');
-    document.getElementById('proInfoModal').classList.remove('hidden');
-    // Reset Pro modal state
-    document.getElementById('proKeyInput').value = '';
-    document.getElementById('proKeyError').style.display = 'none';
-  });
-
-  // Close DP info modal
-  document.getElementById('closeDPInfoModal').addEventListener('click', () => {
-    document.getElementById('dpInfoModal').classList.add('hidden');
-  });
-  document.getElementById('dpInfoModal').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
-  });
-
-  // Close Pro info modal
-  document.getElementById('closeProInfoModal').addEventListener('click', () => {
-    document.getElementById('proInfoModal').classList.add('hidden');
-  });
-  document.getElementById('proInfoModal').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
-  });
-
-  // Decision Pass key activation - Step 1: validate key format and show card selector
-  document.getElementById('dpActivateBtn').addEventListener('click', () => {
-    const key = document.getElementById('dpKeyInput').value.trim();
-    const errorEl = document.getElementById('dpKeyError');
-
-    if (!isValidLicenseKeyFormat(key)) {
-      errorEl.textContent = 'Invalid key format. Please paste the license key from your purchase confirmation.';
-      errorEl.style.display = 'block';
-      return;
-    }
-
-    // Check if key is already used
-    if (state.decisionPasses.some(dp => dp.key === key)) {
-      errorEl.textContent = 'This key has already been activated.';
-      errorEl.style.display = 'block';
-      return;
-    }
-
-    errorEl.style.display = 'none';
-
-    // Populate card selector with available cards
-    const cardSelect = document.getElementById('dpCardSelect');
-    cardSelect.innerHTML = '<option value="">Select a card...</option>';
-    Object.entries(CARDS).forEach(([id, card]) => {
-      if (id === 'skip') return;
-      const alreadyHasDP = hasActiveDecisionPass(id);
-      const label = alreadyHasDP ? `${card.name} (already upgraded)` : card.name;
-      cardSelect.innerHTML += `<option value="${id}" ${alreadyHasDP ? 'disabled' : ''}>${label}</option>`;
-    });
-
-    document.getElementById('dpCardSelector').style.display = 'block';
-  });
-
-  // Decision Pass key activation - Step 2: confirm card selection and activate
-  document.getElementById('dpConfirmActivation').addEventListener('click', () => {
-    const key = document.getElementById('dpKeyInput').value.trim();
-    const cardId = document.getElementById('dpCardSelect').value;
-    const errorEl = document.getElementById('dpKeyError');
-
-    if (!cardId) {
-      errorEl.textContent = 'Please select a card to apply the Decision Pass to.';
-      errorEl.style.display = 'block';
-      return;
-    }
-
-    const success = activateDecisionPass(key, cardId);
-    if (success) {
-      document.getElementById('dpInfoModal').classList.add('hidden');
-      // Re-render to show the upgrade
-      if (state.results) {
-        renderView(state.activeView);
-      }
-    } else {
-      errorEl.textContent = 'Activation failed. Please check your key and try again.';
-      errorEl.style.display = 'block';
-    }
-  });
-
-  // Pro key activation
-  document.getElementById('proActivateBtn').addEventListener('click', () => {
-    const key = document.getElementById('proKeyInput').value.trim();
-    const errorEl = document.getElementById('proKeyError');
-
-    if (!isValidLicenseKeyFormat(key)) {
-      errorEl.textContent = 'Invalid key format. Please paste the license key from your purchase confirmation.';
-      errorEl.style.display = 'block';
-      return;
-    }
-
-    const success = activateProAccess(key);
-    if (success) {
-      document.getElementById('proInfoModal').classList.add('hidden');
-      // Redirect to Pro experience
-      window.location.href = 'app-pro.html';
-    } else {
-      errorEl.textContent = 'Activation failed. Please check your key and try again.';
-      errorEl.style.display = 'block';
-    }
-  });
-
   // Initialize tutorial system (help, tour, guidance - defined in tutorial.js)
   initTutorial();
 });

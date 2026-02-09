@@ -406,6 +406,22 @@
     </div>
   </div>
 
+<!-- Card definition files (each registers into window.CardTracker.cards) -->
+<script src="cards/skip.js"></script>
+<script src="cards/amazon-prime.js"></script>
+<script src="cards/amex-platinum.js"></script>
+<script src="cards/amex-gold.js"></script>
+<script src="cards/bilt-blue.js"></script>
+<script src="cards/bilt-obsidian.js"></script>
+<script src="cards/bilt-palladium.js"></script>
+<script src="cards/chase-freedom-flex.js"></script>
+<script src="cards/chase-freedom-unlimited.js"></script>
+<script src="cards/chase-sapphire-reserve.js"></script>
+<script src="cards/chase-sapphire-preferred.js"></script>
+<script src="cards/us-bank-cash-plus.js"></script>
+<script src="cards/capital-one-venture-rewards.js"></script>
+<script src="cards/capital-one-venture-x.js"></script>
+
 <script>
 // =============================================================================
 // UTILITY FUNCTIONS (Commercial-Grade Infrastructure)
@@ -601,267 +617,11 @@ function generateTransactionId(date, merchant, amount, last4, existingIds = new 
 }
 
 // =============================================================================
-// CARD DEFINITIONS (Single Source of Truth)
+// CARD DEFINITIONS (loaded from individual card files via CardTracker namespace)
 // =============================================================================
 const SKIP_ACCOUNTS = ['checking', 'savings', 'sofi', 'bank', 'venmo'];
 
-const CARDS = {
-  'skip': {
-    name: "Skip / Don't Track",
-    shortName: 'Skipped',
-    annualFee: 0,
-    pointValue: 0,
-    multipliers: {},
-    baseRate: 0,
-    credits: [],
-    categories: [] // Skip card has no categories
-  },
-  'amazon-prime': {
-    name: 'Amazon Prime Rewards Visa',
-    shortName: 'Amazon Prime',
-    annualFee: 0,
-    pointValue: 0.01,
-    multipliers: { 'amazon': 5, 'whole-foods': 5, 'gas': 2, 'transit': 2, 'dining': 2 },
-    baseRate: 1,
-    credits: [],
-    categories: ['amazon', 'whole-foods', 'gas', 'transit', 'dining', 'other']
-  },
-  'amex-platinum': {
-    name: 'American Express Platinum',
-    shortName: 'Amex Plat',
-    annualFee: 895,
-    pointValue: 0.02,
-    multipliers: { 'flights-direct': 5, 'hotels-direct': 5, 'amex-travel': 5 },
-    baseRate: 1,
-    credits: [
-      { name: 'Hotel Credit', amount: 600, keywords: ['FINE HOTELS', 'FHR', 'HOTEL COLLECTION'], manual: false },
-      { name: 'Resy Dining', amount: 400, keywords: ['RESY'], manual: false },
-      { name: 'Lululemon', amount: 300, keywords: ['LULULEMON'], manual: false },
-      { name: 'Digital Entertainment', amount: 300, keywords: ['DIGITAL ENTERTAINMENT', 'ENTERTAINMENT CREDIT'], manual: false },
-      { name: 'Airline Incidental', amount: 200, keywords: ['AIRLINE FEE', 'AIRLINE CREDIT'], manual: false },
-      { name: 'Uber One Credit', amount: 96, keywords: ['UBER ONE', 'PLATINUM UBER ONE'], manual: false },
-      { name: 'Uber Cash', amount: 200, keywords: [], manual: true },
-      { name: 'CLEAR+', amount: 209, keywords: ['CLEAR', 'CLEARME', 'CLEAR PLUS', 'AMEX CLEAR'], manual: false },
-      { name: 'Saks', amount: 100, keywords: ['SAKS'], manual: false },
-      { name: 'Equinox', amount: 300, keywords: ['EQUINOX'], manual: false },
-      { name: 'Global Entry/TSA PreCheck', amount: 120, keywords: ['GLOBAL ENTRY', 'TSA PRECHECK', 'KNOWN TRAVELER', 'TRUSTED TRAVELER'], manual: false },
-    ],
-    categories: ['flights-direct', 'hotels-direct', 'amex-travel', 'other']
-  },
-  'amex-gold': {
-    name: 'American Express Gold',
-    shortName: 'Amex Gold',
-    annualFee: 325,
-    pointValue: 0.02,
-    multipliers: { 'dining': 4, 'grocery': 4, 'flights-direct': 3, 'amex-travel': 3, 'hotels-amex-travel': 2 },
-    baseRate: 1,
-    credits: [
-      { name: 'Uber Cash', amount: 120, keywords: [], manual: true },
-      { name: 'Dining Credit', amount: 120, keywords: ['DINING CREDIT', 'GRUBHUB', 'SEAMLESS', 'CHEESECAKE FACTORY', 'GOLDBELLY', 'WINE.COM', 'MILKBAR'], manual: false },
-      { name: 'Resy Credit', amount: 100, keywords: ['RESY'], manual: false },
-      { name: 'Dunkin Credit', amount: 84, keywords: ['DUNKIN'], manual: false },
-    ],
-    categories: ['dining', 'grocery', 'flights-direct', 'amex-travel', 'hotels-amex-travel', 'other']
-  },
-  'bilt-blue': {
-    name: 'Bilt Blue',
-    shortName: 'Bilt Blue',
-    annualFee: 0,
-    pointValue: 0.022,
-    // Bilt 2.0 (Feb 7, 2026+): 1x on ALL everyday spending, NO bonus categories
-    multipliers: {},
-    baseRate: 1,
-    credits: [],
-    categories: ['rent', 'other'],
-    isBilt: true,
-    // Legacy (before Feb 7, 2026): 3x dining, 2x travel, 1x everything else (including rent)
-    // Note: rent is 1x (same as baseRate) - no special rent multiplier before 2.0
-    legacy: {
-      multipliers: { 'dining': 3, 'travel': 2 },
-      baseRate: 1,
-      categories: ['dining', 'travel', 'rent', 'other']
-    }
-  },
-  'bilt-obsidian': {
-    name: 'Bilt Obsidian',
-    shortName: 'Bilt Obsidian',
-    annualFee: 95,
-    pointValue: 0.022,
-    // Bilt 2.0: 3x dining OR grocery (user choice), 2x travel, 1x other
-    multipliers: { 'dining': 3, 'travel': 2 },
-    baseRate: 1,
-    credits: [{ name: 'Bilt Travel Credit', amount: 100, keywords: ['BILT TRAVEL'], manual: false }],
-    categories: ['rent', 'dining', 'grocery', 'travel', 'other'],
-    isBilt: true,
-    hasObsidianBonus: true, // Can choose 3x dining OR grocery
-    // Legacy (before Feb 7, 2026): same as all Bilt cards - 3x dining, 2x travel, 1x everything else
-    legacy: {
-      multipliers: { 'dining': 3, 'travel': 2 },
-      baseRate: 1,
-      categories: ['dining', 'travel', 'rent', 'other']
-    }
-  },
-  'bilt-palladium': {
-    name: 'Bilt Palladium',
-    shortName: 'Bilt Palladium',
-    annualFee: 495,
-    pointValue: 0.022,
-    // Bilt 2.0: 2x on ALL everyday spending (flat rate, no categories)
-    multipliers: {},
-    baseRate: 2,
-    credits: [
-      { name: 'Bilt Travel Credit', amount: 400, keywords: ['BILT TRAVEL'], manual: false }
-    ],
-    categories: ['rent', 'other'],
-    isBilt: true,
-    // Legacy (before Feb 7, 2026): same as all Bilt cards - 3x dining, 2x travel, 1x everything else
-    legacy: {
-      multipliers: { 'dining': 3, 'travel': 2 },
-      baseRate: 1,
-      categories: ['dining', 'travel', 'rent', 'other']
-    }
-  },
-  'chase-freedom-flex': {
-    name: 'Chase Freedom Flex',
-    shortName: 'Freedom Flex',
-    annualFee: 0,
-    pointValue: 0.017,
-    multipliers: { 'chase-travel': 5, 'dining': 3, 'drugstore': 3 },
-    baseRate: 1,
-    credits: [],
-    categories: ['chase-travel', 'dining', 'drugstore', 'other'], // Base categories, expanded by quarterly selection
-    // Quarterly rotating 5% categories (select 1)
-    selectableCategories: {
-      fivePercent: [
-        'grocery', 'gas', 'dining', 'streaming', 'fitness', 'spa-self-care',
-        'amazon', 'whole-foods', 'target', 'walmart', 'ebay', 'paypal',
-        'hotels-direct', 'chase-travel', 'car-rental', 'ev-charging',
-        'movies', 'live-entertainment', 'home-improvement', 'lowes',
-        'wholesale-club', 'internet-cable-phone', 'pet', 'charity', 'mcdonalds'
-      ]
-    }
-  },
-  'chase-freedom-unlimited': {
-    name: 'Chase Freedom Unlimited',
-    shortName: 'Freedom Unlimited',
-    annualFee: 0,
-    pointValue: 0.017,
-    multipliers: { 'chase-travel': 5, 'dining': 3, 'drugstore': 3, 'lyft': 2 },
-    baseRate: 1.5,
-    credits: [],
-    categories: ['chase-travel', 'dining', 'drugstore', 'lyft', 'other'],
-    // Lyft partnership: 5x from Jan 12, 2020 to March 31, 2025, then 2x after
-    lyftPartnershipStart: '2020-01-12',
-    lyft5xEndDate: '2025-04-01'
-  },
-  'chase-sapphire-reserve': {
-    name: 'Chase Sapphire Reserve',
-    shortName: 'Sapphire Reserve',
-    annualFee: 795,
-    pointValue: 0.017,
-    // CSR only has bonuses for specific travel categories - no generic 'travel' bonus
-    multipliers: { 'chase-travel': 8, 'flights-direct': 4, 'hotels-direct': 4, 'dining': 3, 'lyft': 5 },
-    baseRate: 1,
-    credits: [
-      { name: 'Travel Credit', amount: 300, keywords: ['TRAVEL CREDIT'], manual: false },
-      { name: 'Global Entry/TSA PreCheck', amount: 120, keywords: ['GLOBAL ENTRY', 'TSA PRECHECK', 'KNOWN TRAVELER', 'TRUSTED TRAVELER'], manual: false },
-      { name: 'Dining/OpenTable Credit', amount: 300, keywords: ['DINING CREDIT', 'OPENTABLE'], manual: false },
-      { name: 'The Edit Hotels', amount: 500, keywords: ['THE EDIT'], manual: false },
-      { name: 'DoorDash Restaurant Credit', amount: 60, keywords: [], manual: true }, // $5/month in-app
-      { name: 'DoorDash Grocery Credit', amount: 240, keywords: [], manual: true }, // 2x $10/month in-app
-      { name: 'DashPass Membership', amount: 120, keywords: [], manual: true }, // $9.99/month value
-      { name: 'StubHub', amount: 300, keywords: ['STUBHUB', 'VIAGOGO'], manual: false },
-      { name: 'Lyft Credit', amount: 120, keywords: [], manual: true },
-      { name: 'Peloton', amount: 120, keywords: ['PELOTON'], manual: false },
-      { name: 'Apple Music/TV+', amount: 288, keywords: [], manual: true },
-    ],
-    categories: ['chase-travel', 'flights-direct', 'hotels-direct', 'dining', 'lyft', 'other'],
-    // Lyft partnership: 10x from Jan 12, 2020 to March 31, 2025, then 5x after
-    lyftPartnershipStart: '2020-01-12',
-    lyft10xEndDate: '2025-04-01', // After this date, CSR gets 5x instead of 10x
-    // Legacy CSR (before Oct 26, 2025): different earning structure, lower annual fee
-    legacyCutoffDate: '2025-10-26',
-    legacyAnnualFee: 550,
-    legacy: {
-      multipliers: { 'chase-travel': 10, 'travel': 3, 'dining': 3, 'lyft': 10 },
-      baseRate: 1,
-      categories: ['chase-travel', 'travel', 'dining', 'lyft', 'other']
-    }
-  },
-  'chase-sapphire-preferred': {
-    name: 'Chase Sapphire Preferred',
-    shortName: 'Sapphire Preferred',
-    annualFee: 95,
-    pointValue: 0.017,
-    multipliers: { 'chase-travel': 5, 'dining': 3, 'streaming': 3, 'online-grocery': 3, 'travel': 2, 'lyft': 5 },
-    baseRate: 1,
-    credits: [
-      { name: 'Hotel Credit (Chase Travel)', amount: 50, keywords: ['CHASE TRAVEL'], manual: false },
-      { name: 'DoorDash Grocery Credit', amount: 120, keywords: [], manual: true }, // $10/month in-app
-      { name: 'DashPass Membership', amount: 120, keywords: [], manual: true }, // $9.99/month value
-    ],
-    categories: ['chase-travel', 'dining', 'streaming', 'online-grocery', 'travel', 'lyft', 'other'],
-    // Lyft partnership started Jan 12, 2020
-    lyftPartnershipStart: '2020-01-12'
-  },
-  'us-bank-cash-plus': {
-    name: 'U.S. Bank Cash+',
-    shortName: 'Cash+',
-    annualFee: 0,
-    pointValue: 0.01,
-    multipliers: {}, // Populated dynamically based on quarterly selections
-    baseRate: 1,
-    credits: [],
-    // Categories are dynamic based on quarterly selection
-    categories: ['other'], // Base categories, expanded by getCardCategories()
-    selectableCategories: {
-      fivePercent: [
-        'streaming', 'utilities', 'cell-phone', 'department-stores', 'electronics',
-        'furniture', 'fast-food', 'fitness', 'ground-transport', 'movies',
-        'sporting-goods', 'clothing'
-      ],
-      twoPercent: ['gas', 'grocery', 'dining']
-    }
-  },
-  'capital-one-venture-rewards': {
-    name: 'Capital One Venture Rewards',
-    shortName: 'Venture Rewards',
-    annualFee: 95,
-    // Point value varies by redemption: ~0.01 for statement credit, ~0.015+ for travel transfers/portal.
-    // 0.015 is a reasonable default for "miles" style points.
-    pointValue: 0.015,
-    multipliers: { 'capital-one-travel': 5, 'capital-one-entertainment': 5 },
-    baseRate: 2,
-    credits: [
-      { name: 'Global Entry/TSA PreCheck', amount: 120, keywords: ['GLOBAL ENTRY', 'TSA PRECHECK', 'KNOWN TRAVELER', 'TRUSTED TRAVELER'], manual: false },
-      // Note: Lifestyle Collection credit may not appear as a statement credit depending on how Capital One applies it.
-      { name: 'Lifestyle Collection Credit', amount: 50, keywords: ['LIFESTYLE COLLECTION', 'CAPITAL ONE LIFESTYLE', 'CAPITAL ONE TRAVEL', 'EXPERIENCE CREDIT'], manual: false }
-    ],
-    categories: ['capital-one-travel', 'capital-one-entertainment', 'other']
-  },
-  'capital-one-venture-x': {
-    name: 'Capital One Venture X',
-    shortName: 'Venture X',
-    annualFee: 395,
-    // Point value varies by redemption: ~0.01 for statement credit, ~0.015+ for travel transfers/portal.
-    // 0.015 is a reasonable default for "miles" style points.
-    pointValue: 0.015,
-    // Capital One Travel portal: 10x on hotels & rental cars, 5x on flights & vacation rentals.
-    // Default to 5x (conservative); getMultiplier() upgrades to 10x when hotel/rental car keywords detected.
-    multipliers: { 'capital-one-travel': 5 },
-    baseRate: 2,
-    credits: [
-      // Note: Descriptor may vary (e.g., "CAPITAL ONE TRAVEL CREDIT", "C1 TRAVEL CREDIT", or generic "TRAVEL CREDIT").
-      // Keywords cast a wider net; some false positives are possible with generic "TRAVEL CREDIT".
-      { name: 'Capital One Travel Credit', amount: 300, keywords: ['CAPITAL ONE TRAVEL CREDIT', 'C1 TRAVEL CREDIT', 'CAPITAL ONE TRAVEL', 'TRAVEL CREDIT'], manual: false },
-      // Typically once every ~4 years, but treated as annualized value for ROI purposes.
-      { name: 'Global Entry / TSA PreCheck', amount: 120, keywords: ['GLOBAL ENTRY', 'TSA PRECHECK', 'KNOWN TRAVELER', 'TRUSTED TRAVELER'], manual: false }
-    ],
-    categories: ['capital-one-travel', 'other'],
-    // 10,000 bonus miles awarded each cardholder anniversary (not a statement credit)
-    annualBonusPoints: 10000
-  }
-};
+const CARDS = window.CardTracker.cards;
 
 // =============================================================================
 // KNOWN MERCHANTS (Rules-based classification)

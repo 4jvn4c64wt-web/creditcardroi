@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Credit Card Value Tracker — Demo</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💳</text></svg>">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'IBM Plex Sans', -apple-system, sans-serif; background: #fafaf9; color: #1c1917; min-height: 100vh; line-height: 1.5; }
+    .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+    .header { margin-bottom: 32px; }
+    .header h1 { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 8px; }
+    .header p { font-size: 14px; color: #78716c; }
+    .card { background: #fff; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #e7e5e4; }
+    .card-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+    .btn { display: inline-flex; align-items: center; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; border: none; font-family: inherit; text-decoration: none; }
+    .btn-primary { background: #1c1917; color: #fff; }
+    .btn-primary:hover { background: #292524; }
+    .btn-secondary { background: #f5f5f4; color: #1c1917; border: 1px solid #d6d3d1; }
+    .btn-secondary:hover { background: #e7e5e4; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; }
+    .badge-demo { background: #dbeafe; color: #1e40af; }
+    .metrics-grid { display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid #e7e5e4; border-radius: 12px; overflow: hidden; background: #fff; margin-bottom: 20px; }
+    .metric { padding: 20px; text-align: center; border-right: 1px solid #e7e5e4; }
+    .metric:last-child { border-right: none; }
+    .metric-value { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; font-family: 'IBM Plex Mono', monospace; }
+    .metric-value.positive { color: #059669; }
+    .metric-value.negative { color: #dc2626; }
+    .metric-label { font-size: 11px; color: #78716c; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 24px; border-bottom: 1px solid #e7e5e4; padding-bottom: 12px; flex-wrap: wrap; }
+    .tab { padding: 8px 16px; border-radius: 6px; border: none; background: transparent; font-size: 14px; font-weight: 500; cursor: pointer; color: #78716c; font-family: inherit; }
+    .tab.active { background: #1c1917; color: #fff; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 12px 8px; border-bottom: 2px solid #e7e5e4; font-weight: 600; color: #57534e; font-size: 11px; text-transform: uppercase; }
+    th.text-right { text-align: right; }
+    td { padding: 12px 8px; border-bottom: 1px solid #f5f5f4; }
+    td.text-right { text-align: right; }
+    td.mono { font-family: 'IBM Plex Mono', monospace; }
+    tr:hover td { background: #fafaf9; }
+    .controls-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+    .controls-left, .controls-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .positive-amount { color: #059669; font-weight: 600; }
+    .negative-amount { color: #b91c1c; }
+    .form-select { padding: 10px 12px; border-radius: 6px; border: 1px solid #d6d3d1; font-size: 14px; font-family: inherit; background: #fff; cursor: pointer; }
+    .badge-green { background: #dcfce7; color: #166534; }
+    .badge-yellow { background: #fef9c3; color: #854d0e; }
+    .badge-gray { background: #f5f5f4; color: #57534e; }
+    .demo-banner { background: #dbeafe; border: 1px solid #93c5fd; border-radius: 12px; padding: 16px 24px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+    .demo-banner-text { font-size: 14px; color: #1e40af; }
+    .demo-banner-text strong { font-weight: 600; }
+    .detail-panel { text-align: left; font-size: 11px; margin-top: 8px; padding: 8px; border-radius: 6px; }
+    .points-panel { background: #f0fdf4; border: 1px solid #bbf7d0; }
+    .credits-panel { background: #f5f5f4; border: 1px solid #e7e5e4; }
+    .toggle-arrow { font-size: 10px; cursor: pointer; }
+    .hidden { display: none !important; }
+    @media (max-width: 900px) { .metrics-grid { grid-template-columns: repeat(2, 1fr); } .metric:nth-child(2), .metric:nth-child(4) { border-right: none; } }
+    @media (max-width: 500px) { .metrics-grid { grid-template-columns: 1fr; } .metric { border-right: none; border-bottom: 1px solid #e7e5e4; } .metric:last-child { border-bottom: none; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Credit Card Value Tracker <span class="badge badge-demo" style="font-size:11px;vertical-align:middle;position:relative;top:-2px;">DEMO</span></h1>
+      <p>Sample data showing how the tracker calculates value for each card</p>
+    </div>
+
+    <div class="demo-banner">
+      <div class="demo-banner-text"><strong>This is a demo with sample data.</strong> Ready to try it with your own transactions?</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a href="app.html" class="btn btn-primary" style="font-size:13px;padding:8px 16px;">Launch Tracker (Free)</a>
+        <a href="index.html" class="btn btn-secondary" style="font-size:13px;padding:8px 16px;">Back to Home</a>
+      </div>
+    </div>
+
+    <!-- Top Metrics -->
+    <div class="metrics-grid">
+      <div class="metric">
+        <div class="metric-value" id="metricSpend">$52,847</div>
+        <div class="metric-label">Total Spend</div>
+      </div>
+      <div class="metric">
+        <div class="metric-value" id="metricPoints">93,214</div>
+        <div class="metric-label">Points Earned</div>
+      </div>
+      <div class="metric">
+        <div class="metric-value positive" id="metricPointsValue">$1,477</div>
+        <div class="metric-label">Points Value</div>
+      </div>
+      <div class="metric">
+        <div class="metric-value positive" id="metricCredits">$1,040</div>
+        <div class="metric-label">Credits Used</div>
+      </div>
+      <div class="metric">
+        <div class="metric-value positive" id="metricNetValue">$397</div>
+        <div class="metric-label">Net Value</div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab active" onclick="showTab('summary')">Summary</button>
+      <button class="tab" onclick="showTab('transactions')">All Transactions</button>
+    </div>
+
+    <!-- Summary View -->
+    <div id="summaryView">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+          <div>
+            <h2 class="card-title" style="margin:0;">Card Performance Summary</h2>
+            <p style="font-size:12px;color:#78716c;margin-top:4px;">Click column headers to sort</p>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <select class="form-select" style="min-width:120px;">
+              <option selected>2025</option>
+            </select>
+          </div>
+        </div>
+        <div style="overflow-x:auto;">
+          <table id="summaryTable">
+            <thead><tr>
+              <th>Card</th>
+              <th class="text-right">Spend</th>
+              <th class="text-right">Points</th>
+              <th class="text-right">Pts Value</th>
+              <th class="text-right">Credits</th>
+              <th class="text-right">Ann. Fee</th>
+              <th class="text-right">Net Value</th>
+            </tr></thead>
+            <tbody id="summaryBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Transactions View -->
+    <div id="transactionsView" class="hidden">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+          <h2 class="card-title" style="margin:0;">All Transactions</h2>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <select id="cardFilter" class="form-select" style="font-size:13px;" onchange="renderTransactions()">
+              <option value="">All Cards</option>
+            </select>
+            <select id="categoryFilter" class="form-select" style="font-size:13px;" onchange="renderTransactions()">
+              <option value="">All Categories</option>
+            </select>
+          </div>
+        </div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead><tr>
+              <th>Date</th>
+              <th>Merchant</th>
+              <th>Card</th>
+              <th>Category</th>
+              <th class="text-right">Amount</th>
+              <th class="text-right">Multi</th>
+              <th class="text-right">Points</th>
+              <th>Reason</th>
+            </tr></thead>
+            <tbody id="txnBody"></tbody>
+          </table>
+        </div>
+        <div id="txnCount" style="font-size:12px;color:#78716c;margin-top:12px;"></div>
+      </div>
+    </div>
+
+    <!-- Bottom CTA -->
+    <div class="demo-banner" style="margin-top:32px;">
+      <div class="demo-banner-text"><strong>Like what you see?</strong> Upload your own transactions and find out which cards are earning their keep.</div>
+      <a href="app.html" class="btn btn-primary" style="font-size:13px;padding:8px 16px;">Launch Tracker (Free)</a>
+    </div>
+  </div>
+
+<script>
+// =========================================================================
+// DEMO DATA
+// =========================================================================
+
+const DEMO_CARDS = {
+  'chase-sapphire-reserve': {
+    name: 'Chase Sapphire Reserve',
+    shortName: 'Sapphire Reserve',
+    annualFee: 795,
+    pointValue: 0.017
+  },
+  'amex-gold': {
+    name: 'American Express Gold',
+    shortName: 'Amex Gold',
+    annualFee: 325,
+    pointValue: 0.02
+  },
+  'chase-freedom-flex': {
+    name: 'Chase Freedom Flex',
+    shortName: 'Freedom Flex',
+    annualFee: 0,
+    pointValue: 0.017
+  },
+  'amazon-prime': {
+    name: 'Amazon Prime Rewards Visa',
+    shortName: 'Amazon Prime',
+    annualFee: 0,
+    pointValue: 0.01
+  }
+};
+
+// Sample transactions (realistic spending for a year)
+const DEMO_TRANSACTIONS = [
+  // === Chase Sapphire Reserve ===
+  // Dining (3x)
+  { date: '2025-01-05', merchant: 'SWEETGREEN NYC', card: 'chase-sapphire-reserve', category: 'dining', amount: -16.42, mult: 3 },
+  { date: '2025-01-09', merchant: 'CHIPOTLE 0412', card: 'chase-sapphire-reserve', category: 'dining', amount: -12.85, mult: 3 },
+  { date: '2025-01-14', merchant: 'UBER EATS', card: 'chase-sapphire-reserve', category: 'dining', amount: -34.20, mult: 3 },
+  { date: '2025-01-22', merchant: 'STARBUCKS #8819', card: 'chase-sapphire-reserve', category: 'dining', amount: -6.75, mult: 3 },
+  { date: '2025-02-02', merchant: 'GRUBHUB ORDER', card: 'chase-sapphire-reserve', category: 'dining', amount: -28.90, mult: 3 },
+  { date: '2025-02-14', merchant: 'BALTHAZAR RESTAURANT', card: 'chase-sapphire-reserve', category: 'dining', amount: -187.50, mult: 3 },
+  { date: '2025-02-20', merchant: 'JUST SALAD MIDTOWN', card: 'chase-sapphire-reserve', category: 'dining', amount: -14.65, mult: 3 },
+  { date: '2025-03-01', merchant: 'DOORDASH CHIPOTLE', card: 'chase-sapphire-reserve', category: 'dining', amount: -22.40, mult: 3 },
+  { date: '2025-03-08', merchant: 'SHAKE SHACK #206', card: 'chase-sapphire-reserve', category: 'dining', amount: -19.34, mult: 3 },
+  { date: '2025-03-18', merchant: 'PANDA EXPRESS', card: 'chase-sapphire-reserve', category: 'dining', amount: -11.80, mult: 3 },
+  { date: '2025-04-02', merchant: 'CAVA GRLL BROOKLYN', card: 'chase-sapphire-reserve', category: 'dining', amount: -15.90, mult: 3 },
+  { date: '2025-04-15', merchant: 'SWEETGREEN NYC', card: 'chase-sapphire-reserve', category: 'dining', amount: -17.20, mult: 3 },
+  { date: '2025-05-03', merchant: 'DIG INN NYC', card: 'chase-sapphire-reserve', category: 'dining', amount: -16.50, mult: 3 },
+  { date: '2025-05-20', merchant: 'LEVAIN BAKERY', card: 'chase-sapphire-reserve', category: 'dining', amount: -8.00, mult: 3 },
+  { date: '2025-06-07', merchant: 'STARBUCKS #8819', card: 'chase-sapphire-reserve', category: 'dining', amount: -7.10, mult: 3 },
+  { date: '2025-06-14', merchant: 'GRUBHUB ORDER', card: 'chase-sapphire-reserve', category: 'dining', amount: -31.20, mult: 3 },
+  { date: '2025-07-04', merchant: 'PETER LUGER STEAK', card: 'chase-sapphire-reserve', category: 'dining', amount: -312.00, mult: 3 },
+  { date: '2025-07-19', merchant: 'UBER EATS', card: 'chase-sapphire-reserve', category: 'dining', amount: -26.50, mult: 3 },
+  { date: '2025-08-05', merchant: 'CHIPOTLE 0412', card: 'chase-sapphire-reserve', category: 'dining', amount: -13.40, mult: 3 },
+  { date: '2025-08-22', merchant: 'DOORDASH SUSHI', card: 'chase-sapphire-reserve', category: 'dining', amount: -47.80, mult: 3 },
+  { date: '2025-09-10', merchant: 'PANERA BREAD', card: 'chase-sapphire-reserve', category: 'dining', amount: -14.20, mult: 3 },
+  { date: '2025-09-28', merchant: 'FIVE GUYS #1889', card: 'chase-sapphire-reserve', category: 'dining', amount: -18.95, mult: 3 },
+  { date: '2025-10-15', merchant: 'SWEETGREEN NYC', card: 'chase-sapphire-reserve', category: 'dining', amount: -16.80, mult: 3 },
+  { date: '2025-11-01', merchant: 'UBER EATS', card: 'chase-sapphire-reserve', category: 'dining', amount: -38.40, mult: 3 },
+  { date: '2025-11-27', merchant: 'EATALY NYC FLATIRON', card: 'chase-sapphire-reserve', category: 'dining', amount: -89.50, mult: 3 },
+  { date: '2025-12-24', merchant: 'NOBU DOWNTOWN NYC', card: 'chase-sapphire-reserve', category: 'dining', amount: -425.00, mult: 3 },
+  // Travel - flights (4x)
+  { date: '2025-02-10', merchant: 'DELTA AIR LINES', card: 'chase-sapphire-reserve', category: 'flights', amount: -387.00, mult: 4 },
+  { date: '2025-05-15', merchant: 'JETBLUE AIRWAYS', card: 'chase-sapphire-reserve', category: 'flights', amount: -248.00, mult: 4 },
+  { date: '2025-07-28', merchant: 'UNITED AIRLINES', card: 'chase-sapphire-reserve', category: 'flights', amount: -512.00, mult: 4 },
+  { date: '2025-10-05', merchant: 'AMERICAN AIRLINES', card: 'chase-sapphire-reserve', category: 'flights', amount: -295.00, mult: 4 },
+  // Travel - hotels (4x)
+  { date: '2025-02-12', merchant: 'MARRIOTT HOTELS', card: 'chase-sapphire-reserve', category: 'hotels', amount: -489.00, mult: 4 },
+  { date: '2025-07-30', merchant: 'HYATT REGENCY', card: 'chase-sapphire-reserve', category: 'hotels', amount: -672.00, mult: 4 },
+  // Chase Travel portal (8x)
+  { date: '2025-06-01', merchant: 'CHASE TRAVEL PORTAL', card: 'chase-sapphire-reserve', category: 'chase-travel', amount: -340.00, mult: 8 },
+  // Lyft (5x)
+  { date: '2025-01-20', merchant: 'LYFT RIDE', card: 'chase-sapphire-reserve', category: 'lyft', amount: -24.50, mult: 5 },
+  { date: '2025-03-14', merchant: 'LYFT RIDE', card: 'chase-sapphire-reserve', category: 'lyft', amount: -18.75, mult: 5 },
+  { date: '2025-05-22', merchant: 'LYFT RIDE', card: 'chase-sapphire-reserve', category: 'lyft', amount: -31.20, mult: 5 },
+  { date: '2025-08-03', merchant: 'LYFT RIDE', card: 'chase-sapphire-reserve', category: 'lyft', amount: -22.10, mult: 5 },
+  { date: '2025-10-18', merchant: 'LYFT RIDE', card: 'chase-sapphire-reserve', category: 'lyft', amount: -27.80, mult: 5 },
+  { date: '2025-12-05', merchant: 'LYFT RIDE', card: 'chase-sapphire-reserve', category: 'lyft', amount: -19.40, mult: 5 },
+  // Other (1x)
+  { date: '2025-01-15', merchant: 'VERIZON WIRELESS', card: 'chase-sapphire-reserve', category: 'other', amount: -89.00, mult: 1 },
+  { date: '2025-02-15', merchant: 'VERIZON WIRELESS', card: 'chase-sapphire-reserve', category: 'other', amount: -89.00, mult: 1 },
+  { date: '2025-03-15', merchant: 'VERIZON WIRELESS', card: 'chase-sapphire-reserve', category: 'other', amount: -89.00, mult: 1 },
+  { date: '2025-04-15', merchant: 'VERIZON WIRELESS', card: 'chase-sapphire-reserve', category: 'other', amount: -89.00, mult: 1 },
+  { date: '2025-05-15', merchant: 'VERIZON WIRELESS', card: 'chase-sapphire-reserve', category: 'other', amount: -89.00, mult: 1 },
+  { date: '2025-06-15', merchant: 'VERIZON WIRELESS', card: 'chase-sapphire-reserve', category: 'other', amount: -89.00, mult: 1 },
+  { date: '2025-07-15', merchant: 'VERIZON WIRELESS', card: 'chase-sapphire-reserve', category: 'other', amount: -89.00, mult: 1 },
+  { date: '2025-08-15', merchant: 'VERIZON WIRELESS', card: 'chase-sapphire-reserve', category: 'other', amount: -89.00, mult: 1 },
+  { date: '2025-09-15', merchant: 'VERIZON WIRELESS', card: 'chase-sapphire-reserve', category: 'other', amount: -89.00, mult: 1 },
+  { date: '2025-10-15', merchant: 'VERIZON WIRELESS', card: 'chase-sapphire-reserve', category: 'other', amount: -89.00, mult: 1 },
+  { date: '2025-11-15', merchant: 'VERIZON WIRELESS', card: 'chase-sapphire-reserve', category: 'other', amount: -89.00, mult: 1 },
+  { date: '2025-12-15', merchant: 'VERIZON WIRELESS', card: 'chase-sapphire-reserve', category: 'other', amount: -89.00, mult: 1 },
+  { date: '2025-03-20', merchant: 'APPLE.COM', card: 'chase-sapphire-reserve', category: 'other', amount: -129.00, mult: 1 },
+  { date: '2025-06-10', merchant: 'IKEA BROOKLYN', card: 'chase-sapphire-reserve', category: 'other', amount: -284.00, mult: 1 },
+  { date: '2025-09-05', merchant: 'HOME DEPOT #6124', card: 'chase-sapphire-reserve', category: 'other', amount: -156.40, mult: 1 },
+  // Credits (positive amounts = statement credits)
+  { date: '2025-01-08', merchant: 'CHASE TRAVEL CREDIT', card: 'chase-sapphire-reserve', category: 'credit', amount: 300.00, isCredit: true, creditName: 'Travel Credit' },
+  { date: '2025-04-01', merchant: 'PELOTON MEMBERSHIP', card: 'chase-sapphire-reserve', category: 'credit', amount: 120.00, isCredit: true, creditName: 'Peloton' },
+  // Annual fee
+  { date: '2025-01-01', merchant: 'CHASE ANNUAL FEE', card: 'chase-sapphire-reserve', category: 'annual-fee', amount: -795.00, isAnnualFee: true },
+
+  // === American Express Gold ===
+  // Dining (4x)
+  { date: '2025-01-03', merchant: 'CHICK-FIL-A #2019', card: 'amex-gold', category: 'dining', amount: -11.40, mult: 4 },
+  { date: '2025-01-18', merchant: 'TACO BELL #08823', card: 'amex-gold', category: 'dining', amount: -9.85, mult: 4 },
+  { date: '2025-02-06', merchant: 'UBER EATS', card: 'amex-gold', category: 'dining', amount: -42.30, mult: 4 },
+  { date: '2025-02-22', merchant: 'STARBUCKS #4521', card: 'amex-gold', category: 'dining', amount: -7.25, mult: 4 },
+  { date: '2025-03-05', merchant: 'DOORDASH THAI FOOD', card: 'amex-gold', category: 'dining', amount: -36.80, mult: 4 },
+  { date: '2025-03-28', merchant: 'LE PAIN QUOTIDIEN', card: 'amex-gold', category: 'dining', amount: -22.50, mult: 4 },
+  { date: '2025-04-10', merchant: 'GREGORYS COFFEE', card: 'amex-gold', category: 'dining', amount: -6.20, mult: 4 },
+  { date: '2025-04-25', merchant: 'GRUBHUB PIZZA', card: 'amex-gold', category: 'dining', amount: -29.75, mult: 4 },
+  { date: '2025-05-08', merchant: 'HALAL GUYS NYC', card: 'amex-gold', category: 'dining', amount: -12.50, mult: 4 },
+  { date: '2025-05-30', merchant: 'BLUESTONE LANE', card: 'amex-gold', category: 'dining', amount: -8.90, mult: 4 },
+  { date: '2025-06-12', merchant: 'UBER EATS', card: 'amex-gold', category: 'dining', amount: -38.60, mult: 4 },
+  { date: '2025-07-01', merchant: 'SHAKE SHACK #206', card: 'amex-gold', category: 'dining', amount: -21.45, mult: 4 },
+  { date: '2025-07-18', merchant: 'STARBUCKS #4521', card: 'amex-gold', category: 'dining', amount: -6.80, mult: 4 },
+  { date: '2025-08-09', merchant: 'CHICK-FIL-A #2019', card: 'amex-gold', category: 'dining', amount: -13.20, mult: 4 },
+  { date: '2025-08-28', merchant: 'DOORDASH RAMEN', card: 'amex-gold', category: 'dining', amount: -44.10, mult: 4 },
+  { date: '2025-09-14', merchant: 'SWEETGREEN NYC', card: 'amex-gold', category: 'dining', amount: -16.90, mult: 4 },
+  { date: '2025-10-02', merchant: 'GRUBHUB INDIAN', card: 'amex-gold', category: 'dining', amount: -52.30, mult: 4 },
+  { date: '2025-10-20', merchant: 'PRET A MANGER', card: 'amex-gold', category: 'dining', amount: -10.45, mult: 4 },
+  { date: '2025-11-08', merchant: 'UBER EATS', card: 'amex-gold', category: 'dining', amount: -35.70, mult: 4 },
+  { date: '2025-11-22', merchant: 'TACO BELL #08823', card: 'amex-gold', category: 'dining', amount: -8.60, mult: 4 },
+  { date: '2025-12-10', merchant: 'DOORDASH SUSHI', card: 'amex-gold', category: 'dining', amount: -56.20, mult: 4 },
+  { date: '2025-12-20', merchant: 'THE SMITH NYC', card: 'amex-gold', category: 'dining', amount: -142.00, mult: 4 },
+  // Grocery (4x)
+  { date: '2025-01-06', merchant: 'TRADER JOES #542', card: 'amex-gold', category: 'grocery', amount: -87.30, mult: 4 },
+  { date: '2025-01-20', merchant: 'TRADER JOES #542', card: 'amex-gold', category: 'grocery', amount: -72.15, mult: 4 },
+  { date: '2025-02-03', merchant: 'WHOLE FOODS MKT', card: 'amex-gold', category: 'grocery', amount: -94.60, mult: 4 },
+  { date: '2025-02-17', merchant: 'TRADER JOES #542', card: 'amex-gold', category: 'grocery', amount: -68.40, mult: 4 },
+  { date: '2025-03-03', merchant: 'TRADER JOES #542', card: 'amex-gold', category: 'grocery', amount: -91.20, mult: 4 },
+  { date: '2025-03-17', merchant: 'WHOLE FOODS MKT', card: 'amex-gold', category: 'grocery', amount: -110.50, mult: 4 },
+  { date: '2025-04-01', merchant: 'TRADER JOES #542', card: 'amex-gold', category: 'grocery', amount: -76.80, mult: 4 },
+  { date: '2025-04-14', merchant: 'TRADER JOES #542', card: 'amex-gold', category: 'grocery', amount: -83.25, mult: 4 },
+  { date: '2025-05-01', merchant: 'WHOLE FOODS MKT', card: 'amex-gold', category: 'grocery', amount: -102.10, mult: 4 },
+  { date: '2025-05-15', merchant: 'TRADER JOES #542', card: 'amex-gold', category: 'grocery', amount: -79.60, mult: 4 },
+  { date: '2025-06-01', merchant: 'TRADER JOES #542', card: 'amex-gold', category: 'grocery', amount: -88.40, mult: 4 },
+  { date: '2025-06-15', merchant: 'WHOLE FOODS MKT', card: 'amex-gold', category: 'grocery', amount: -97.80, mult: 4 },
+  { date: '2025-07-01', merchant: 'TRADER JOES #542', card: 'amex-gold', category: 'grocery', amount: -71.30, mult: 4 },
+  { date: '2025-07-14', merchant: 'TRADER JOES #542', card: 'amex-gold', category: 'grocery', amount: -85.90, mult: 4 },
+  { date: '2025-08-01', merchant: 'WHOLE FOODS MKT', card: 'amex-gold', category: 'grocery', amount: -108.20, mult: 4 },
+  { date: '2025-08-15', merchant: 'TRADER JOES #542', card: 'amex-gold', category: 'grocery', amount: -77.50, mult: 4 },
+  { date: '2025-09-01', merchant: 'TRADER JOES #542', card: 'amex-gold', category: 'grocery', amount: -82.70, mult: 4 },
+  { date: '2025-09-15', merchant: 'WHOLE FOODS MKT', card: 'amex-gold', category: 'grocery', amount: -96.40, mult: 4 },
+  { date: '2025-10-01', merchant: 'TRADER JOES #542', card: 'amex-gold', category: 'grocery', amount: -73.80, mult: 4 },
+  { date: '2025-10-14', merchant: 'TRADER JOES #542', card: 'amex-gold', category: 'grocery', amount: -89.10, mult: 4 },
+  { date: '2025-11-01', merchant: 'WHOLE FOODS MKT', card: 'amex-gold', category: 'grocery', amount: -115.60, mult: 4 },
+  { date: '2025-11-15', merchant: 'TRADER JOES #542', card: 'amex-gold', category: 'grocery', amount: -92.30, mult: 4 },
+  { date: '2025-12-01', merchant: 'TRADER JOES #542', card: 'amex-gold', category: 'grocery', amount: -98.50, mult: 4 },
+  { date: '2025-12-15', merchant: 'WHOLE FOODS MKT', card: 'amex-gold', category: 'grocery', amount: -124.80, mult: 4 },
+  // Flights (3x)
+  { date: '2025-04-20', merchant: 'SOUTHWEST AIRLINES', card: 'amex-gold', category: 'flights', amount: -198.00, mult: 3 },
+  { date: '2025-09-22', merchant: 'DELTA AIR LINES', card: 'amex-gold', category: 'flights', amount: -276.00, mult: 3 },
+  // Other (1x)
+  { date: '2025-02-28', merchant: 'NETFLIX', card: 'amex-gold', category: 'other', amount: -15.49, mult: 1 },
+  { date: '2025-05-28', merchant: 'NETFLIX', card: 'amex-gold', category: 'other', amount: -15.49, mult: 1 },
+  { date: '2025-08-28', merchant: 'NETFLIX', card: 'amex-gold', category: 'other', amount: -15.49, mult: 1 },
+  { date: '2025-11-28', merchant: 'NETFLIX', card: 'amex-gold', category: 'other', amount: -15.49, mult: 1 },
+  { date: '2025-06-22', merchant: 'TARGET STORE #1234', card: 'amex-gold', category: 'other', amount: -67.80, mult: 1 },
+  { date: '2025-11-29', merchant: 'TARGET STORE #1234', card: 'amex-gold', category: 'other', amount: -145.20, mult: 1 },
+  // Credits
+  { date: '2025-03-15', merchant: 'AMEX DINING CREDIT', card: 'amex-gold', category: 'credit', amount: 120.00, isCredit: true, creditName: 'Dining Credit' },
+  { date: '2025-06-15', merchant: 'AMEX RESY CREDIT', card: 'amex-gold', category: 'credit', amount: 100.00, isCredit: true, creditName: 'Resy Credit' },
+  { date: '2025-09-01', merchant: 'DUNKIN AMEX CREDIT', card: 'amex-gold', category: 'credit', amount: 84.00, isCredit: true, creditName: 'Dunkin Credit' },
+  // Annual fee
+  { date: '2025-01-01', merchant: 'AMEX ANNUAL FEE', card: 'amex-gold', category: 'annual-fee', amount: -325.00, isAnnualFee: true },
+
+  // === Chase Freedom Flex ===
+  // Dining (3x)
+  { date: '2025-01-07', merchant: 'MCDONALDS #23114', card: 'chase-freedom-flex', category: 'dining', amount: -8.49, mult: 3 },
+  { date: '2025-02-11', merchant: 'WENDYS #5128', card: 'chase-freedom-flex', category: 'dining', amount: -10.25, mult: 3 },
+  { date: '2025-03-22', merchant: 'SUBWAY #46210', card: 'chase-freedom-flex', category: 'dining', amount: -9.50, mult: 3 },
+  { date: '2025-04-18', merchant: 'BURGER KING #1029', card: 'chase-freedom-flex', category: 'dining', amount: -11.80, mult: 3 },
+  { date: '2025-05-25', merchant: 'POPEYES #3392', card: 'chase-freedom-flex', category: 'dining', amount: -13.40, mult: 3 },
+  { date: '2025-06-30', merchant: 'KFC #19284', card: 'chase-freedom-flex', category: 'dining', amount: -14.20, mult: 3 },
+  { date: '2025-08-12', merchant: 'MCDONALDS #23114', card: 'chase-freedom-flex', category: 'dining', amount: -9.75, mult: 3 },
+  { date: '2025-10-08', merchant: 'WENDYS #5128', card: 'chase-freedom-flex', category: 'dining', amount: -12.10, mult: 3 },
+  { date: '2025-12-03', merchant: 'SUBWAY #46210', card: 'chase-freedom-flex', category: 'dining', amount: -10.80, mult: 3 },
+  // Drugstore (3x)
+  { date: '2025-01-12', merchant: 'CVS/PHARMACY #4872', card: 'chase-freedom-flex', category: 'drugstore', amount: -24.30, mult: 3 },
+  { date: '2025-03-08', merchant: 'WALGREENS #12084', card: 'chase-freedom-flex', category: 'drugstore', amount: -18.60, mult: 3 },
+  { date: '2025-05-14', merchant: 'CVS/PHARMACY #4872', card: 'chase-freedom-flex', category: 'drugstore', amount: -32.15, mult: 3 },
+  { date: '2025-07-22', merchant: 'WALGREENS #12084', card: 'chase-freedom-flex', category: 'drugstore', amount: -15.80, mult: 3 },
+  { date: '2025-09-18', merchant: 'CVS/PHARMACY #4872', card: 'chase-freedom-flex', category: 'drugstore', amount: -28.40, mult: 3 },
+  { date: '2025-11-10', merchant: 'CVS/PHARMACY #4872', card: 'chase-freedom-flex', category: 'drugstore', amount: -21.50, mult: 3 },
+  // Quarterly 5% (grocery for Q1, gas for Q2, amazon for Q3, walmart for Q4)
+  { date: '2025-01-10', merchant: 'STOP & SHOP #2912', card: 'chase-freedom-flex', category: 'quarterly', amount: -78.40, mult: 5 },
+  { date: '2025-02-08', merchant: 'STOP & SHOP #2912', card: 'chase-freedom-flex', category: 'quarterly', amount: -92.10, mult: 5 },
+  { date: '2025-03-12', merchant: 'STOP & SHOP #2912', card: 'chase-freedom-flex', category: 'quarterly', amount: -85.20, mult: 5 },
+  { date: '2025-04-05', merchant: 'SHELL OIL #38291', card: 'chase-freedom-flex', category: 'quarterly', amount: -52.40, mult: 5 },
+  { date: '2025-05-10', merchant: 'BP GAS STATION', card: 'chase-freedom-flex', category: 'quarterly', amount: -48.75, mult: 5 },
+  { date: '2025-06-08', merchant: 'SHELL OIL #38291', card: 'chase-freedom-flex', category: 'quarterly', amount: -55.20, mult: 5 },
+  { date: '2025-07-15', merchant: 'AMAZON.COM', card: 'chase-freedom-flex', category: 'quarterly', amount: -124.99, mult: 5 },
+  { date: '2025-08-20', merchant: 'AMAZON.COM', card: 'chase-freedom-flex', category: 'quarterly', amount: -67.50, mult: 5 },
+  { date: '2025-09-03', merchant: 'AMAZON.COM', card: 'chase-freedom-flex', category: 'quarterly', amount: -89.30, mult: 5 },
+  { date: '2025-10-12', merchant: 'WALMART #4521', card: 'chase-freedom-flex', category: 'quarterly', amount: -156.80, mult: 5 },
+  { date: '2025-11-15', merchant: 'WALMART #4521', card: 'chase-freedom-flex', category: 'quarterly', amount: -210.40, mult: 5 },
+  { date: '2025-12-08', merchant: 'WALMART #4521', card: 'chase-freedom-flex', category: 'quarterly', amount: -178.30, mult: 5 },
+  // Other (1x)
+  { date: '2025-02-25', merchant: 'SPOTIFY PREMIUM', card: 'chase-freedom-flex', category: 'other', amount: -11.99, mult: 1 },
+  { date: '2025-05-25', merchant: 'SPOTIFY PREMIUM', card: 'chase-freedom-flex', category: 'other', amount: -11.99, mult: 1 },
+  { date: '2025-08-25', merchant: 'SPOTIFY PREMIUM', card: 'chase-freedom-flex', category: 'other', amount: -11.99, mult: 1 },
+  { date: '2025-11-25', merchant: 'SPOTIFY PREMIUM', card: 'chase-freedom-flex', category: 'other', amount: -11.99, mult: 1 },
+  { date: '2025-04-28', merchant: 'COSTCO WHOLESALE', card: 'chase-freedom-flex', category: 'other', amount: -234.50, mult: 1 },
+  { date: '2025-10-30', merchant: 'COSTCO WHOLESALE', card: 'chase-freedom-flex', category: 'other', amount: -189.80, mult: 1 },
+
+  // === Amazon Prime Rewards Visa ===
+  // Amazon (5x)
+  { date: '2025-01-02', merchant: 'AMAZON.COM', card: 'amazon-prime', category: 'amazon', amount: -34.99, mult: 5 },
+  { date: '2025-01-15', merchant: 'AMAZON.COM', card: 'amazon-prime', category: 'amazon', amount: -89.50, mult: 5 },
+  { date: '2025-02-08', merchant: 'AMAZON.COM', card: 'amazon-prime', category: 'amazon', amount: -22.40, mult: 5 },
+  { date: '2025-02-28', merchant: 'AMAZON MKTP US', card: 'amazon-prime', category: 'amazon', amount: -156.00, mult: 5 },
+  { date: '2025-03-14', merchant: 'AMAZON.COM', card: 'amazon-prime', category: 'amazon', amount: -42.80, mult: 5 },
+  { date: '2025-04-02', merchant: 'AMAZON MKTP US', card: 'amazon-prime', category: 'amazon', amount: -67.30, mult: 5 },
+  { date: '2025-04-22', merchant: 'AMAZON.COM', card: 'amazon-prime', category: 'amazon', amount: -18.99, mult: 5 },
+  { date: '2025-05-10', merchant: 'AMAZON.COM', card: 'amazon-prime', category: 'amazon', amount: -134.50, mult: 5 },
+  { date: '2025-06-05', merchant: 'AMAZON MKTP US', card: 'amazon-prime', category: 'amazon', amount: -29.99, mult: 5 },
+  { date: '2025-07-15', merchant: 'AMAZON PRIME DAY', card: 'amazon-prime', category: 'amazon', amount: -312.40, mult: 5 },
+  { date: '2025-07-16', merchant: 'AMAZON PRIME DAY', card: 'amazon-prime', category: 'amazon', amount: -87.60, mult: 5 },
+  { date: '2025-08-04', merchant: 'AMAZON.COM', card: 'amazon-prime', category: 'amazon', amount: -45.20, mult: 5 },
+  { date: '2025-09-01', merchant: 'AMAZON MKTP US', card: 'amazon-prime', category: 'amazon', amount: -23.50, mult: 5 },
+  { date: '2025-10-08', merchant: 'AMAZON.COM', card: 'amazon-prime', category: 'amazon', amount: -58.90, mult: 5 },
+  { date: '2025-11-24', merchant: 'AMAZON BLACK FRIDAY', card: 'amazon-prime', category: 'amazon', amount: -245.00, mult: 5 },
+  { date: '2025-12-12', merchant: 'AMAZON.COM', card: 'amazon-prime', category: 'amazon', amount: -178.30, mult: 5 },
+  // Whole Foods (5x)
+  { date: '2025-01-25', merchant: 'WHOLE FOODS MKT', card: 'amazon-prime', category: 'whole-foods', amount: -62.40, mult: 5 },
+  { date: '2025-03-22', merchant: 'WHOLE FOODS MKT', card: 'amazon-prime', category: 'whole-foods', amount: -78.90, mult: 5 },
+  { date: '2025-05-18', merchant: 'WHOLE FOODS MKT', card: 'amazon-prime', category: 'whole-foods', amount: -54.30, mult: 5 },
+  { date: '2025-07-20', merchant: 'WHOLE FOODS MKT', card: 'amazon-prime', category: 'whole-foods', amount: -71.50, mult: 5 },
+  { date: '2025-09-25', merchant: 'WHOLE FOODS MKT', card: 'amazon-prime', category: 'whole-foods', amount: -66.20, mult: 5 },
+  { date: '2025-11-30', merchant: 'WHOLE FOODS MKT', card: 'amazon-prime', category: 'whole-foods', amount: -92.10, mult: 5 },
+  // Gas (2x)
+  { date: '2025-02-14', merchant: 'EXXON MOBIL #2841', card: 'amazon-prime', category: 'gas', amount: -45.80, mult: 2 },
+  { date: '2025-05-04', merchant: 'SHELL OIL #10294', card: 'amazon-prime', category: 'gas', amount: -52.30, mult: 2 },
+  { date: '2025-08-18', merchant: 'EXXON MOBIL #2841', card: 'amazon-prime', category: 'gas', amount: -48.60, mult: 2 },
+  { date: '2025-11-05', merchant: 'SHELL OIL #10294', card: 'amazon-prime', category: 'gas', amount: -56.10, mult: 2 },
+  // Transit (2x)
+  { date: '2025-01-30', merchant: 'MTA NYC TRANSIT', card: 'amazon-prime', category: 'transit', amount: -33.00, mult: 2 },
+  { date: '2025-04-30', merchant: 'MTA NYC TRANSIT', card: 'amazon-prime', category: 'transit', amount: -33.00, mult: 2 },
+  { date: '2025-07-30', merchant: 'MTA NYC TRANSIT', card: 'amazon-prime', category: 'transit', amount: -33.00, mult: 2 },
+  { date: '2025-10-30', merchant: 'MTA NYC TRANSIT', card: 'amazon-prime', category: 'transit', amount: -33.00, mult: 2 },
+  // Dining (2x)
+  { date: '2025-03-30', merchant: 'DUNKIN #89201', card: 'amazon-prime', category: 'dining', amount: -5.80, mult: 2 },
+  { date: '2025-06-28', merchant: 'DUNKIN #89201', card: 'amazon-prime', category: 'dining', amount: -6.20, mult: 2 },
+  { date: '2025-09-15', merchant: 'DUNKIN #89201', card: 'amazon-prime', category: 'dining', amount: -5.40, mult: 2 },
+  { date: '2025-12-18', merchant: 'DUNKIN #89201', card: 'amazon-prime', category: 'dining', amount: -7.10, mult: 2 },
+  // Other (1x)
+  { date: '2025-06-18', merchant: 'NINTENDO ESHOP', card: 'amazon-prime', category: 'other', amount: -59.99, mult: 1 },
+  { date: '2025-12-22', merchant: 'BEST BUY #892', card: 'amazon-prime', category: 'other', amount: -249.99, mult: 1 },
+];
+
+// =========================================================================
+// CALCULATE METRICS
+// =========================================================================
+
+function calculateMetrics() {
+  const cardMetrics = {};
+
+  // Initialize card metrics
+  for (const [id, card] of Object.entries(DEMO_CARDS)) {
+    cardMetrics[id] = {
+      cardId: id,
+      cardName: card.name,
+      spend: 0,
+      points: 0,
+      pointsValue: 0,
+      credits: 0,
+      annualFee: card.annualFee,
+      pointsByCategory: {}
+    };
+  }
+
+  // Process transactions
+  DEMO_TRANSACTIONS.forEach(t => {
+    const cm = cardMetrics[t.card];
+    if (!cm) return;
+
+    if (t.isAnnualFee) return; // Skip annual fee transactions from spend
+    if (t.isCredit) {
+      cm.credits += t.amount; // Credits are positive
+      return;
+    }
+
+    const spend = Math.abs(t.amount);
+    const points = Math.round(spend * t.mult);
+    const card = DEMO_CARDS[t.card];
+    const ptsValue = points * card.pointValue;
+
+    cm.spend += spend;
+    cm.points += points;
+    cm.pointsValue += ptsValue;
+
+    if (!cm.pointsByCategory[t.category]) {
+      cm.pointsByCategory[t.category] = { points: 0, spend: 0 };
+    }
+    cm.pointsByCategory[t.category].points += points;
+    cm.pointsByCategory[t.category].spend += spend;
+  });
+
+  return cardMetrics;
+}
+
+// =========================================================================
+// FORMATTING
+// =========================================================================
+
+function fmt(n) {
+  return '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+function fmtPrecise(n) {
+  return '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function fmtNum(n) {
+  return Math.round(n).toLocaleString('en-US');
+}
+
+function getReason(t, card) {
+  if (t.isCredit) return 'Statement credit: ' + t.creditName;
+
+  const catLabels = {
+    'dining': 'Dining',
+    'grocery': 'Grocery',
+    'flights': 'Flights (direct)',
+    'hotels': 'Hotels (direct)',
+    'chase-travel': 'Chase Travel portal',
+    'lyft': 'Lyft partnership',
+    'drugstore': 'Drugstore',
+    'quarterly': 'Quarterly 5% category',
+    'amazon': 'Amazon purchase',
+    'whole-foods': 'Whole Foods',
+    'gas': 'Gas station',
+    'transit': 'Transit',
+    'other': 'Base rate'
+  };
+  const catLabel = catLabels[t.category] || t.category;
+  return 'Known merchant: ' + catLabel + ' \u2192 ' + t.mult + 'x';
+}
+
+// =========================================================================
+// RENDER
+// =========================================================================
+
+let currentSort = { column: 'netValue', direction: 'desc' };
+
+function renderSummary() {
+  const metrics = calculateMetrics();
+  const cards = Object.values(metrics).map(c => {
+    const netValue = c.pointsValue + c.credits - c.annualFee;
+    return { ...c, netValue };
+  });
+
+  // Sort
+  cards.sort((a, b) => {
+    const aVal = a[currentSort.column] ?? a.cardName;
+    const bVal = b[currentSort.column] ?? b.cardName;
+    if (currentSort.column === 'cardName') {
+      return currentSort.direction === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+    }
+    return currentSort.direction === 'asc' ? aVal - bVal : bVal - aVal;
+  });
+
+  // Update top metrics
+  let totalSpend = 0, totalPoints = 0, totalPtsValue = 0, totalCredits = 0, totalFees = 0;
+  cards.forEach(c => {
+    totalSpend += c.spend;
+    totalPoints += c.points;
+    totalPtsValue += c.pointsValue;
+    totalCredits += c.credits;
+    totalFees += c.annualFee;
+  });
+  const totalNet = totalPtsValue + totalCredits - totalFees;
+
+  document.getElementById('metricSpend').textContent = fmt(totalSpend);
+  document.getElementById('metricPoints').textContent = fmtNum(totalPoints);
+  document.getElementById('metricPointsValue').textContent = fmt(totalPtsValue);
+  document.getElementById('metricCredits').textContent = fmt(totalCredits);
+  const netEl = document.getElementById('metricNetValue');
+  netEl.textContent = (totalNet >= 0 ? '+' : '-') + fmt(totalNet);
+  netEl.className = 'metric-value ' + (totalNet >= 0 ? 'positive' : 'negative');
+
+  // Render summary table
+  const tbody = document.getElementById('summaryBody');
+  tbody.innerHTML = cards.map(c => {
+    const netClass = c.netValue >= 0 ? 'positive-amount' : 'negative-amount';
+    const netSign = c.netValue >= 0 ? '+' : '-';
+
+    // Points breakdown
+    const catEntries = Object.entries(c.pointsByCategory).sort((a, b) => b[1].points - a[1].points);
+    const ptsBreakdown = catEntries.length > 0
+      ? catEntries.map(([cat, data]) =>
+          `<div style="display:flex;justify-content:space-between;margin-bottom:2px;">
+            <span style="text-transform:capitalize;">${cat}</span>
+            <span style="font-weight:500;">${fmtNum(data.points)} pts</span>
+          </div>`
+        ).join('')
+      : '<div style="color:#78716c;">No breakdown</div>';
+
+    // Credits breakdown
+    const creditTxns = DEMO_TRANSACTIONS.filter(t => t.card === c.cardId && t.isCredit);
+    const creditsBreakdown = creditTxns.length > 0
+      ? creditTxns.map(t =>
+          `<div style="display:flex;justify-content:space-between;margin-bottom:2px;">
+            <span>${t.creditName}</span>
+            <span style="font-weight:500;">${fmtPrecise(t.amount)}</span>
+          </div>`
+        ).join('')
+      : (c.annualFee > 0 ? '<div style="color:#78716c;">No credits detected</div>' : '');
+
+    return `<tr>
+      <td style="white-space:nowrap;">${c.cardName}</td>
+      <td class="text-right mono">${fmtPrecise(c.spend)}</td>
+      <td class="text-right mono">
+        <div class="detail-toggle" data-target="pts-${c.cardId}" style="cursor:pointer;display:flex;align-items:center;justify-content:flex-end;gap:4px;">
+          ${fmtNum(c.points)} <span class="toggle-arrow" style="font-size:10px;">&#9660;</span>
+        </div>
+        <div id="pts-${c.cardId}" class="detail-panel points-panel" style="display:none;">
+          ${ptsBreakdown}
+        </div>
+      </td>
+      <td class="text-right mono">${fmtPrecise(c.pointsValue)}</td>
+      <td class="text-right mono">
+        ${(creditTxns.length > 0 || c.annualFee > 0) ? `
+          <div class="detail-toggle" data-target="cr-${c.cardId}" style="cursor:pointer;display:flex;align-items:center;justify-content:flex-end;gap:4px;">
+            ${fmtPrecise(c.credits)} <span class="toggle-arrow" style="font-size:10px;">&#9660;</span>
+          </div>
+          <div id="cr-${c.cardId}" class="detail-panel credits-panel" style="display:none;">
+            ${creditsBreakdown}
+          </div>
+        ` : fmtPrecise(c.credits)}
+      </td>
+      <td class="text-right mono">${c.annualFee > 0 ? fmtPrecise(c.annualFee) : '$0'}</td>
+      <td class="text-right mono ${netClass}" style="font-weight:600;">${netSign}${fmtPrecise(Math.abs(c.netValue))}</td>
+    </tr>`;
+  }).join('');
+
+  // Column sorting
+  document.querySelectorAll('#summaryTable th').forEach(th => {
+    th.style.cursor = 'pointer';
+    th.onclick = () => {
+      const cols = ['cardName', 'spend', 'points', 'pointsValue', 'credits', 'annualFee', 'netValue'];
+      const idx = Array.from(th.parentElement.children).indexOf(th);
+      const col = cols[idx];
+      if (currentSort.column === col) {
+        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+      } else {
+        currentSort = { column: col, direction: col === 'cardName' ? 'asc' : 'desc' };
+      }
+      renderSummary();
+    };
+  });
+
+  // Detail toggle click handlers
+  document.querySelectorAll('.detail-toggle').forEach(el => {
+    el.onclick = (e) => {
+      e.stopPropagation();
+      const targetId = el.getAttribute('data-target');
+      const panel = document.getElementById(targetId);
+      if (panel) {
+        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        const arrow = el.querySelector('.toggle-arrow');
+        if (arrow) arrow.textContent = panel.style.display === 'none' ? '\u25BC' : '\u25B2';
+      }
+    };
+  });
+}
+
+function renderTransactions() {
+  const cardFilter = document.getElementById('cardFilter').value;
+  const catFilter = document.getElementById('categoryFilter').value;
+
+  let txns = DEMO_TRANSACTIONS.filter(t => !t.isAnnualFee);
+  if (cardFilter) txns = txns.filter(t => t.card === cardFilter);
+  if (catFilter) txns = txns.filter(t => t.category === catFilter);
+
+  // Sort by date descending
+  txns.sort((a, b) => b.date.localeCompare(a.date));
+
+  const tbody = document.getElementById('txnBody');
+  tbody.innerHTML = txns.map(t => {
+    const card = DEMO_CARDS[t.card];
+    const isCredit = t.isCredit;
+    const amount = t.amount;
+
+    // Amount color: green for credits, red for charges (matching app)
+    let amountColor = '#b91c1c';
+    let amountWeight = '500';
+    if (isCredit) {
+      amountColor = '#059669';
+      amountWeight = '600';
+    }
+
+    // Multiplier display (matching app)
+    const multiDisplay = isCredit ? '\u2014' : t.mult + 'x';
+
+    // Points display
+    const points = isCredit ? '\u2014' : fmtNum(Math.round(Math.abs(amount) * t.mult));
+
+    // Category display
+    const catDisplay = isCredit ? 'credit' : t.category;
+
+    // Reason (matching app's "Reason" column)
+    const reason = getReason(t, card);
+
+    return `<tr>
+      <td style="white-space:nowrap;font-size:12px;">${t.date}</td>
+      <td style="max-width:180px;"><div style="font-weight:500;">${t.merchant}</div></td>
+      <td style="font-size:12px;">${card.name}</td>
+      <td><span class="badge ${isCredit ? 'badge-green' : 'badge-gray'}" style="text-transform:capitalize;">${catDisplay}</span></td>
+      <td class="text-right mono" style="color:${amountColor};font-weight:${amountWeight};">${isCredit ? '+' : '-'}${fmtPrecise(Math.abs(amount))}</td>
+      <td class="text-right mono">${multiDisplay}</td>
+      <td class="text-right mono">${points}</td>
+      <td style="font-size:11px;color:#78716c;max-width:180px;">${reason}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('txnCount').textContent = `${txns.length} transactions`;
+}
+
+function populateFilters() {
+  const cardSelect = document.getElementById('cardFilter');
+  const catSelect = document.getElementById('categoryFilter');
+
+  const cards = [...new Set(DEMO_TRANSACTIONS.map(t => t.card))].sort();
+  cards.forEach(id => {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = DEMO_CARDS[id].name;
+    cardSelect.appendChild(opt);
+  });
+
+  const categories = [...new Set(DEMO_TRANSACTIONS.filter(t => !t.isAnnualFee).map(t => t.isCredit ? 'credit' : t.category))].sort();
+  categories.forEach(cat => {
+    const opt = document.createElement('option');
+    opt.value = cat;
+    opt.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
+    catSelect.appendChild(opt);
+  });
+}
+
+function showTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  if (tab === 'summary') {
+    document.getElementById('summaryView').classList.remove('hidden');
+    document.getElementById('transactionsView').classList.add('hidden');
+    document.querySelectorAll('.tab')[0].classList.add('active');
+  } else {
+    document.getElementById('summaryView').classList.add('hidden');
+    document.getElementById('transactionsView').classList.remove('hidden');
+    document.querySelectorAll('.tab')[1].classList.add('active');
+    renderTransactions();
+  }
+}
+
+// Initialize
+renderSummary();
+populateFilters();
+</script>
+</body>
+</html>

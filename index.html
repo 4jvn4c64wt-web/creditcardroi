@@ -14,6 +14,12 @@
     .container { max-width: 860px; margin: 0 auto; padding: 0 24px; }
     section { padding: 64px 0; }
 
+    /* Nav */
+    .site-nav { padding: 16px 0; border-bottom: 1px solid #e7e5e4; }
+    .site-nav .container { display: flex; align-items: center; justify-content: space-between; }
+    .site-nav-brand { font-size: 15px; font-weight: 600; color: #1c1917; text-decoration: none; }
+    .site-nav .btn { padding: 8px 18px; font-size: 14px; }
+
     /* Hero */
     .hero { padding: 80px 0 64px; text-align: center; }
     .hero-badge { display: inline-block; font-size: 13px; font-weight: 500; color: #059669; background: #dcfce7; padding: 4px 14px; border-radius: 9999px; margin-bottom: 20px; }
@@ -138,6 +144,14 @@
   </style>
 </head>
 <body>
+
+  <!-- Nav -->
+  <nav class="site-nav">
+    <div class="container">
+      <a href="index.html" class="site-nav-brand">Credit Card Value Tracker</a>
+      <a href="app.html" class="btn btn-primary">Go to Tracker</a>
+    </div>
+  </nav>
 
   <!-- Hero -->
   <section class="hero">
@@ -341,7 +355,8 @@
             <li>Complete ROI analysis</li>
             <li>Perfect for annual fee time</li>
           </ul>
-          <a href="#" class="btn btn-primary">Get Decision Pass</a>
+          <!-- TODO: link to purchase flow -->
+          <a href="#purchase-decision-pass" class="btn btn-primary">Get Decision Pass</a>
         </div>
 
         <!-- Pro -->
@@ -356,7 +371,8 @@
             <li>Scenario calculator — see what adding or dropping a card would do</li>
             <li>Check before every annual fee</li>
           </ul>
-          <a href="#" class="btn btn-primary">Get Pro</a>
+          <!-- TODO: link to purchase flow -->
+          <a href="#purchase-pro" class="btn btn-primary">Get Pro</a>
         </div>
 
       </div>

@@ -418,6 +418,7 @@
 <script src="cards/bilt-obsidian.js"></script>
 <script src="cards/bilt-palladium.js"></script>
 <script src="cards/chase-freedom-flex.js"></script>
+<script src="cards/chase-freedom-flex-quarters.js"></script>
 <script src="cards/chase-freedom-unlimited.js"></script>
 <script src="cards/chase-sapphire-reserve.js"></script>
 <script src="cards/chase-sapphire-preferred.js"></script>
@@ -1136,70 +1137,71 @@ function getMultiplier(cardId, category, txnDate = null, merchantDesc = '') {
     return { rate: 1, reason: '1% base rate' };
   }
   
-  // Special handling for CFF with quarterly rotating 5% categories
+  // Special handling for CFF with quarterly rotating categories (from stored historical data)
   if (cardId === 'chase-freedom-flex') {
     const quarter = txnDate ? getQuarterForDate(txnDate) : getCurrentQuarter();
     const year = getYearFromDate(txnDate);
     const yearQuarterKey = `${year}-${quarter}`;
 
-    // Try year-specific key first, then fall back to quarter-only key for legacy data
-    const selectedCats = state.cffCategories[yearQuarterKey] || state.cffCategories[quarter] || [];
+    // Look up stored quarterly bonus categories
+    const CFF_DATA = window.CardTracker.cffQuarterlyData || {};
+    const quarterEntries = CFF_DATA[yearQuarterKey] || [];
+    const normMerchant = (merchantDesc || '').toLowerCase();
 
-    // PayPal wrapper detection: PayPal is a payment wrapper, not a merchant category.
-    // If PayPal is selected as a 5% category for this quarter, check if the transaction
-    // was made through PayPal and award 5x regardless of the underlying merchant category.
-    if (selectedCats.includes('paypal') && merchantDesc) {
-      const normMerchant = (merchantDesc || '').toLowerCase();
-      const isPaypalTransaction = normMerchant.includes('paypal');
-
-      if (isPaypalTransaction) {
-        // For Q4, check if December-only mode is enabled
-        if (quarter === 'Q4') {
-          const decemberOnlyKey = `${year}-Q4`;
-          const isDecemberOnly = state.cffPaypalDecemberOnly[decemberOnlyKey];
-
-          if (isDecemberOnly) {
-            // Parse the transaction month - only award 5x if December (month 11)
-            let txnMonth = 11; // Default to December
-            if (txnDate) {
-              if (txnDate.includes('-')) {
-                txnMonth = parseInt(txnDate.split('-')[1]) - 1; // YYYY-MM-DD
-              } else if (txnDate.includes('/')) {
-                txnMonth = parseInt(txnDate.split('/')[0]) - 1; // MM/DD/YYYY
-              }
-            }
-
-            if (txnMonth !== 11) {
-              // Not December - don't award PayPal 5x, fall through to normal classification
-              // (PayPal is December-only for this Q4)
-            } else {
-              // December - award PayPal 5x
-              return { rate: 5, reason: `5% PayPal (${year} Q4 December)` };
-            }
-          } else {
-            // Not December-only - award PayPal 5x for entire Q4
-            return { rate: 5, reason: `5% PayPal (${year} ${quarter} bonus)` };
-          }
-        } else {
-          // Non-Q4 quarter - straightforward PayPal 5x
-          return { rate: 5, reason: `5% PayPal (${year} ${quarter} bonus)` };
-        }
-      }
+    // Helper to parse transaction month (1-12)
+    function getTxnMonth(dateStr) {
+      if (!dateStr) return new Date().getMonth() + 1;
+      if (dateStr.includes('-')) return parseInt(dateStr.split('-')[1]); // YYYY-MM-DD
+      if (dateStr.includes('/')) return parseInt(dateStr.split('/')[0]); // MM/DD/YYYY
+      return new Date().getMonth() + 1;
     }
 
-    // Walk up hierarchy to check if this category or any parent is a selected 5% category
-    let checkCat = category;
-    while (checkCat) {
-      if (selectedCats.includes(checkCat)) {
-        const reason = checkCat !== category
-          ? `5% ${checkCat} (from ${category}, ${year} ${quarter})`
-          : `5% ${category} (${year} ${quarter} bonus)`;
-        return { rate: 5, reason };
+    // Check each stored quarterly category for a match
+    for (const entry of quarterEntries) {
+      // Month-only restriction (e.g., PayPal December-only, Internet June-only)
+      if (entry.monthOnly) {
+        const txnMonth = getTxnMonth(txnDate);
+        if (txnMonth !== entry.monthOnly) continue;
       }
-      checkCat = CATEGORY_HIERARCHY[checkCat];
+
+      // PayPal: match by merchant description (payment wrapper, not a category)
+      if (entry.key === 'paypal') {
+        if (normMerchant.includes('paypal')) {
+          const monthNote = entry.monthOnly ? ` ${new Date(2000, entry.monthOnly - 1).toLocaleString('en', {month: 'long'})}` : '';
+          return { rate: entry.rate, reason: `${entry.rate}% PayPal (${year} ${quarter}${monthNote})` };
+        }
+        continue;
+      }
+
+      // Merchant-keyword entries: match by merchant description only
+      // These are merchant-specific bonuses (McDonald's, Norwegian Cruise Line, etc.)
+      // that should NOT fall through to broad category matching
+      if (entry.merchantKeywords) {
+        let matched = false;
+        for (const kw of entry.merchantKeywords) {
+          if (normMerchant.includes(kw)) { matched = true; break; }
+        }
+        if (matched) {
+          return { rate: entry.rate, reason: `${entry.rate}% ${entry.label} (${year} ${quarter} bonus)` };
+        }
+        continue; // No keyword match - skip this entry entirely
+      }
+
+      // Category-based: walk up the transaction's category hierarchy to find a match
+      let checkCat = category;
+      while (checkCat) {
+        if (checkCat === entry.key) {
+          const reason = checkCat !== category
+            ? `${entry.rate}% ${entry.label} (from ${category}, ${year} ${quarter})`
+            : `${entry.rate}% ${entry.label} (${year} ${quarter} bonus)`;
+          return { rate: entry.rate, reason };
+        }
+        checkCat = CATEGORY_HIERARCHY[checkCat];
+      }
     }
 
     // Check static multipliers with hierarchy (chase-travel 5x, dining 3x, drugstore 3x)
+    // Only apply if not already matched by a quarterly bonus above
     const effectiveCat = getEffectiveCategory(category, cardId);
     if (card.multipliers[effectiveCat]) {
       const rate = card.multipliers[effectiveCat];
@@ -2525,51 +2527,73 @@ function showCardConfigEditor(preselectedCardId = null) {
       `;
     }
     
-    // CFF quarterly 5% section - ALL 4 QUARTERS
+    // CFF quarterly 5% section - read-only display from stored historical data
     let cffSection = '';
     if (isCFF) {
-      const selectedCFFYear = state.selectedCFFYear || availableYears[0];
-      
+      const CFF_DATA = window.CardTracker.cffQuarterlyData || {};
+      const storedYears = [...new Set(Object.keys(CFF_DATA).map(k => parseInt(k.split('-')[0])))].sort((a,b) => b-a);
+      const allCFFYears = [...new Set([...availableYears, ...storedYears])].sort((a,b) => b-a);
+      const selectedCFFYear = state.selectedCFFYear || allCFFYears[0];
+
+      // All possible CFF category labels for greyed-out display
+      const ALL_CFF_LABELS = {
+        'amazon': 'Amazon', 'car-rental': 'Rental Cars', 'charity': 'Charities',
+        'chase-travel': 'Chase Travel', 'clothing': 'Clothing', 'cruise': 'Cruises',
+        'department-stores': 'Department Stores', 'dining': 'Dining',
+        'ebay': 'eBay', 'ev-charging': 'EV Charging', 'fast-food': 'Fast Food',
+        'fitness': 'Gyms & Fitness', 'gas': 'Gas Stations', 'grocery': 'Grocery Stores',
+        'home-improvement': 'Home Improvement', 'insurance': 'Insurance',
+        'internet-cable-phone': 'Internet/Cable/Phone', 'live-entertainment': 'Live Entertainment',
+        'lowes': "Lowe's", 'movies': 'Movie Theaters', 'online-grocery': 'Online Grocery',
+        'paypal': 'PayPal', 'pet': 'Pet & Vet', 'spa-self-care': 'Spa & Self Care',
+        'streaming': 'Streaming Services', 'target': 'Target', 'tax': 'Tax Preparation',
+        'walmart': 'Walmart', 'whole-foods': 'Whole Foods', 'wholesale-club': 'Wholesale Clubs'
+      };
+
       cffSection = `
         <div id="quarterlySection">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-            <h3 style="font-size:14px;font-weight:600;">Quarterly 5% Categories</h3>
+            <h3 style="font-size:14px;font-weight:600;">Quarterly Bonus Categories</h3>
             <select id="cffYearSelect" class="form-select" style="min-width:100px;padding:6px 10px;">
-              ${availableYears.map(y => `<option value="${y}" ${y === selectedCFFYear ? 'selected' : ''}>${y}</option>`).join('')}
+              ${allCFFYears.map(y => `<option value="${y}" ${y === selectedCFFYear ? 'selected' : ''}>${y}</option>`).join('')}
             </select>
           </div>
-          <p style="font-size:12px;color:#78716c;margin-bottom:4px;">Select the rotating 5% categories Chase offered each quarter.</p>
-          <p style="font-size:11px;color:#a8a29e;margin-bottom:12px;">This affects how points are calculated for transactions in that period. $1,500 cap. Card also earns 5x Chase Travel, 3x dining/drugstores.</p>
-          
+          <p style="font-size:12px;color:#78716c;margin-bottom:4px;">Chase Freedom Flex rotating bonus categories are automatically applied based on quarter.</p>
+          <p style="font-size:11px;color:#a8a29e;margin-bottom:12px;">$1,500 cap per quarter. Card also earns 5x Chase Travel, 3x dining/drugstores.</p>
+
           <div id="cffQuarters">
           ${QUARTERS.map(q => {
             const yearQuarterKey = `${selectedCFFYear}-${q.id}`;
-            const selectedCats = state.cffCategories[yearQuarterKey] || state.cffCategories[q.id] || [];
+            const entries = CFF_DATA[yearQuarterKey] || [];
             const isCurrentQuarter = selectedCFFYear === currentYear && getCurrentQuarter() === q.id;
-            const isQ4 = q.id === 'Q4';
-            const paypalDecemberOnly = isQ4 && state.cffPaypalDecemberOnly[`${selectedCFFYear}-Q4`];
-            const paypalSelected = selectedCats.includes('paypal');
+            const activeKeys = entries.map(e => e.key);
 
             return `
             <details style="margin-bottom:12px;border:1px solid #e7e5e4;border-radius:8px;${isCurrentQuarter ? 'border-color:#059669;' : ''}" ${isCurrentQuarter ? 'open' : ''}>
               <summary style="padding:12px;cursor:pointer;font-weight:500;font-size:13px;background:${isCurrentQuarter ? '#dcfce7' : '#fafaf9'};border-radius:7px;list-style:none;display:flex;justify-content:space-between;align-items:center;">
                 <span>${q.name} ${isCurrentQuarter ? '(Current)' : ''}</span>
                 <span style="font-size:11px;color:#78716c;">
-                  ${selectedCats.length} categories selected
+                  ${entries.length > 0 ? entries.length + ' bonus categor' + (entries.length === 1 ? 'y' : 'ies') : 'No data'}
                 </span>
               </summary>
               <div style="padding:12px;">
-                <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:6px;max-height:200px;overflow-y:auto;">
-                  ${Object.entries(CFF_5_LABELS).map(([key, label]) => {
-                    const isPaypalInQ4 = isQ4 && key === 'paypal';
-                    const isChecked = selectedCats.includes(key);
+                ${entries.length > 0 ? `
+                <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:6px;">
+                  ${Object.entries(ALL_CFF_LABELS).map(([key, genericLabel]) => {
+                    const entry = entries.find(e => e.key === key);
+                    const isActive = !!entry;
+                    const displayLabel = entry ? entry.label : genericLabel;
+                    const monthName = entry && entry.monthOnly ? new Date(2000, entry.monthOnly - 1).toLocaleString('en', {month: 'short'}) : '';
+                    const rateLabel = entry ? entry.rate + '%' : '';
                     return `
-                    <label style="display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid #e7e5e4;border-radius:4px;cursor:pointer;font-size:11px;${isChecked ? 'background:#dcfce7;border-color:#059669;' : ''}${isPaypalInQ4 ? 'position:relative;' : ''}">
-                      <input type="checkbox" class="cff-5" data-year="${selectedCFFYear}" data-quarter="${q.id}" data-category="${key}" ${isChecked ? 'checked' : ''}>
-                      ${label}${isPaypalInQ4 && isChecked ? `<button type="button" class="cff-paypal-dec-toggle" data-year="${selectedCFFYear}" title="PayPal is sometimes only active in December of Q4" style="margin-left:auto;padding:1px 4px;font-size:9px;border:1px solid ${paypalDecemberOnly ? '#059669' : '#d1d5db'};border-radius:3px;background:${paypalDecemberOnly ? '#dcfce7' : '#f9fafb'};color:${paypalDecemberOnly ? '#059669' : '#6b7280'};cursor:pointer;white-space:nowrap;">Dec only</button>` : ''}
-                    </label>
-                  `}).join('')}
+                    <div style="display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid ${isActive ? '#059669' : '#f0eeec'};border-radius:4px;font-size:11px;${isActive ? 'background:#dcfce7;font-weight:600;color:#1a1a1a;' : 'background:#fafaf9;color:#c4c0bc;'}">
+                      ${isActive ? '<span style="color:#059669;flex-shrink:0;">&#10003;</span>' : '<span style="flex-shrink:0;visibility:hidden;">&#10003;</span>'}
+                      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(displayLabel)}${monthName ? ' (' + monthName + ' only)' : ''}">${escapeHtml(displayLabel)}</span>
+                      ${isActive ? '<span style="margin-left:auto;font-size:10px;color:#059669;flex-shrink:0;white-space:nowrap;">' + rateLabel + (monthName ? ' <span style="font-size:9px;color:#78716c;">(' + monthName + ')</span>' : '') + '</span>' : ''}
+                    </div>`;
+                  }).join('')}
                 </div>
+                ` : '<div style="font-size:12px;color:#a8a29e;font-style:italic;">No quarterly category data available for this period.</div>'}
               </div>
             </details>
           `}).join('')}
@@ -2914,7 +2938,7 @@ function showCardConfigEditor(preselectedCardId = null) {
                 <span style="font-size:13px;font-weight:600;">${rate}x</span>
               </div>
             `).join('') : (isCashPlus ? '<div style="font-size:12px;color:#78716c;font-style:italic;">Based on quarterly selections above</div>' : '')}
-            ${isCFF ? '<div style="font-size:12px;color:#78716c;font-style:italic;">+ 5x on quarterly categories selected above</div>' : ''}
+            ${isCFF ? '<div style="font-size:12px;color:#78716c;font-style:italic;">+ quarterly bonus categories shown above</div>' : ''}
             <div style="display:flex;justify-content:space-between;padding:8px 12px;background:#fafaf9;border-radius:6px;border:1px dashed #d6d3d1;">
               <span style="font-size:13px;color:#78716c;">Everything else</span>
               <span style="font-size:13px;font-weight:600;color:#78716c;">${card.baseRate}x</span>
@@ -2935,66 +2959,7 @@ function showCardConfigEditor(preselectedCardId = null) {
       });
     });
 
-    // CFF 5% category selection
-    if (isCFF) {
-      document.querySelectorAll('.cff-5').forEach(cb => {
-        cb.addEventListener('change', () => {
-          cb.closest('label').style.background = cb.checked ? '#dcfce7' : '';
-          cb.closest('label').style.borderColor = cb.checked ? '#059669' : '#e7e5e4';
-          // If this is the PayPal checkbox in Q4, dynamically add/remove Dec only toggle
-          if (cb.dataset.category === 'paypal' && cb.dataset.quarter === 'Q4') {
-            const label = cb.closest('label');
-            const year = parseInt(cb.dataset.year);
-            const existingBtn = label.querySelector('.cff-paypal-dec-toggle');
-
-            if (cb.checked && !existingBtn) {
-              // Add the Dec only button
-              const isActive = state.cffPaypalDecemberOnly[`${year}-Q4`];
-              const btn = document.createElement('button');
-              btn.type = 'button';
-              btn.className = 'cff-paypal-dec-toggle';
-              btn.dataset.year = year;
-              btn.title = 'PayPal is sometimes only active in December of Q4';
-              btn.textContent = 'Dec only';
-              btn.style.cssText = `margin-left:auto;padding:1px 4px;font-size:9px;border:1px solid ${isActive ? '#059669' : '#d1d5db'};border-radius:3px;background:${isActive ? '#dcfce7' : '#f9fafb'};color:${isActive ? '#059669' : '#6b7280'};cursor:pointer;white-space:nowrap;`;
-              btn.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                const key = `${year}-Q4`;
-                state.cffPaypalDecemberOnly[key] = !state.cffPaypalDecemberOnly[key];
-                safeLocalStorageSet('ccTracker_cffPaypalDecemberOnly', state.cffPaypalDecemberOnly);
-                const active = state.cffPaypalDecemberOnly[key];
-                btn.style.borderColor = active ? '#059669' : '#d1d5db';
-                btn.style.background = active ? '#dcfce7' : '#f9fafb';
-                btn.style.color = active ? '#059669' : '#6b7280';
-              });
-              label.appendChild(btn);
-            } else if (!cb.checked && existingBtn) {
-              // Remove the Dec only button
-              existingBtn.remove();
-            }
-          }
-        });
-      });
-
-      // PayPal December-only toggle for Q4
-      document.querySelectorAll('.cff-paypal-dec-toggle').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          const year = parseInt(btn.dataset.year);
-          const key = `${year}-Q4`;
-          // Toggle the December-only setting
-          state.cffPaypalDecemberOnly[key] = !state.cffPaypalDecemberOnly[key];
-          safeLocalStorageSet('ccTracker_cffPaypalDecemberOnly', state.cffPaypalDecemberOnly);
-          // Update button appearance
-          const isActive = state.cffPaypalDecemberOnly[key];
-          btn.style.borderColor = isActive ? '#059669' : '#d1d5db';
-          btn.style.background = isActive ? '#dcfce7' : '#f9fafb';
-          btn.style.color = isActive ? '#059669' : '#6b7280';
-        });
-      });
-    }
+    // CFF quarterly categories are now read-only from stored data (no event listeners needed)
     
     // Limit Cash+ 5% selections to 2 PER QUARTER
     if (isCashPlus) {
@@ -4400,13 +4365,17 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
   }
   
   const txnQuarter = txn ? getQuarterFromDate(txn.date) : getCurrentQuarter();
-  const cffSelected = state.cffCategories[txnQuarter] || [];
+  const txnYear = txn && txn.date ? (txn.date.includes('-') ? parseInt(txn.date.split('-')[0]) : parseInt(txn.date.split('/')[2])) : new Date().getFullYear();
+  const cffQuarterKey = `${txnYear}-${txnQuarter}`;
+  const cffEntries = (window.CardTracker.cffQuarterlyData || {})[cffQuarterKey] || [];
   const cashPlusSelected = state.cashPlusCategories[txnQuarter] || { fivePercent: [], twoPercent: '' };
-  
+
   function getDisplayRate(cat) {
     if (cardId === 'chase-freedom-flex') {
+      // Check stored quarterly bonus categories first
+      const entry = cffEntries.find(e => e.key === cat);
+      if (entry) return { rate: entry.rate, bonus: true };
       if (card.multipliers[cat]) return { rate: card.multipliers[cat], bonus: true };
-      if (cffSelected.includes(cat)) return { rate: 5, bonus: true };
       return { rate: card.baseRate, bonus: false };
     }
     if (cardId === 'us-bank-cash-plus') {
@@ -5329,7 +5298,7 @@ const TOUR_STEPS = [
     id: 'config-quarterly',
     target: '#quarterlySection',
     title: 'Quarterly Bonus Categories 📅',
-    content: 'Select your activated bonus categories for each quarter. This determines which transactions get 5% back. Make sure to update this each quarter!',
+    content: 'Quarterly bonus categories are automatically applied based on Chase\'s rotating calendar. Check here to see which categories earn bonus points each quarter.',
     position: 'top',
     clickRequired: false,
     conditional: 'hasQuarterlyCategories'
@@ -5822,7 +5791,7 @@ function showFeatureEducation(feature) {
     },
     quarterlyCategories: {
       title: 'New Feature: Quarterly Categories 📅',
-      text: 'This card has rotating 5% bonus categories. Select your activated categories for each quarter to ensure accurate point calculations.',
+      text: 'This card has rotating bonus categories that are automatically applied each quarter based on Chase\'s published calendar.',
       target: '#quarterlySection'
     }
   };
@@ -6321,21 +6290,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       safeLocalStorageSet('ccTracker_cashPlusCategories', state.cashPlusCategories);
     }
 
-    // Save CFF quarterly categories for selected year
-    // Use consistent fallback: most recent transaction year, or current year if no transactions
-    if (cardId === 'chase-freedom-flex') {
-      const defaultYear = state.availableYears.length > 0 ? state.availableYears[0] : new Date().getFullYear();
-      const cffYear = state.selectedCFFYear || defaultYear;
-      ['Q1', 'Q2', 'Q3', 'Q4'].forEach(quarterKey => {
-        const yearQuarterKey = `${cffYear}-${quarterKey}`;
-        const selectedCats = [];
-        document.querySelectorAll(`.cff-5[data-quarter="${quarterKey}"]:checked`).forEach(cb => {
-          selectedCats.push(cb.dataset.category);
-        });
-        state.cffCategories[yearQuarterKey] = selectedCats;
-      });
-      safeLocalStorageSet('ccTracker_cffCategories', state.cffCategories);
-    }
+    // CFF quarterly categories are now read from stored data (no user selections to save)
     
     // Save Bilt-specific config from the DOM (matches pattern of other card-specific saves)
     const card = CARDS[cardId];

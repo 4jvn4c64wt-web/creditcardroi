@@ -244,7 +244,7 @@
           <span id="transactionCount" style="font-size:13px;color:#78716c;"></span>
         </div>
         <div class="controls-right">
-          <button class="btn btn-secondary" id="upgradeBtn" style="color:#059669;border-color:#bbf7d0;">Upgrade</button>
+          <button class="btn btn-secondary" id="upgradeBtn" style="color:#059669;border-color:#bbf7d0;">Upgrade to Pro</button>
           <button class="btn btn-secondary" id="helpBtn">❓ Help</button>
           <button class="btn btn-secondary" id="configBtn">⚙️ Card Mapping</button>
           <button class="btn btn-secondary" id="cardConfigBtn">📋 Card Config</button>
@@ -367,7 +367,7 @@
       </div>
     </div>
     
-    <!-- Upgrade Modal (consolidated — DP and Pro side by side with inline activation) -->
+    <!-- Upgrade Modal (DP and Pro side by side with purchase buttons + inline activation) -->
     <div id="upgradeModal" class="loading-overlay hidden" style="cursor:pointer;">
       <div class="loading-modal" style="cursor:default;max-width:700px;text-align:left;" onclick="event.stopPropagation()">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
@@ -389,13 +389,13 @@
               <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span>Edit categories &amp; card settings</li>
               <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span>Card Year anniversary toggle</li>
               <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span>Export your data</li>
-              <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span>Perfect for annual fee renewals</li>
             </ul>
-            <div style="border-top:1px solid #e7e5e4;padding-top:12px;">
-              <div style="font-size:12px;font-weight:500;color:#57534e;margin-bottom:6px;">Have a key? Activate below:</div>
+            <button id="upgradeChoiceDP" class="btn btn-primary" style="width:100%;justify-content:center;margin-bottom:10px;">Get Decision Pass — $12</button>
+            <div style="border-top:1px solid #e7e5e4;padding-top:10px;">
+              <div style="font-size:11px;font-weight:500;color:#78716c;margin-bottom:5px;">Already have a key?</div>
               <div style="display:flex;gap:6px;">
                 <input type="text" id="dpKeyInput" placeholder="License key" class="form-select" style="flex:1;font-size:12px;padding:6px 8px;">
-                <button class="btn btn-primary" id="dpActivateBtn" style="font-size:12px;padding:6px 12px;">Activate</button>
+                <button class="btn btn-secondary" id="dpActivateBtn" style="font-size:12px;padding:6px 12px;">Activate</button>
               </div>
               <div id="dpKeyError" style="font-size:11px;color:#dc2626;margin-top:4px;display:none;"></div>
               <div id="dpCardSelector" style="display:none;margin-top:8px;">
@@ -416,17 +416,86 @@
               <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span>Edit all categories &amp; settings</li>
               <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span>Export all data</li>
               <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span>Scenario calculator <span style="color:#a8a29e;">(coming soon)</span></li>
-              <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span>Check before every annual fee</li>
             </ul>
-            <div style="border-top:1px solid #e7e5e4;padding-top:12px;">
-              <div style="font-size:12px;font-weight:500;color:#57534e;margin-bottom:6px;">Have a key? Activate below:</div>
+            <button id="upgradeChoicePro" class="btn btn-primary" style="width:100%;justify-content:center;margin-bottom:10px;background:#1c1917;">Get Pro — $24/year</button>
+            <div style="border-top:1px solid #e7e5e4;padding-top:10px;">
+              <div style="font-size:11px;font-weight:500;color:#78716c;margin-bottom:5px;">Already have a key?</div>
               <div style="display:flex;gap:6px;">
                 <input type="text" id="proKeyInput" placeholder="License key" class="form-select" style="flex:1;font-size:12px;padding:6px 8px;">
-                <button class="btn btn-primary" id="proActivateBtn" style="font-size:12px;padding:6px 12px;">Activate</button>
+                <button class="btn btn-secondary" id="proActivateBtn" style="font-size:12px;padding:6px 12px;">Activate</button>
               </div>
               <div id="proKeyError" style="font-size:11px;color:#dc2626;margin-top:4px;display:none;"></div>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Decision Pass Detail Modal -->
+    <div id="dpInfoModal" class="loading-overlay hidden" style="cursor:pointer;">
+      <div class="loading-modal" style="cursor:default;max-width:500px;text-align:left;" onclick="event.stopPropagation()">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <h3 style="font-size:18px;font-weight:600;margin:0;">Decision Pass</h3>
+          <button id="closeDPInfoModal" style="background:none;border:none;font-size:20px;cursor:pointer;color:#78716c;">&times;</button>
+        </div>
+        <div style="background:#ecfdf5;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin-bottom:16px;">
+          <div style="font-weight:600;color:#059669;margin-bottom:8px;">How it works</div>
+          <div style="font-size:13px;color:#057a55;line-height:1.6;">
+            Decision Pass plugs directly into your free tracker. Pick one card, and for 7 days you get full editing access — recategorize transactions, tweak card settings, toggle Card Year view, and export data. You'll also see that card's complete transaction history, not just the last year.
+          </div>
+        </div>
+        <div style="font-size:13px;color:#44403c;line-height:1.7;margin-bottom:16px;">
+          <div style="font-weight:600;margin-bottom:8px;">What you unlock:</div>
+          <ul style="list-style:none;padding:0;margin:0;">
+            <li style="padding:4px 0;padding-left:22px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span><strong>Full history</strong> — see every transaction, not just the last 12 months</li>
+            <li style="padding:4px 0;padding-left:22px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span><strong>Edit categories</strong> — fix miscategorized transactions for accurate ROI</li>
+            <li style="padding:4px 0;padding-left:22px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span><strong>Card settings</strong> — adjust point values, credits, anniversary bonus</li>
+            <li style="padding:4px 0;padding-left:22px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span><strong>Card Year toggle</strong> — view ROI by anniversary year instead of calendar year</li>
+            <li style="padding:4px 0;padding-left:22px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span><strong>Export</strong> — download your data as CSV or JSON</li>
+          </ul>
+        </div>
+        <div style="background:#f5f5f4;border-radius:8px;padding:12px 16px;margin-bottom:16px;">
+          <div style="font-size:12px;color:#57534e;line-height:1.5;">
+            <strong>Perfect timing:</strong> Use it right before your annual fee hits. Upload your full year of statements, activate the pass on that card, and see exactly whether the card pays for itself.
+          </div>
+        </div>
+        <div style="text-align:center;">
+          <a id="dpGumroadLink" href="#" target="_blank" class="btn btn-primary" style="width:100%;justify-content:center;font-size:15px;padding:12px;">Buy Decision Pass — $12</a>
+          <p style="font-size:11px;color:#a8a29e;margin-top:8px;">One-time payment. You'll receive a license key to activate here.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pro Detail Modal -->
+    <div id="proInfoModal" class="loading-overlay hidden" style="cursor:pointer;">
+      <div class="loading-modal" style="cursor:default;max-width:500px;text-align:left;" onclick="event.stopPropagation()">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <h3 style="font-size:18px;font-weight:600;margin:0;">Pro</h3>
+          <button id="closeProInfoModal" style="background:none;border:none;font-size:20px;cursor:pointer;color:#78716c;">&times;</button>
+        </div>
+        <div style="background:#fafaf9;border:1px solid #e7e5e4;border-radius:8px;padding:16px;margin-bottom:16px;">
+          <div style="font-weight:600;margin-bottom:8px;">Everything, unlocked</div>
+          <div style="font-size:13px;color:#57534e;line-height:1.6;">
+            Pro opens a separate experience with zero restrictions. Every card, every transaction, full editing, full history — plus advanced features as they ship. One subscription covers your entire portfolio.
+          </div>
+        </div>
+        <div style="font-size:13px;color:#44403c;line-height:1.7;margin-bottom:16px;">
+          <div style="font-weight:600;margin-bottom:8px;">Everything in Decision Pass, plus:</div>
+          <ul style="list-style:none;padding:0;margin:0;">
+            <li style="padding:4px 0;padding-left:22px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span><strong>All cards unlocked</strong> — edit categories, settings, and credits on every card</li>
+            <li style="padding:4px 0;padding-left:22px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span><strong>Unlimited history</strong> — full transaction data across all cards</li>
+            <li style="padding:4px 0;padding-left:22px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span><strong>Scenario calculator</strong> — see what adding or dropping a card would do <span style="color:#a8a29e;">(coming soon)</span></li>
+            <li style="padding:4px 0;padding-left:22px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span><strong>Continuous access</strong> — check before every annual fee, year-round</li>
+          </ul>
+        </div>
+        <div style="background:#f5f5f4;border-radius:8px;padding:12px 16px;margin-bottom:16px;">
+          <div style="font-size:12px;color:#57534e;line-height:1.5;">
+            <strong>Worth it if you carry 2+ cards.</strong> At $24/year, Pro costs less than two Decision Passes and covers your entire wallet indefinitely.
+          </div>
+        </div>
+        <div style="text-align:center;">
+          <a id="proGumroadLink" href="#" target="_blank" class="btn btn-primary" style="width:100%;justify-content:center;font-size:15px;padding:12px;background:#1c1917;">Get Pro — $24/year</a>
+          <p style="font-size:11px;color:#a8a29e;margin-top:8px;">Annual subscription. You'll receive a license key to activate here.</p>
         </div>
       </div>
     </div>
@@ -4062,7 +4131,7 @@ function renderView(view) {
     
     // Decision Pass banner for transactions page (free tier only)
     const txnBannerKey = 'transactions';
-    const showTxnBanner = window.TIER_CONFIG !== 'pro' && !state.dpBannersDismissed[txnBannerKey];
+    const showTxnBanner = window.TIER_CONFIG !== 'pro' && getActiveDecisionPasses().length === 0 && !state.dpBannersDismissed[txnBannerKey];
     const txnDPBanner = showTxnBanner ? `
       <div class="dp-banner" data-banner-key="${txnBannerKey}" style="position:relative;background:#ecfdf5;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;padding-right:32px;margin-bottom:16px;font-size:12px;color:#057a55;">
         Transaction categories are read-only. Unlock editing with a <a href="#" class="dp-upgrade-link" style="color:#059669;font-weight:600;text-decoration:underline;cursor:pointer;">Decision Pass</a> to recategorize transactions per card.
@@ -5833,6 +5902,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
   });
 
+  // Purchase buttons → open detail modals
+  document.getElementById('upgradeChoiceDP').addEventListener('click', () => {
+    document.getElementById('upgradeModal').classList.add('hidden');
+    document.getElementById('dpInfoModal').classList.remove('hidden');
+  });
+  document.getElementById('upgradeChoicePro').addEventListener('click', () => {
+    document.getElementById('upgradeModal').classList.add('hidden');
+    document.getElementById('proInfoModal').classList.remove('hidden');
+  });
+
+  // Close detail modals
+  document.getElementById('closeDPInfoModal').addEventListener('click', () => {
+    document.getElementById('dpInfoModal').classList.add('hidden');
+  });
+  document.getElementById('dpInfoModal').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
+  });
+  document.getElementById('closeProInfoModal').addEventListener('click', () => {
+    document.getElementById('proInfoModal').classList.add('hidden');
+  });
+  document.getElementById('proInfoModal').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
+  });
+
   // Decision Pass key activation - Step 1: validate key and show card selector
   document.getElementById('dpActivateBtn').addEventListener('click', () => {
     const key = document.getElementById('dpKeyInput').value.trim();
@@ -5886,7 +5979,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     const success = activateDecisionPass(key, cardId);
     if (success) {
       document.getElementById('upgradeModal').classList.add('hidden');
+      // Re-render whichever view is active
       if (state.results) renderView(state.activeView);
+      // Also re-render card config if it's currently visible
+      const configSection = document.getElementById('cardConfigSection');
+      if (configSection && !configSection.classList.contains('hidden')) {
+        const currentConfigCard = document.getElementById('configCardSelect')?.value;
+        if (currentConfigCard) showCardConfigEditor(currentConfigCard);
+      }
     } else {
       errorEl.textContent = 'Activation failed. Please check your key and try again.';
       errorEl.style.display = 'block';

@@ -428,19 +428,20 @@
 
 <script>
 // =============================================================================
-// PRO TIER VALIDATION — must run before anything else
+// PRO TIER VALIDATION
 // =============================================================================
 window.TIER_CONFIG = 'pro';
-
-(function validateProAccess() {
+(function() {
   try {
-    const raw = localStorage.getItem('ccTracker_proAccess');
-    if (!raw) { window.location.href = 'app.html'; return; }
-    const proAccess = JSON.parse(raw);
-    if (!proAccess || !proAccess.activatedAt) { window.location.href = 'app.html'; return; }
-    const elapsed = Date.now() - proAccess.activatedAt;
-    if (elapsed > 365 * 24 * 60 * 60 * 1000) { window.location.href = 'app.html'; return; }
-  } catch (e) { window.location.href = 'app.html'; return; }
+    const proAccess = JSON.parse(localStorage.getItem('ccTracker_proAccess'));
+    if (!proAccess || !proAccess.key) {
+      window.location.href = 'app.html';
+      return;
+    }
+  } catch(e) {
+    window.location.href = 'app.html';
+    return;
+  }
 })();
 
 // =============================================================================
@@ -3464,7 +3465,7 @@ function showResults(results, isNewUpload = false) {
     ${results.cards.length} cards tracked${lowConfBadge}
     <div style="margin-top:10px;padding-top:10px;border-top:1px dashed #d6d3d1;">
       <span style="background:#1c1917;color:#fff;font-size:10px;font-weight:600;padding:1px 6px;border-radius:9999px;letter-spacing:0.04em;">PRO</span>
-      <span style="margin-left:6px;">Feedback welcome: <span id="feedbackEmail" style="color:#2563eb;cursor:pointer;text-decoration:underline;" title="Click to send feedback"></span></span>
+      <span style="margin-left:6px;">Thanks for supporting the tracker! Feedback welcome: <span id="feedbackEmail" style="color:#2563eb;cursor:pointer;text-decoration:underline;" title="Click to send feedback"></span></span>
     </div>
   `;
   initFeedbackEmail();
@@ -3846,7 +3847,8 @@ function renderView(view) {
                     style="display:inline-block;font-size:9px;font-weight:600;padding:1px 4px;border-radius:3px;background:${isCardYearActive ? '#4b6bfb' : '#e7e5e4'};color:${isCardYearActive ? '#fff' : '#a8a29e'};cursor:pointer;margin-left:6px;vertical-align:middle;flex-shrink:0;">CY</span>
                 ` : '';
 
-                // Pro: no Decision Pass badges needed — everything is unlocked
+                // Decision Pass indicator - shows when this card has an active Decision Pass
+                const hasDPActive = hasActiveDecisionPass(c.cardId);
                 const dpBadgeHtml = '';
 
                 return `<tr data-row-id="${rowId}" style="${cardYearRowStyle}">
@@ -4009,7 +4011,7 @@ function renderView(view) {
     
     // Decision Pass banner for transactions page (free tier only)
     const txnBannerKey = 'transactions';
-    const showTxnBanner = window.TIER_CONFIG !== 'pro' && !state.dpBannersDismissed[txnBannerKey];
+    const showTxnBanner = window.TIER_CONFIG !== 'pro' && getActiveDecisionPasses().length === 0 && !state.dpBannersDismissed[txnBannerKey];
     const txnDPBanner = showTxnBanner ? `
       <div class="dp-banner" data-banner-key="${txnBannerKey}" style="position:relative;background:#ecfdf5;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;padding-right:32px;margin-bottom:16px;font-size:12px;color:#057a55;">
         Transaction categories are read-only. Unlock editing with a <a href="#" class="dp-upgrade-link" style="color:#059669;font-weight:600;text-decoration:underline;cursor:pointer;">Decision Pass</a> to recategorize transactions per card.

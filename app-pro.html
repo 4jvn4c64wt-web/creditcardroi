@@ -842,9 +842,12 @@ function activateDecisionPass(key, cardId) {
   if (!isValidLicenseKeyFormat(key)) return false;
   if (!cardId || !CARDS[cardId]) return false;
 
-  // Check if this key is already used
-  const existingKey = state.decisionPasses.find(dp => dp.key === key.trim());
-  if (existingKey) return false; // Key already used
+  // Test keys (TESTDP-xxxx) bypass duplicate check for easy testing
+  const isTestKey = /^TESTDP-/i.test(key.trim());
+  if (!isTestKey) {
+    const existingKey = state.decisionPasses.find(dp => dp.key === key.trim());
+    if (existingKey) return false; // Key already used
+  }
 
   state.decisionPasses.push({
     key: key.trim(),
@@ -863,6 +866,7 @@ function activateDecisionPass(key, cardId) {
 function activateProAccess(key) {
   if (!isValidLicenseKeyFormat(key)) return false;
 
+  // Test keys (TESTPRO-xxxx) work just like real keys
   state.proAccess = {
     key: key.trim(),
     activatedAt: Date.now()

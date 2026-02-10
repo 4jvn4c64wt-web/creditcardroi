@@ -435,25 +435,12 @@ window.TIER_CONFIG = 'pro';
 (function validateProAccess() {
   try {
     const raw = localStorage.getItem('ccTracker_proAccess');
-    if (!raw) {
-      window.location.href = 'app.html';
-      return;
-    }
+    if (!raw) { window.location.href = 'app.html'; return; }
     const proAccess = JSON.parse(raw);
-    if (!proAccess || !proAccess.activatedAt) {
-      window.location.href = 'app.html';
-      return;
-    }
+    if (!proAccess || !proAccess.activatedAt) { window.location.href = 'app.html'; return; }
     const elapsed = Date.now() - proAccess.activatedAt;
-    if (elapsed > 365 * 24 * 60 * 60 * 1000) {
-      // Pro expired — redirect to Free
-      window.location.href = 'app.html';
-      return;
-    }
-  } catch (e) {
-    window.location.href = 'app.html';
-    return;
-  }
+    if (elapsed > 365 * 24 * 60 * 60 * 1000) { window.location.href = 'app.html'; return; }
+  } catch (e) { window.location.href = 'app.html'; return; }
 })();
 
 // =============================================================================
@@ -705,7 +692,6 @@ let state = {
   results: null,
   detectedAnnualFees: {}, // { cardId: { year: amount } } - detected from transaction data
   activeView: 'summary',
-  dpComparisonMode: false, // When true, clip DP cards to 3 months for apples-to-apples comparison
   selectedYear: null,
   selectedCreditYear: null, // For card config credit year selection
   selectedCashPlusYear: null, // For Cash+ quarterly category year selection
@@ -743,8 +729,7 @@ let state = {
 // DECISION PASS & TIER LOGIC
 // =============================================================================
 const DECISION_PASS_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-const FREE_DATA_MONTHS = 3;
-const DP_DATA_MONTHS = 12;
+const FREE_DATA_MONTHS = 12; // Free users see 1 year of data
 
 // Expire old Decision Passes on page load
 (function expireDecisionPasses() {
@@ -782,39 +767,54 @@ function getActiveDecisionPassLookup() {
 }
 
 /**
- * Get the data range cutoff date for a card based on its tier
+ * Check if a card's data is editable (has active DP, or Pro, or is an exception card)
+ * Cash+ always allows quarterly category editing; Bilt always allows config editing (except credits)
  * @param {string} cardId - The card identifier
- * @param {boolean} forceThreeMonths - Override to use 3-month range (for comparison mode)
- * @returns {Date} The earliest date to include transactions from
+ * @param {string} editType - Type of edit: 'category', 'config', 'credits', 'export'
+ * @returns {boolean}
  */
-function getTierCutoffDate(cardId, forceThreeMonths = false) {
-  const now = new Date();
-  const months = (!forceThreeMonths && hasActiveDecisionPass(cardId)) ? DP_DATA_MONTHS : FREE_DATA_MONTHS;
-  return new Date(now.getFullYear(), now.getMonth() - months, now.getDate());
+function isCardEditable(cardId, editType = 'config') {
+  // Pro: everything editable
+  if (window.TIER_CONFIG === 'pro') return true;
+
+  // Active Decision Pass: card is fully editable
+  if (hasActiveDecisionPass(cardId)) return true;
+
+  // Exception: Cash+ quarterly categories always editable
+  if (cardId === 'us-bank-cash-plus' && editType === 'category') return true;
+
+  // Exception: Bilt cards config always editable except credits
+  const card = CARDS[cardId];
+  if (card && card.isBilt && editType === 'config') return true;
+
+  return false;
 }
 
 /**
  * Apply per-card tier-based date filtering to a set of transactions
- * Cards with active Decision Pass get 12 months; others get 3 months
+ * Free users: 12 months of data
+ * Decision Pass cards: all-time (no cutoff)
+ * Pro: all-time (no cutoff)
  * @param {Array} transactions - Processed transactions to filter
- * @param {boolean} forceThreeMonths - If true, apply 3-month limit to all cards (comparison mode)
  * @returns {Array} Filtered transactions
  */
-function applyTierDateFiltering(transactions, forceThreeMonths = false) {
+function applyTierDateFiltering(transactions) {
   // Pro tier has no data restrictions
   if (window.TIER_CONFIG === 'pro') return transactions;
 
   const dpLookup = getActiveDecisionPassLookup();
   const now = new Date();
+  const cutoff = new Date(now.getFullYear(), now.getMonth() - FREE_DATA_MONTHS, now.getDate());
 
   return transactions.filter(t => {
-    if (!t.cardId || t.cardId === 'skip') return true; // Don't filter non-card transactions
+    if (!t.cardId || t.cardId === 'skip') return true;
+
+    // Decision Pass cards get all-time data
+    if (dpLookup[t.cardId]) return true;
 
     const parsed = parseDateString(t.date);
-    if (!parsed) return true; // Can't parse date, keep it
+    if (!parsed) return true;
 
-    const months = (!forceThreeMonths && dpLookup[t.cardId]) ? DP_DATA_MONTHS : FREE_DATA_MONTHS;
-    const cutoff = new Date(now.getFullYear(), now.getMonth() - months, now.getDate());
     return parsed.date >= cutoff;
   });
 }
@@ -2627,17 +2627,34 @@ function showCardConfigEditor(preselectedCardId = null) {
     const cardId = select.value;
     const card = CARDS[cardId];
     if (!card) return;
-    
+
+    // Editability gating
+    const cardEditable = isCardEditable(cardId, 'config');
+    const creditsEditable = isCardEditable(cardId, 'credits');
+    const isCashPlus = cardId === 'us-bank-cash-plus';
+    const isCFF = cardId === 'chase-freedom-flex';
+    // Cash+ quarterly categories always editable; Bilt config always editable (except credits)
+    const cashPlusEditable = isCashPlus || cardEditable;
+    const biltEditable = (card.isBilt) || cardEditable;
+
+    // Update save button and show locked notice
+    const saveBtn = document.getElementById('saveCardConfig');
+    if (!cardEditable && !cashPlusEditable && !biltEditable) {
+      saveBtn.disabled = true;
+      saveBtn.title = 'Unlock editing with Decision Pass';
+    } else {
+      saveBtn.disabled = false;
+      saveBtn.title = '';
+    }
+
     // Check for feature education (only after tour is complete)
     if (state.tourComplete && typeof checkFeatureEducation === 'function') {
       setTimeout(() => checkFeatureEducation(cardId), 100);
     }
-    
+
     const currentPointValue = getPointValue(cardId) * 100;
     const defaultPointValue = card.pointValue * 100;
     const disabled = state.disabledCredits[cardId] || [];
-    const isCashPlus = cardId === 'us-bank-cash-plus';
-    const isCFF = cardId === 'chase-freedom-flex';
     
     // Get available years from transactions
     const txnYears = [...new Set(state.transactions.map(t => getYearFromDateString(t.date)))].sort().reverse();
@@ -3068,15 +3085,34 @@ function showCardConfigEditor(preselectedCardId = null) {
       creditsSection = '';
     }
 
+    // Locked notice for non-editable cards
+    const lockedNotice = (!cardEditable && !cashPlusEditable && !biltEditable) ? `
+      <div style="background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#92400e;">
+        Card configuration is read-only. Unlock editing for this card with a <strong>Decision Pass</strong>.
+      </div>
+    ` : (!cardEditable ? `
+      <div style="background:#ecfdf5;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#057a55;">
+        ${isCashPlus ? 'Quarterly categories are editable. Other settings require a Decision Pass.' : ''}
+        ${card.isBilt ? 'Bilt configuration is editable. Point values and credits require a Decision Pass.' : ''}
+      </div>
+    ` : '');
+
+    // Locked style for non-editable sections
+    const lockedStyle = !cardEditable ? 'pointer-events:none;opacity:0.55;' : '';
+    // Bilt config sections are always editable, credits are not (unless DP active)
+    const biltLockedStyle = !biltEditable ? 'pointer-events:none;opacity:0.55;' : '';
+    const creditsLockedStyle = !creditsEditable ? 'pointer-events:none;opacity:0.55;' : '';
+
     document.getElementById('cardConfigContent').innerHTML = `
+      ${lockedNotice}
       <div style="display:grid;gap:24px;">
         <!-- Point Value -->
-        <div>
+        <div style="${lockedStyle}">
           <h3 style="font-size:14px;font-weight:600;margin-bottom:12px;">Point Value</h3>
           <div class="card-mapping-row">
             <span style="min-width:120px;">Value per point:</span>
             <input type="number" step="0.1" min="0" max="10" value="${currentPointValue.toFixed(1)}"
-                   id="configPointValue" class="form-select" style="width:100px;">
+                   id="configPointValue" class="form-select" style="width:100px;" ${!cardEditable ? 'disabled' : ''}>
             <span style="font-size:13px;color:#78716c;">¢</span>
             <span style="font-size:12px;color:#a8a29e;">(default: ${defaultPointValue.toFixed(1)}¢)</span>
           </div>
@@ -3084,7 +3120,7 @@ function showCardConfigEditor(preselectedCardId = null) {
 
         ${card.annualBonusPoints ? `
         <!-- Anniversary Bonus Points -->
-        <div>
+        <div style="${lockedStyle}">
           <h3 style="font-size:14px;font-weight:600;margin-bottom:12px;">Anniversary Bonus Miles</h3>
           <p style="font-size:12px;color:#78716c;margin-bottom:8px;">Bonus miles awarded each cardholder anniversary (not a statement credit). Included in ROI calculation.</p>
           <div class="card-mapping-row">
@@ -3102,9 +3138,9 @@ function showCardConfigEditor(preselectedCardId = null) {
         </div>
         ` : ''}
 
-        ${cashPlusSection}
+        <div style="${isCashPlus ? '' : lockedStyle}">${cashPlusSection}</div>
         ${cffSection}
-        ${biltSection}
+        <div style="${card.isBilt ? '' : lockedStyle}">${biltSection}</div>
 
         <!-- Multipliers (read-only) -->
         <div>
@@ -3125,7 +3161,7 @@ function showCardConfigEditor(preselectedCardId = null) {
         </div>
         
         <!-- Credits -->
-        ${creditsSection}
+        <div style="${creditsLockedStyle}">${creditsSection}</div>
       </div>
     `;
     
@@ -3455,9 +3491,8 @@ function renderView(view) {
       filteredProcessed = r.processed.filter(t => getYearFromDate(t.date) === displayYear);
     }
 
-    // Pro: no tier date filtering needed — all data shown
-    const hasAnyActiveDP = false;
-    filteredProcessed = applyTierDateFiltering(filteredProcessed, state.dpComparisonMode);
+    // Apply per-card tier date filtering (Free=1yr, DP=all-time)
+    filteredProcessed = applyTierDateFiltering(filteredProcessed);
     
     // Recalculate totals for filtered transactions
     const filteredTotals = filteredProcessed.reduce((acc, t) => {
@@ -3602,7 +3637,7 @@ function renderView(view) {
     cards.forEach(c => {
       const cardDef = CARDS[c.cardId];
       const availableCredits = cardDef?.credits || [];
-      const showCardYearToggle = displayYear && canShowCardYearToggle(c.cardId);
+      const showCardYearToggle = displayYear && canShowCardYearToggle(c.cardId) && isCardEditable(c.cardId, 'config');
       const isCardYearActive = showCardYearToggle && state.cardYearToggles[c.cardId];
 
       if (isCardYearActive && displayYear) {
@@ -3740,22 +3775,7 @@ function renderView(view) {
     // Get available years for filter
     const summaryYears = state.availableYears.length > 0 ? state.availableYears : [...new Set(r.processed.map(t => getYearFromDateString(t.date)))].sort((a, b) => b - a);
     
-    // Decision Pass comparison toggle HTML (only shown when DP is active)
-    const dpToggleHtml = hasAnyActiveDP ? `
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;padding:10px 14px;background:#ecfdf5;border:1px solid #bbf7d0;border-radius:8px;font-size:13px;">
-        <span style="color:#059669;font-weight:500;">Decision Pass active</span>
-        <span style="color:#78716c;margin:0 4px;">—</span>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-          <input type="checkbox" id="dpComparisonToggle" ${state.dpComparisonMode ? 'checked' : ''}
-            style="accent-color:#059669;">
-          <span style="color:#57534e;">3-month comparison mode</span>
-        </label>
-        <span class="help-icon tooltip tooltip-multiline" data-tooltip="When checked, clips Decision Pass cards to 3 months for apples-to-apples comparison with other cards">?</span>
-      </div>
-    ` : '';
-
     container.innerHTML = `
-      ${dpToggleHtml}
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
           <div>
@@ -3793,7 +3813,7 @@ function renderView(view) {
 
                 // Use pre-calculated card year data if available
                 const cyData = cardDisplayData[c.cardId];
-                const showCardYearToggle = displayYear && canShowCardYearToggle(c.cardId);
+                const showCardYearToggle = displayYear && canShowCardYearToggle(c.cardId) && isCardEditable(c.cardId, 'config');
                 const isCardYearActive = cyData?.isCardYearActive || false;
                 const cardYearPeriod = cyData?.cardYearPeriod || null;
                 const displayCreditsUsed = cyData?.creditsUsed || creditsUsedByCard[c.cardId] || {};
@@ -3903,15 +3923,6 @@ function renderView(view) {
       state.selectedYear = newYear;
       renderView('summary');
     });
-
-    // Decision Pass comparison toggle handler
-    const dpToggleEl = document.getElementById('dpComparisonToggle');
-    if (dpToggleEl) {
-      dpToggleEl.addEventListener('change', (e) => {
-        state.dpComparisonMode = e.target.checked;
-        renderView('summary');
-      });
-    }
 
     // Add click handler for detail toggles - clicking either Points or Credits toggles both panels
     document.querySelectorAll('.detail-toggle').forEach(toggle => {
@@ -4093,8 +4104,8 @@ function renderView(view) {
       const needsReview = document.getElementById('filterNeedsReview').checked;
       const merchantSearch = (document.getElementById('filterMerchant').value || '').toLowerCase().trim();
 
-      // Apply per-card tier date filtering (3 months free, 12 months with Decision Pass)
-      let txns = applyTierDateFiltering([...r.processed], state.dpComparisonMode);
+      // Apply per-card tier date filtering (Free=1yr, DP=all-time)
+      let txns = applyTierDateFiltering([...r.processed]);
 
       // Apply year filter
       if (yearFilter) {
@@ -4326,17 +4337,24 @@ function renderView(view) {
         <td style="max-width:180px;"><div style="font-weight:500;">${escapeHtml(t.merchant)}</div></td>
         <td style="font-size:12px;">${escapeHtml(t.cardName)}</td>
         <td>
+          ${isCardEditable(t.cardId, 'category') ? `
           <span class="badge category-badge"
                 data-txn-id="${escapeHtml(t.id)}" data-merchant="${escapeHtml(t.merchant)}" data-current-cat="${escapeHtml(t.category)}" data-card-id="${escapeHtml(t.cardId)}"
                 style="cursor:pointer;${badgeInfo.style}" title="${escapeHtml(badgeInfo.tooltip)} — Click to change">
             ${formatCategoryDebug(t)}
           </span>
+          ` : `
+          <span class="badge"
+                style="${badgeInfo.style}opacity:0.7;" title="${escapeHtml(badgeInfo.tooltip)}">
+            ${formatCategoryDebug(t)}
+          </span>
+          `}
         </td>
         <td class="text-right mono" style="color:${amountColor};font-weight:${amountWeight};">${t.isCredit ? '+' : '-'}${formatCurrencyPrecise(Math.abs(t.amount))}</td>
         <td class="text-right mono">${multiDisplay}</td>
         <td class="text-right mono" style="color:${pointsColor};">${pointsDisplay}</td>
         <td style="font-size:11px;color:#78716c;max-width:180px;">
-          ${!t.isPayment && t.confidence < CONFIDENCE_THRESHOLD ? '<span title="Low confidence - may need review" style="color:#b45309;">⚠️ </span>' : ''}${t.isCredit && !t.isPayment ? `
+          ${!t.isPayment && t.confidence < CONFIDENCE_THRESHOLD ? '<span title="Low confidence - may need review" style="color:#b45309;">⚠️ </span>' : ''}${t.isCredit && !t.isPayment && isCardEditable(t.cardId, 'category') ? `
             <span class="credit-toggle" data-txn-id="${escapeHtml(t.id)}" data-card-id="${escapeHtml(t.cardId)}"
                   style="cursor:pointer;text-decoration:underline;color:#2563eb;">
               ${escapeHtml(t.reason)}
@@ -5434,7 +5452,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Export Data button and modal handlers
   document.getElementById('exportData').addEventListener('click', () => {
     manageDataDropdown.classList.add('hidden');
-    
+
+    // Gate export: require at least one active Decision Pass or Pro
+    if (window.TIER_CONFIG !== 'pro' && getActiveDecisionPasses().length === 0) {
+      alert('Export is available with a Decision Pass or Pro subscription. Click the Upgrade button to learn more.');
+      return;
+    }
+
     // Update stats in modal
     const txnCount = state.savedTransactions.length;
     document.getElementById('exportTxnCount').textContent = txnCount.toLocaleString();
@@ -5542,65 +5566,74 @@ document.addEventListener('DOMContentLoaded', async () => {
   
   document.getElementById('saveCardConfig').addEventListener('click', async () => {
     const cardId = document.getElementById('configCardSelect').value;
-    
-    // Save point value
-    const pointVal = parseFloat(document.getElementById('configPointValue')?.value) / 100;
-    if (!isNaN(pointVal) && pointVal > 0) {
-      state.customPointValues[cardId] = pointVal;
-      safeLocalStorageSet('ccTracker_pointValues', state.customPointValues);
+    const cardFullyEditable = isCardEditable(cardId, 'config');
+
+    // Save point value (only if card is editable)
+    if (cardFullyEditable) {
+      const pointVal = parseFloat(document.getElementById('configPointValue')?.value) / 100;
+      if (!isNaN(pointVal) && pointVal > 0) {
+        state.customPointValues[cardId] = pointVal;
+        safeLocalStorageSet('ccTracker_pointValues', state.customPointValues);
+      }
     }
 
-    // Save annual bonus points override (if applicable)
-    const bonusInput = document.getElementById('configAnnualBonusPoints');
-    if (bonusInput) {
-      const bonusVal = parseInt(bonusInput.value);
-      if (!isNaN(bonusVal) && bonusVal >= 0) {
-        state.customAnnualBonusPoints[cardId] = bonusVal;
-      } else {
-        delete state.customAnnualBonusPoints[cardId];
+    // Save annual bonus points override (only if card is editable)
+    if (cardFullyEditable) {
+      const bonusInput = document.getElementById('configAnnualBonusPoints');
+      if (bonusInput) {
+        const bonusVal = parseInt(bonusInput.value);
+        if (!isNaN(bonusVal) && bonusVal >= 0) {
+          state.customAnnualBonusPoints[cardId] = bonusVal;
+        } else {
+          delete state.customAnnualBonusPoints[cardId];
+        }
+        safeLocalStorageSet('ccTracker_annualBonusPoints', state.customAnnualBonusPoints);
       }
-      safeLocalStorageSet('ccTracker_annualBonusPoints', state.customAnnualBonusPoints);
     }
 
-    // Save disabled credits
-    const disabledList = [];
-    document.querySelectorAll('.credit-toggle-checkbox').forEach(cb => {
-      if (!cb.checked) {
-        disabledList.push(cb.dataset.creditName);
-      }
-    });
-    state.disabledCredits[cardId] = disabledList;
-    safeLocalStorageSet('ccTracker_disabledCredits', state.disabledCredits);
-    
-    // Save monthly credit claims - NOW YEAR-SPECIFIC
-    const selectedYear = state.selectedCreditYear || new Date().getFullYear();
-    if (!state.monthlyCredits[cardId]) state.monthlyCredits[cardId] = {};
-    
-    document.querySelectorAll('.month-claim').forEach(cb => {
-      const creditName = cb.dataset.credit;
-      const month = parseInt(cb.dataset.month);
-      
-      // Initialize structure if needed
-      if (!state.monthlyCredits[cardId][creditName]) {
-        state.monthlyCredits[cardId][creditName] = {};
-      }
-      // Migrate legacy array format to year-based object
-      if (Array.isArray(state.monthlyCredits[cardId][creditName])) {
-        const legacyMonths = state.monthlyCredits[cardId][creditName];
-        state.monthlyCredits[cardId][creditName] = { [selectedYear]: legacyMonths };
-      }
-      if (!state.monthlyCredits[cardId][creditName][selectedYear]) {
-        state.monthlyCredits[cardId][creditName][selectedYear] = [];
-      }
-      
-      const yearMonths = state.monthlyCredits[cardId][creditName][selectedYear];
-      if (cb.checked && !yearMonths.includes(month)) {
-        yearMonths.push(month);
-      } else if (!cb.checked) {
-        state.monthlyCredits[cardId][creditName][selectedYear] = yearMonths.filter(m => m !== month);
-      }
-    });
-    safeLocalStorageSet('ccTracker_monthlyCredits', state.monthlyCredits);
+    // Save disabled credits (only if card credits are editable)
+    if (isCardEditable(cardId, 'credits')) {
+      const disabledList = [];
+      document.querySelectorAll('.credit-toggle-checkbox').forEach(cb => {
+        if (!cb.checked) {
+          disabledList.push(cb.dataset.creditName);
+        }
+      });
+      state.disabledCredits[cardId] = disabledList;
+      safeLocalStorageSet('ccTracker_disabledCredits', state.disabledCredits);
+    }
+
+    // Save monthly credit claims - NOW YEAR-SPECIFIC (only if credits editable)
+    if (isCardEditable(cardId, 'credits')) {
+      const selectedYear = state.selectedCreditYear || new Date().getFullYear();
+      if (!state.monthlyCredits[cardId]) state.monthlyCredits[cardId] = {};
+
+      document.querySelectorAll('.month-claim').forEach(cb => {
+        const creditName = cb.dataset.credit;
+        const month = parseInt(cb.dataset.month);
+
+        // Initialize structure if needed
+        if (!state.monthlyCredits[cardId][creditName]) {
+          state.monthlyCredits[cardId][creditName] = {};
+        }
+        // Migrate legacy array format to year-based object
+        if (Array.isArray(state.monthlyCredits[cardId][creditName])) {
+          const legacyMonths = state.monthlyCredits[cardId][creditName];
+          state.monthlyCredits[cardId][creditName] = { [selectedYear]: legacyMonths };
+        }
+        if (!state.monthlyCredits[cardId][creditName][selectedYear]) {
+          state.monthlyCredits[cardId][creditName][selectedYear] = [];
+        }
+
+        const yearMonths = state.monthlyCredits[cardId][creditName][selectedYear];
+        if (cb.checked && !yearMonths.includes(month)) {
+          yearMonths.push(month);
+        } else if (!cb.checked) {
+          state.monthlyCredits[cardId][creditName][selectedYear] = yearMonths.filter(m => m !== month);
+        }
+      });
+      safeLocalStorageSet('ccTracker_monthlyCredits', state.monthlyCredits);
+    }
     
     // Save Cash+ quarterly categories for selected year
     // Use consistent fallback: most recent transaction year, or current year if no transactions

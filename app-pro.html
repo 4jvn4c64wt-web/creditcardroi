@@ -275,7 +275,7 @@
               </button>
             </div>
           </div>
-          <label class="btn btn-secondary" style="cursor:pointer;" title="Import another CSV or restore a backup">
+          <label class="btn btn-secondary" id="newUploadBtn" style="cursor:pointer;" title="Import another CSV or restore a backup">
             <input type="file" id="newFileInput" accept=".csv,.json">
             📄 New Upload
           </label>
@@ -786,10 +786,9 @@ function isCardEditable(cardId, editType = 'config') {
   // Active Decision Pass: card is fully editable
   if (hasActiveDecisionPass(cardId)) return true;
 
-  // Exception: Bilt cards config always editable except credits
-  // (Cash+ quarterly config is handled directly in renderCardConfig, not through this function)
-  const card = CARDS[cardId];
-  if (card && card.isBilt && editType === 'config') return true;
+  // Note: Bilt-specific config (rent day, reward options) is handled directly
+  // in renderCardConfig via card.isBilt checks, not through this function.
+  // Point values for Bilt cards are locked just like other cards.
 
   return false;
 }
@@ -2683,8 +2682,8 @@ function showCardConfigEditor(preselectedCardId = null) {
       saveBtn.title = '';
     }
 
-    // Check for feature education (only after tour is complete)
-    if (state.tourComplete && typeof checkFeatureEducation === 'function') {
+    // Check for feature education (only after tour is fully complete and not actively running)
+    if (state.tourComplete && !state.tourActive && typeof checkFeatureEducation === 'function') {
       setTimeout(() => checkFeatureEducation(cardId), 100);
     }
 
@@ -3689,7 +3688,7 @@ function renderView(view) {
     cards.forEach(c => {
       const cardDef = CARDS[c.cardId];
       const availableCredits = cardDef?.credits || [];
-      const showCardYearToggle = displayYear && canShowCardYearToggle(c.cardId) && isCardEditable(c.cardId, 'config');
+      const showCardYearToggle = displayYear && canShowCardYearToggle(c.cardId) && (isCardEditable(c.cardId, 'config') || CARDS[c.cardId]?.isBilt);
       const isCardYearActive = showCardYearToggle && state.cardYearToggles[c.cardId];
 
       if (isCardYearActive && displayYear) {
@@ -3865,7 +3864,7 @@ function renderView(view) {
 
                 // Use pre-calculated card year data if available
                 const cyData = cardDisplayData[c.cardId];
-                const showCardYearToggle = displayYear && canShowCardYearToggle(c.cardId) && isCardEditable(c.cardId, 'config');
+                const showCardYearToggle = displayYear && canShowCardYearToggle(c.cardId) && (isCardEditable(c.cardId, 'config') || CARDS[c.cardId]?.isBilt);
                 const isCardYearActive = cyData?.isCardYearActive || false;
                 const cardYearPeriod = cyData?.cardYearPeriod || null;
                 const displayCreditsUsed = cyData?.creditsUsed || creditsUsedByCard[c.cardId] || {};
@@ -4075,7 +4074,7 @@ function renderView(view) {
           const lowConfCount = r.processed.filter(t => !t.isPayment && t.confidence < CONFIDENCE_THRESHOLD).length;
           const needsReviewBadge = lowConfCount > 0 ? `<span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:10px;font-size:11px;font-weight:600;margin-left:4px;">${lowConfCount}</span>` : '';
           return `
-        <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+        <div id="filterRow" style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
           <div class="search-input-wrapper" style="position:relative;">
             <input type="text" id="filterMerchant" class="form-select" placeholder="Search merchants..." style="min-width:180px;padding-right:28px;">
             <button type="button" id="clearMerchantSearch" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:14px;color:#a8a29e;padding:2px 4px;display:none;" title="Clear search">&times;</button>

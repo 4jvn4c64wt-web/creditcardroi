@@ -15,12 +15,12 @@ const HELP_CONTENT = {
       {
         icon: '\u{1F3A8}',
         title: 'Category Colors',
-        text: '<span style="background:#dcfce7;padding:2px 6px;border-radius:4px;">Green</span> = Optimal card for that category. <span style="background:#fef9c3;padding:2px 6px;border-radius:4px;">Yellow</span> = Good, but better option exists. <span style="background:#fee2e2;padding:2px 6px;border-radius:4px;">Red</span> = Suboptimal choice.'
+        text: 'Colors compare across your cards. <span style="background:#dcfce7;padding:2px 6px;border-radius:4px;">Green</span> = Best card in your wallet for that purchase. <span style="background:#fef9c3;padding:2px 6px;border-radius:4px;">Yellow</span> = Good, but a better option exists. <span style="background:#fee2e2;padding:2px 6px;border-radius:4px;">Red</span> = Another card would have earned more. Use this to optimize which card to use going forward.'
       },
       {
         icon: '\u{1F4C5}',
-        title: 'Year Filter',
-        text: 'Filter results by year. "All Years" shows combined totals with annual fees counted once per card.'
+        title: 'Year Filter & Card Year',
+        text: 'Filter results by year. "All Years" shows combined totals with annual fees counted once per card. Use the <strong>CY</strong> toggle on each card to switch between Calendar Year (Jan\u2013Dec) and Card Year (anniversary date). Card Year is more useful when deciding whether to keep a card at renewal, since some credits and fees reset on the anniversary.'
       },
       {
         icon: '\u26A1',
@@ -32,6 +32,11 @@ const HELP_CONTENT = {
   transactions: {
     title: 'Transactions Page Help',
     sections: [
+      {
+        icon: '\u{1F9E9}',
+        title: 'How Classification Works',
+        text: 'The app automatically categorizes each transaction (e.g., restaurants \u2192 Dining, CVS \u2192 Drugstore) using the merchant name, your bank\'s category label, and built-in rules. This determines which point multiplier applies for each card. When the app isn\'t confident, it flags the transaction for your review.'
+      },
       {
         icon: '\u{1F3F7}\uFE0F',
         title: 'Recategorize Transactions',
@@ -70,12 +75,12 @@ const HELP_CONTENT = {
       {
         icon: '\u{1F4B3}',
         title: 'Statement Credits',
-        text: 'Toggle credits on/off to include/exclude from ROI. For manual credits (\u26A1), click the month buttons to mark when you\'ve claimed them.'
+        text: 'Some credits (like streaming or airline incidentals) are auto-detected from your transactions. Others (like Uber Cash or Amex Offers) don\'t appear in transaction data \u2014 those are marked \u26A1 and you track them manually by clicking the month buttons. Toggle any credit on/off to include or exclude it from ROI.'
       },
       {
         icon: '\u{1F4B0}',
         title: 'Point Values',
-        text: 'Adjust the cents-per-point value if you redeem differently than the default. This affects all value calculations.'
+        text: 'How much each point is worth when you redeem it (in cents). For example, at 2.0\u00A2 per point, 1,000 points = $20. Cash back users might set 1.0\u00A2, travel redeemers might set 1.5\u20132.0\u00A2. This affects all value calculations.'
       },
       {
         icon: '\u{1F4C5}',
@@ -160,10 +165,10 @@ const TOUR_STEPS = [
     type: 'modal',
     phase: 'setup',
     id: 'welcome',
-    title: 'Welcome to Credit Card ROI Tracker! \u{1F44B}',
+    title: 'Welcome to Credit Card ValueTracker! \u{1F44B}',
     content: `
-      <p>This app calculates exactly how much value you're getting from each credit card \u2014 factoring in points earned, credits used, and annual fees.</p>
-      <p style="margin-top:12px;"><strong>Let's get you set up in about 2 minutes.</strong></p>
+      <p>Upload transactions \u2192 the app classifies your spending \u2192 you see your <strong>net value per card</strong> (points + credits \u2212 annual fees).</p>
+      <p style="margin-top:12px;font-size:12px;color:#78716c;">\u{1F512} Your data never leaves your device. All calculations happen locally in your browser.</p>
     `,
     buttons: [{ text: 'Get Started \u2192', action: 'next', primary: true }]
   },
@@ -173,17 +178,13 @@ const TOUR_STEPS = [
     id: 'upload',
     title: 'Step 1: Upload Your Transactions \u{1F4C4}',
     content: `
-      <p style="text-align:left;">First, you'll need to upload a CSV file of your transactions. We support exports from most credit card companies and money management software, including:</p>
-      <ul style="margin:12px 0 12px 40px;line-height:1.8;text-align:left;">
-        <li>Chase, Amex, Bilt, Capital One</li>
-        <li>Monarch Money, Copilot, Mint</li>
-        <li>Most other bank CSV exports</li>
-      </ul>
-      <p style="text-align:left;">After you click Continue, drag & drop your CSV or click to browse.</p>
+      <p style="text-align:left;">First, you'll need to upload a CSV file of your transactions. We support exports from most credit card companies and money management apps.</p>
+      <p style="text-align:left;margin-top:12px;">After you click Continue, drag & drop your CSV or click to browse.</p>
     `,
     buttons: [{ text: 'Continue \u2192', action: 'next', primary: true }],
     onNext: () => { /* Will show upload section */ }
   },
+
   {
     type: 'wait-for-upload',
     phase: 'setup',
@@ -229,16 +230,6 @@ const TOUR_STEPS = [
   {
     type: 'spotlight',
     phase: 'summary-tour',
-    id: 'card-year-toggle',
-    target: '.card-year-toggle',
-    title: 'Card Year View \u{1F4C5}',
-    content: 'For cards with annual fees, click <strong>CY</strong> to switch between calendar year and card anniversary year. This affects how credits are calculated \u2014 in card year mode, annual caps apply.',
-    position: 'left',
-    clickRequired: false
-  },
-  {
-    type: 'spotlight',
-    phase: 'summary-tour',
     id: 'card-config-btn',
     target: '#cardConfigBtn',
     title: 'Card Configuration \u2699\uFE0F',
@@ -266,7 +257,7 @@ const TOUR_STEPS = [
     id: 'config-point-value',
     target: '#configPointValue',
     title: 'Point Valuation \u{1F4B0}',
-    content: 'Adjust how much you value each point (in cents). This affects all ROI calculations. The default is based on typical redemption values, but adjust if you redeem differently.',
+    content: '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING SOON</span><br>This is how much each point is worth when you redeem it. For example, at 2.0\u00A2 per point, 1,000 points = $20 in value. Cash back users might set 1.0\u00A2, travel redeemers might set 1.5\u20132.0\u00A2.',
     position: 'right',
     clickRequired: false
   },
@@ -276,7 +267,7 @@ const TOUR_STEPS = [
     id: 'config-credits-section',
     target: '#configCreditsSection',
     title: 'Statement Credits \u{1F4B3}',
-    content: 'Toggle credits <strong>ON</strong> to track them in your ROI, or <strong>OFF</strong> to exclude them. Only enabled credits will appear when categorizing transactions.',
+    content: 'Your statement credits are <strong>auto-detected</strong> from transactions (like streaming or airline incidentals). Others marked \u26A1 (like Uber Cash) require manual tracking. <span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING SOON</span> Toggle individual credits ON/OFF to customize your ROI calculation.',
     position: 'top',
     clickRequired: false
   },
@@ -314,7 +305,7 @@ const TOUR_STEPS = [
     onShow: 'setup-back-listener'
   },
 
-  // Phase 4: Transactions Tour - steps 15-18
+  // Phase 4: Transactions Tour - steps 15-19
   {
     type: 'spotlight',
     phase: 'transactions-tour',
@@ -329,15 +320,25 @@ const TOUR_STEPS = [
   {
     type: 'spotlight',
     phase: 'transactions-tour',
+    id: 'classification-explanation',
+    target: '#transactionsBody .badge',
+    title: 'How Transactions Are Classified \u{1F9E9}',
+    content: 'The app automatically categorizes each transaction (e.g., restaurants \u2192 Dining, CVS \u2192 Drugstore) to calculate the right point multiplier for each card. It uses the merchant name, your bank\'s category label, and built-in rules to make its best guess. When it\'s not confident, it flags the transaction for your review.',
+    position: 'right',
+    clickRequired: false
+  },
+  {
+    type: 'spotlight',
+    phase: 'transactions-tour',
     id: 'category-badges',
-    target: '.category-badge',
-    title: 'Category Badges \u{1F3F7}\uFE0F',
+    target: '#transactionsBody .badge',
+    title: 'Category Badge Colors \u{1F3F7}\uFE0F',
     content: `
-      Colors show card optimization:<br>
-      <span style="background:#dcfce7;padding:2px 6px;border-radius:4px;">Green</span> = Optimal card<br>
-      <span style="background:#fef9c3;padding:2px 6px;border-radius:4px;">Yellow</span> = Good, better exists<br>
-      <span style="background:#fee2e2;padding:2px 6px;border-radius:4px;">Red</span> = Suboptimal<br><br>
-      <strong>Click any badge</strong> to change the category or create a rule for similar merchants.
+      These colors compare across your cards:<br>
+      <span style="background:#dcfce7;padding:2px 6px;border-radius:4px;">Green</span> = Best card in your wallet for that purchase<br>
+      <span style="background:#fef9c3;padding:2px 6px;border-radius:4px;">Yellow</span> = Good, but a better option exists<br>
+      <span style="background:#fee2e2;padding:2px 6px;border-radius:4px;">Red</span> = Another card would have earned more<br><br>
+      This helps you optimize which card to use going forward.
     `,
     position: 'right',
     clickRequired: false
@@ -345,8 +346,18 @@ const TOUR_STEPS = [
   {
     type: 'spotlight',
     phase: 'transactions-tour',
+    id: 'recategorize',
+    target: '#transactionsBody .badge',
+    title: 'Recategorize Transactions \u{1F3F7}\uFE0F',
+    content: '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING SOON</span><br>You\'ll be able to recategorize spending categories and credits by clicking any badge. You can also add rules for specific merchants so they\'re always classified correctly.',
+    position: 'right',
+    clickRequired: false
+  },
+  {
+    type: 'spotlight',
+    phase: 'transactions-tour',
     id: 'filter-bar',
-    target: '#filterYear',
+    target: '#filterRow',
     title: 'Filter Your Transactions \u{1F50D}',
     content: 'Filter by year, month, card, or category to find specific transactions. Great for reviewing spending patterns.',
     position: 'bottom',
@@ -363,7 +374,7 @@ const TOUR_STEPS = [
     clickRequired: false
   },
 
-  // Phase 4b: Export Data - step 19
+  // Phase 4b: Export Data - step 20
   {
     type: 'spotlight',
     phase: 'transactions-tour',
@@ -374,22 +385,41 @@ const TOUR_STEPS = [
     position: 'bottom',
     clickRequired: false
   },
+  {
+    type: 'spotlight',
+    phase: 'transactions-tour',
+    id: 'card-mapping',
+    target: '#configBtn',
+    title: 'Card Mapping \u2699\uFE0F',
+    content: 'Opens the page where you matched account numbers to reward cards. Come back here if you need to reassign a card or if you add a new card to your wallet.',
+    position: 'bottom',
+    clickRequired: false
+  },
+  {
+    type: 'spotlight',
+    phase: 'transactions-tour',
+    id: 'new-upload',
+    target: '#newUploadBtn',
+    title: 'New Upload \u{1F4C4}',
+    content: 'Upload additional transaction files here anytime. The app automatically detects and removes duplicates, so it\'s safe to upload overlapping date ranges. Your existing data and rules are preserved.',
+    position: 'bottom',
+    clickRequired: false
+  },
 
-  // Phase 5: Complete - step 20
+  // Phase 5: Complete
   {
     type: 'modal',
     phase: 'complete',
     id: 'complete',
     title: 'You\'re All Set! \u{1F389}',
     content: `
-      <p>Here's what to remember:</p>
-      <ul style="margin:16px 0;line-height:2;text-align:left;">
-        <li>\u{1F4CA} <strong>Summary</strong> \u2014 Check your card ROI anytime</li>
-        <li>\u2699\uFE0F <strong>Card Config</strong> \u2014 Manage credits & quarterly categories</li>
-        <li>\u{1F50D} <strong>Needs Review</strong> \u2014 Fix low-confidence transactions</li>
-        <li>\u{1F4BE} <strong>Export Data</strong> \u2014 Back up via Manage Data menu</li>
-        <li>\u2753 <strong>Help</strong> \u2014 Restart this tour anytime</li>
-      </ul>
+      <p><strong>What to do next:</strong></p>
+      <ol style="margin:16px 0;line-height:2;text-align:left;">
+        <li>\u26A0\uFE0F <strong>Review flagged transactions</strong> \u2014 Fix any marked "Needs Review" to improve accuracy</li>
+        <li>\u2699\uFE0F <strong>Check Card Config</strong> \u2014 Verify credits and point values are set correctly for each card</li>
+        <li>\u{1F4CA} <strong>Check your Summary</strong> \u2014 See which cards are earning their keep</li>
+      </ol>
+      <p style="margin-top:12px;font-size:12px;color:#78716c;">Click the <strong>?</strong> button on any page for help, or to restart this tour.</p>
     `,
     buttons: [{ text: 'Start Using the App', action: 'finish', primary: true }]
   }
@@ -417,6 +447,16 @@ function startTour(isManualRestart = false) {
     state.tourStep = 0;
     state.tourComplete = false;
     localStorage.removeItem('ccTracker_tourComplete');
+
+    // Navigate back to summary view so tour steps can find their targets
+    const cardConfigSection = document.getElementById('cardConfigSection');
+    if (cardConfigSection && !cardConfigSection.classList.contains('hidden')) {
+      cardConfigSection.classList.add('hidden');
+    }
+    if (state.results) {
+      document.getElementById('resultsSection').classList.remove('hidden');
+      renderView('summary');
+    }
   }
 
   state.tourActive = true;
@@ -487,6 +527,10 @@ function showTourModal(step) {
   const stepNum = getDisplayStepNumber(state.tourStep);
   const totalSteps = getTourStepCount();
 
+  // For the upload step, add "Skip Upload" button if user already has data
+  const hasExistingData = state.savedTransactions && state.savedTransactions.length > 0;
+  const showSkipUpload = step.id === 'upload' && hasExistingData;
+
   content.innerHTML = `
     <div class="tour-modal-icon">${step.title.split(' ').pop()}</div>
     <div class="tour-modal-title">${step.title.replace(/\s*[\u{1F300}-\u{1F9FF}]/gu, '')}</div>
@@ -497,6 +541,11 @@ function showTourModal(step) {
           ${btn.text}
         </button>
       `).join('')}
+      ${showSkipUpload ? `
+        <button class="btn btn-secondary" data-action="skip-upload" style="margin-top:8px;">
+          Skip Upload \u2014 I already have data \u2192
+        </button>
+      ` : ''}
     </div>
     <div style="margin-top:16px;font-size:12px;color:#a8a29e;">
       Step ${stepNum} of ${totalSteps}
@@ -514,6 +563,21 @@ function showTourModal(step) {
         state.tourStep++;
         modal.classList.add('hidden');
         renderTourStep();
+      } else if (action === 'skip-upload') {
+        // Skip past upload and mapping wait steps, go to summary tour
+        modal.classList.add('hidden');
+        // Advance past wait-for-upload and wait-for-mapping steps
+        while (TOUR_STEPS[state.tourStep] &&
+               (TOUR_STEPS[state.tourStep].type === 'wait-for-upload' ||
+                TOUR_STEPS[state.tourStep].type === 'wait-for-mapping' ||
+                TOUR_STEPS[state.tourStep].id === 'upload')) {
+          state.tourStep++;
+        }
+        // Make sure summary view is showing
+        document.getElementById('resultsSection').classList.remove('hidden');
+        document.getElementById('uploadSection').classList.add('hidden');
+        renderView('summary');
+        setTimeout(() => renderTourStep(), 300);
       } else if (action === 'finish') {
         endTour();
       }
@@ -525,12 +589,18 @@ function showTourModal(step) {
 }
 
 // Show spotlight tour step
-function showTourSpotlight(step) {
+function showTourSpotlight(step, retryCount = 0) {
   document.getElementById('tourModal').classList.add('hidden');
 
   const target = document.querySelector(step.target);
   if (!target) {
-    console.warn('Tour target not found:', step.target);
+    // Element may not be rendered yet (e.g. after navigating to transactions view).
+    // Retry up to 5 times (1.5s total) before skipping.
+    if (retryCount < 5) {
+      setTimeout(() => showTourSpotlight(step, retryCount + 1), 300);
+      return;
+    }
+    console.warn('Tour target not found after retries:', step.target);
     state.tourStep++;
     renderTourStep();
     return;
@@ -541,9 +611,11 @@ function showTourSpotlight(step) {
   const tooltip = document.getElementById('tourTooltip');
   const arrow = document.getElementById('tourTooltipArrow');
 
+  // Show overlay immediately but hide spotlight/tooltip until positioned
+  // (prevents flash at old position during scroll)
   overlay.classList.remove('hidden');
-  spotlight.classList.remove('hidden');
-  tooltip.classList.remove('hidden');
+  spotlight.classList.add('hidden');
+  tooltip.classList.add('hidden');
 
   // Make spotlight clickable if required (set this before positioning)
   // Exception: for 'select-card' action, keep spotlight non-blocking so users can click the dropdown
@@ -612,7 +684,7 @@ function showTourSpotlight(step) {
     backBtn.addEventListener('click', backHandler);
   }
 
-  // Function to position spotlight and tooltip
+  // Function to position spotlight and tooltip, then reveal them
   function positionElements() {
     const rect = target.getBoundingClientRect();
     const padding = 8;
@@ -656,9 +728,13 @@ function showTourSpotlight(step) {
 
     tooltip.style.left = tooltipLeft + 'px';
     tooltip.style.top = tooltipTop + 'px';
+
+    // Now reveal spotlight and tooltip at the correct position
+    spotlight.classList.remove('hidden');
+    tooltip.classList.remove('hidden');
   }
 
-  // Scroll target into view first, then position
+  // Scroll target into view first, then position and reveal
   target.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
   // Position after scroll completes
@@ -716,7 +792,7 @@ function handleSpotlightClick(step) {
     setTimeout(() => {
       state.tourStep++;
       renderTourStep();
-    }, 300);
+    }, 600);
   }
 }
 
@@ -777,8 +853,8 @@ function checkFeatureEducation(cardId) {
   const card = CARDS[cardId];
   if (!card) return;
 
-  // Already completed full tour? Check for new features
-  if (!state.tourComplete) return;
+  // Only show feature education AFTER tour is fully complete and not actively running
+  if (!state.tourComplete || state.tourActive) return;
 
   const disabledForCard = state.disabledCredits[cardId] || [];
   const enabledCredits = (card.credits || []).filter(c => !disabledForCard.includes(c.name));

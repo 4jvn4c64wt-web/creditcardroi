@@ -165,7 +165,7 @@ const TOUR_STEPS = [
     type: 'modal',
     phase: 'setup',
     id: 'welcome',
-    title: 'Welcome to Credit Card ROI Tracker! \u{1F44B}',
+    title: 'Welcome to Credit Card ValueTracker! \u{1F44B}',
     content: `
       <p>Upload transactions \u2192 the app classifies your spending \u2192 you see your <strong>net value per card</strong> (points + credits \u2212 annual fees).</p>
       <p style="margin-top:12px;font-size:12px;color:#78716c;">\u{1F512} Your data never leaves your device. All calculations happen locally in your browser.</p>
@@ -358,7 +358,7 @@ const TOUR_STEPS = [
     id: 'recategorize',
     target: '.category-badge',
     title: 'Recategorize Transactions \u{1F3F7}\uFE0F',
-    content: '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING SOON</span><br>Click any badge to change a transaction\'s category or create a rule for similar merchants. This lets you correct misclassified transactions and improve accuracy over time.',
+    content: '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING SOON</span><br>You\'ll be able to recategorize spending categories and credits by clicking any badge. You can also add rules for specific merchants so they\'re always classified correctly.',
     position: 'right',
     clickRequired: false
   },

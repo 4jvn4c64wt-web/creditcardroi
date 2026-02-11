@@ -825,6 +825,11 @@ function endTour() {
   localStorage.removeItem('ccTracker_tourStep');
   hideTourUI();
   document.getElementById('tourSkipConfirm').classList.add('hidden');
+
+  // Show newsletter popup now that the tour is done (if not already shown this session)
+  if (typeof showNewsletterPopup === 'function') {
+    showNewsletterPopup(5000);
+  }
 }
 
 // Continue tour after upload

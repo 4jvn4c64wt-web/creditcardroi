@@ -2095,7 +2095,6 @@ function detectCredit(merchant, originalStatement, cardId, txnId, txnDate = null
 // =============================================================================
 // CSV PARSING (loaded from csv-parser.js via CardTracker namespace)
 // =============================================================================
-const CSV_FORMATS = window.CardTracker.csvParser.CSV_FORMATS;
 function isDataRow(fields) { return window.CardTracker.csvParser.isDataRow(fields); }
 function isWellsFargoFormat(fields) { return window.CardTracker.csvParser.isWellsFargoFormat(fields); }
 function getCSVShapeKey(headers) { return window.CardTracker.csvParser.getCSVShapeKey(headers); }

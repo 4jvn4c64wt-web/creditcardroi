@@ -1714,6 +1714,22 @@ function getMultiplier(cardId, category, txnDate = null, merchantDesc = '') {
     return { rate: 5, reason: '5x Capital One Travel (default — flights/vacation rentals/unknown)' };
   }
 
+  // Amex Platinum: portal bookings earn 5x on hotels & flights, 1x on everything else (car rentals, etc.)
+  // Check the merchant description for travel sub-type keywords to decide 5x vs 1x.
+  if (cardId === 'amex-platinum' && category === 'amex-travel' && merchantDesc) {
+    const normDesc = merchantDesc.toLowerCase().replace(/[^a-z0-9\s]/g, '');
+    // Check for hotel keywords in Amex Travel transactions (e.g., "AMEXTRAVEL.COM PREPAID HOTEL")
+    if (normDesc.includes('hotel') || normDesc.includes('prepaid hotel')) {
+      return { rate: 5, reason: '5x Amex Travel (hotel)' };
+    }
+    // Check for flight keywords in Amex Travel transactions (e.g., "AMEXTRAVEL.COM AIRFARE")
+    if (normDesc.includes('airfare') || normDesc.includes('flight') || normDesc.includes('airline')) {
+      return { rate: 5, reason: '5x Amex Travel (flight)' };
+    }
+    // Car rentals and everything else through Amex Travel get 1x base rate
+    return { rate: 1, reason: '1x Amex Travel (car rental or other)' };
+  }
+
   // Use hierarchy to find the best matching category for this card
   const effectiveCat = getEffectiveCategory(category, cardId);
 

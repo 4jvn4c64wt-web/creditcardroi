@@ -330,7 +330,7 @@ const TOUR_STEPS = [
     type: 'spotlight',
     phase: 'transactions-tour',
     id: 'classification-explanation',
-    target: '.category-badge',
+    target: '#transactionsBody .badge',
     title: 'How Transactions Are Classified \u{1F9E9}',
     content: 'The app automatically categorizes each transaction (e.g., restaurants \u2192 Dining, CVS \u2192 Drugstore) to calculate the right point multiplier for each card. It uses the merchant name, your bank\'s category label, and built-in rules to make its best guess. When it\'s not confident, it flags the transaction for your review.',
     position: 'right',
@@ -340,7 +340,7 @@ const TOUR_STEPS = [
     type: 'spotlight',
     phase: 'transactions-tour',
     id: 'category-badges',
-    target: '.category-badge',
+    target: '#transactionsBody .badge',
     title: 'Category Badge Colors \u{1F3F7}\uFE0F',
     content: `
       These colors compare across your cards:<br>
@@ -356,7 +356,7 @@ const TOUR_STEPS = [
     type: 'spotlight',
     phase: 'transactions-tour',
     id: 'recategorize',
-    target: '.category-badge',
+    target: '#transactionsBody .badge',
     title: 'Recategorize Transactions \u{1F3F7}\uFE0F',
     content: '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING SOON</span><br>You\'ll be able to recategorize spending categories and credits by clicking any badge. You can also add rules for specific merchants so they\'re always classified correctly.',
     position: 'right',

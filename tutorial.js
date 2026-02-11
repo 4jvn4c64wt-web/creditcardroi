@@ -15,12 +15,12 @@ const HELP_CONTENT = {
       {
         icon: '\u{1F3A8}',
         title: 'Category Colors',
-        text: '<span style="background:#dcfce7;padding:2px 6px;border-radius:4px;">Green</span> = Optimal card for that category. <span style="background:#fef9c3;padding:2px 6px;border-radius:4px;">Yellow</span> = Good, but better option exists. <span style="background:#fee2e2;padding:2px 6px;border-radius:4px;">Red</span> = Suboptimal choice.'
+        text: 'Colors compare across your cards. <span style="background:#dcfce7;padding:2px 6px;border-radius:4px;">Green</span> = Best card in your wallet for that purchase. <span style="background:#fef9c3;padding:2px 6px;border-radius:4px;">Yellow</span> = Good, but a better option exists. <span style="background:#fee2e2;padding:2px 6px;border-radius:4px;">Red</span> = Another card would have earned more. Use this to optimize which card to use going forward.'
       },
       {
         icon: '\u{1F4C5}',
-        title: 'Year Filter',
-        text: 'Filter results by year. "All Years" shows combined totals with annual fees counted once per card.'
+        title: 'Year Filter & Card Year',
+        text: 'Filter results by year. "All Years" shows combined totals with annual fees counted once per card. Use the <strong>CY</strong> toggle on each card to switch between Calendar Year (Jan\u2013Dec) and Card Year (anniversary date). Card Year is more useful when deciding whether to keep a card at renewal, since some credits and fees reset on the anniversary.'
       },
       {
         icon: '\u26A1',
@@ -32,6 +32,11 @@ const HELP_CONTENT = {
   transactions: {
     title: 'Transactions Page Help',
     sections: [
+      {
+        icon: '\u{1F9E9}',
+        title: 'How Classification Works',
+        text: 'The app automatically categorizes each transaction (e.g., restaurants \u2192 Dining, CVS \u2192 Drugstore) using the merchant name, your bank\'s category label, and built-in rules. This determines which point multiplier applies for each card. When the app isn\'t confident, it flags the transaction for your review.'
+      },
       {
         icon: '\u{1F3F7}\uFE0F',
         title: 'Recategorize Transactions',
@@ -70,12 +75,12 @@ const HELP_CONTENT = {
       {
         icon: '\u{1F4B3}',
         title: 'Statement Credits',
-        text: 'Toggle credits on/off to include/exclude from ROI. For manual credits (\u26A1), click the month buttons to mark when you\'ve claimed them.'
+        text: 'Some credits (like streaming or airline incidentals) are auto-detected from your transactions. Others (like Uber Cash or Amex Offers) don\'t appear in transaction data \u2014 those are marked \u26A1 and you track them manually by clicking the month buttons. Toggle any credit on/off to include or exclude it from ROI.'
       },
       {
         icon: '\u{1F4B0}',
         title: 'Point Values',
-        text: 'Adjust the cents-per-point value if you redeem differently than the default. This affects all value calculations.'
+        text: 'How much each point is worth when you redeem it (in cents). For example, at 2.0\u00A2 per point, 1,000 points = $20. Cash back users might set 1.0\u00A2, travel redeemers might set 1.5\u20132.0\u00A2. This affects all value calculations.'
       },
       {
         icon: '\u{1F4C5}',
@@ -162,8 +167,9 @@ const TOUR_STEPS = [
     id: 'welcome',
     title: 'Welcome to Credit Card ROI Tracker! \u{1F44B}',
     content: `
-      <p>This app calculates exactly how much value you're getting from each credit card \u2014 factoring in points earned, credits used, and annual fees.</p>
-      <p style="margin-top:12px;"><strong>Let's get you set up in about 2 minutes.</strong></p>
+      <p>This app analyzes your actual credit card transactions to calculate whether each card is earning you more in rewards than it costs in annual fees.</p>
+      <p style="margin-top:12px;">Here's how it works: <strong>upload your transactions</strong> \u2192 the app <strong>classifies your spending</strong> into categories \u2192 you see your <strong>net value per card</strong> (points earned + credits \u2212 annual fees).</p>
+      <p style="margin-top:12px;font-size:12px;color:#78716c;">\u{1F512} Your data never leaves your device. All calculations happen locally in your browser \u2014 nothing is uploaded to any server.</p>
     `,
     buttons: [{ text: 'Get Started \u2192', action: 'next', primary: true }]
   },
@@ -232,7 +238,7 @@ const TOUR_STEPS = [
     id: 'card-year-toggle',
     target: '.card-year-toggle',
     title: 'Card Year View \u{1F4C5}',
-    content: 'For cards with annual fees, click <strong>CY</strong> to switch between calendar year and card anniversary year. This affects how credits are calculated \u2014 in card year mode, annual caps apply.',
+    content: 'Calendar Year shows results January\u2013December. <strong>Card Year</strong> shows results based on your card\'s anniversary date \u2014 this matters because some credits and annual fees reset on the anniversary, not January 1st. If you\'re deciding whether to keep a card at renewal, Card Year is usually more useful.',
     position: 'left',
     clickRequired: false
   },
@@ -266,7 +272,7 @@ const TOUR_STEPS = [
     id: 'config-point-value',
     target: '#configPointValue',
     title: 'Point Valuation \u{1F4B0}',
-    content: 'Adjust how much you value each point (in cents). This affects all ROI calculations. The default is based on typical redemption values, but adjust if you redeem differently.',
+    content: 'This is how much each point is worth when you redeem it. For example, at 2.0\u00A2 per point, 1,000 points = $20 in value. Adjust based on how you actually use your points \u2014 cash back users might set 1.0\u00A2, travel redeemers might set 1.5\u20132.0\u00A2.',
     position: 'right',
     clickRequired: false
   },
@@ -276,7 +282,7 @@ const TOUR_STEPS = [
     id: 'config-credits-section',
     target: '#configCreditsSection',
     title: 'Statement Credits \u{1F4B3}',
-    content: 'Toggle credits <strong>ON</strong> to track them in your ROI, or <strong>OFF</strong> to exclude them. Only enabled credits will appear when categorizing transactions.',
+    content: 'Some credits (like streaming or airline incidentals) are <strong>auto-detected</strong> from your transactions. Others (like Uber Cash or Amex Offers) don\'t appear in transaction data \u2014 those are marked \u26A1 and you track them manually. Toggle any credit ON/OFF to include or exclude it from your ROI.',
     position: 'top',
     clickRequired: false
   },
@@ -314,7 +320,7 @@ const TOUR_STEPS = [
     onShow: 'setup-back-listener'
   },
 
-  // Phase 4: Transactions Tour - steps 15-18
+  // Phase 4: Transactions Tour - steps 15-19
   {
     type: 'spotlight',
     phase: 'transactions-tour',
@@ -329,15 +335,25 @@ const TOUR_STEPS = [
   {
     type: 'spotlight',
     phase: 'transactions-tour',
+    id: 'classification-explanation',
+    target: '.category-badge',
+    title: 'How Transactions Are Classified \u{1F9E9}',
+    content: 'The app automatically categorizes each transaction (e.g., restaurants \u2192 Dining, CVS \u2192 Drugstore) to calculate the right point multiplier for each card. It uses the merchant name, your bank\'s category label, and built-in rules to make its best guess. When it\'s not confident, it flags the transaction for your review.',
+    position: 'right',
+    clickRequired: false
+  },
+  {
+    type: 'spotlight',
+    phase: 'transactions-tour',
     id: 'category-badges',
     target: '.category-badge',
-    title: 'Category Badges \u{1F3F7}\uFE0F',
+    title: 'Category Badge Colors \u{1F3F7}\uFE0F',
     content: `
-      Colors show card optimization:<br>
-      <span style="background:#dcfce7;padding:2px 6px;border-radius:4px;">Green</span> = Optimal card<br>
-      <span style="background:#fef9c3;padding:2px 6px;border-radius:4px;">Yellow</span> = Good, better exists<br>
-      <span style="background:#fee2e2;padding:2px 6px;border-radius:4px;">Red</span> = Suboptimal<br><br>
-      <strong>Click any badge</strong> to change the category or create a rule for similar merchants.
+      These colors compare across your cards:<br>
+      <span style="background:#dcfce7;padding:2px 6px;border-radius:4px;">Green</span> = Best card in your wallet for that purchase<br>
+      <span style="background:#fef9c3;padding:2px 6px;border-radius:4px;">Yellow</span> = Good, but a better option exists<br>
+      <span style="background:#fee2e2;padding:2px 6px;border-radius:4px;">Red</span> = Another card would have earned more<br><br>
+      This helps you optimize which card to use going forward. <strong>Click any badge</strong> to change the category or create a rule for similar merchants.
     `,
     position: 'right',
     clickRequired: false
@@ -363,7 +379,7 @@ const TOUR_STEPS = [
     clickRequired: false
   },
 
-  // Phase 4b: Export Data - step 19
+  // Phase 4b: Export Data - step 20
   {
     type: 'spotlight',
     phase: 'transactions-tour',
@@ -375,21 +391,20 @@ const TOUR_STEPS = [
     clickRequired: false
   },
 
-  // Phase 5: Complete - step 20
+  // Phase 5: Complete - step 21
   {
     type: 'modal',
     phase: 'complete',
     id: 'complete',
     title: 'You\'re All Set! \u{1F389}',
     content: `
-      <p>Here's what to remember:</p>
-      <ul style="margin:16px 0;line-height:2;text-align:left;">
-        <li>\u{1F4CA} <strong>Summary</strong> \u2014 Check your card ROI anytime</li>
-        <li>\u2699\uFE0F <strong>Card Config</strong> \u2014 Manage credits & quarterly categories</li>
-        <li>\u{1F50D} <strong>Needs Review</strong> \u2014 Fix low-confidence transactions</li>
-        <li>\u{1F4BE} <strong>Export Data</strong> \u2014 Back up via Manage Data menu</li>
-        <li>\u2753 <strong>Help</strong> \u2014 Restart this tour anytime</li>
-      </ul>
+      <p><strong>What to do next:</strong></p>
+      <ol style="margin:16px 0;line-height:2;text-align:left;">
+        <li>\u26A0\uFE0F <strong>Review flagged transactions</strong> \u2014 Fix any marked "Needs Review" to improve accuracy</li>
+        <li>\u2699\uFE0F <strong>Check Card Config</strong> \u2014 Verify credits and point values are set correctly for each card</li>
+        <li>\u{1F4CA} <strong>Check your Summary</strong> \u2014 See which cards are earning their keep</li>
+      </ol>
+      <p style="margin-top:12px;font-size:12px;color:#78716c;">Click the <strong>?</strong> button on any page for help, or to restart this tour.</p>
     `,
     buttons: [{ text: 'Start Using the App', action: 'finish', primary: true }]
   }

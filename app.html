@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://api.buttondown.com; form-action 'none'; base-uri 'self';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; form-action https://buttondown.com; base-uri 'self';">
   <title>Credit Card Value Tracker</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💳</text></svg>">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -130,15 +130,16 @@
 </head>
 <body>
   <!-- Newsletter Signup Popup (free mode only, once per session) -->
+  <iframe name="newsletterTarget" style="display:none;" aria-hidden="true"></iframe>
   <div id="newsletterPopup" class="newsletter-overlay hidden">
     <div class="newsletter-modal">
       <button class="newsletter-close" id="newsletterClose" title="Close">&times;</button>
       <div class="newsletter-title">This App Will Keep Getting Better</div>
       <div class="newsletter-body">New cards, smarter classification, and features like scenario calculators are in development. Leave your email to get notified when updates drop — a few times a year at most. Your email stays with us and is never shared or sold.</div>
-      <div class="newsletter-form">
-        <input type="email" class="newsletter-input" id="newsletterEmail" placeholder="you@example.com" autocomplete="email">
-        <button class="newsletter-submit" id="newsletterSubmit">Keep Me Posted</button>
-      </div>
+      <form class="newsletter-form" id="newsletterForm" action="https://buttondown.com/api/emails/embed-subscribe/creditcardvaluetracker" method="post" target="newsletterTarget">
+        <input type="email" class="newsletter-input" id="newsletterEmail" name="email" placeholder="you@example.com" autocomplete="email" required>
+        <button type="submit" class="newsletter-submit" id="newsletterSubmit">Keep Me Posted</button>
+      </form>
       <div id="newsletterMsg" class="newsletter-msg hidden"></div>
       <button class="newsletter-skip" id="newsletterSkip">Skip</button>
     </div>
@@ -6179,7 +6180,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   initTutorial();
 });
 
-// Newsletter popup (free mode only, once per session, deferred until tour completes)
+// Newsletter popup (free mode only, deferred until tour completes)
+// Uses Buttondown's embed form (no API key needed — posts to hidden iframe)
 function initNewsletterPopup() {
   const popup = document.getElementById('newsletterPopup');
 
@@ -6191,69 +6193,35 @@ function initNewsletterPopup() {
   document.getElementById('newsletterSkip').addEventListener('click', closeNewsletter);
   popup.addEventListener('click', (e) => { if (e.target === popup) closeNewsletter(); });
 
-  document.getElementById('newsletterSubmit').addEventListener('click', async () => {
+  document.getElementById('newsletterForm').addEventListener('submit', (e) => {
     const emailInput = document.getElementById('newsletterEmail');
     const email = emailInput.value.trim();
     const msgEl = document.getElementById('newsletterMsg');
-    const submitBtn = document.getElementById('newsletterSubmit');
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      e.preventDefault();
       msgEl.textContent = 'Please enter a valid email address.';
       msgEl.className = 'newsletter-msg error';
       msgEl.classList.remove('hidden');
       return;
     }
 
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Sending...';
-    msgEl.classList.add('hidden');
-
-    try {
-      const resp = await fetch('https://api.buttondown.com/v1/subscribers', {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Token 01f8cbb3-0608-43b9-b983-c41b1c2f2c78',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ email_address: email })
-      });
-
-      if (resp.ok || resp.status === 201) {
-        msgEl.textContent = 'You\'re in! We\'ll keep you posted.';
-        msgEl.className = 'newsletter-msg success';
-        msgEl.classList.remove('hidden');
-        setTimeout(closeNewsletter, 2000);
-      } else {
-        const data = await resp.json().catch(() => ({}));
-        if (resp.status === 409 || JSON.stringify(data).toLowerCase().includes('already')) {
-          msgEl.textContent = 'You\'re already subscribed!';
-          msgEl.className = 'newsletter-msg success';
-        } else {
-          msgEl.textContent = 'Something went wrong. Please try again.';
-          msgEl.className = 'newsletter-msg error';
-        }
-        msgEl.classList.remove('hidden');
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Keep Me Posted';
-      }
-    } catch (err) {
-      msgEl.textContent = 'Network error. Please try again.';
-      msgEl.className = 'newsletter-msg error';
-      msgEl.classList.remove('hidden');
-      submitBtn.disabled = false;
-      submitBtn.textContent = 'Keep Me Posted';
-    }
-  });
-
-  document.getElementById('newsletterEmail').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') document.getElementById('newsletterSubmit').click();
+    // Form submits to hidden iframe — mark as subscribed
+    safeLocalStorageSet('ccTracker_newsletterSubmitted', 'true');
+    msgEl.textContent = 'You\'re in! We\'ll keep you posted.';
+    msgEl.className = 'newsletter-msg success';
+    msgEl.classList.remove('hidden');
+    document.getElementById('newsletterSubmit').disabled = true;
+    setTimeout(closeNewsletter, 2000);
   });
 }
 
-// Show the newsletter popup if it hasn't been shown this session.
+// Show the newsletter popup if the user hasn't already submitted their email.
 // Called from showResults() (with appropriate delay) or from endTour() in tutorial.js.
 // Only shows when the card performance / results page is visible.
 function showNewsletterPopup(delayMs) {
+  // Don't show if user already subscribed (persists across sessions, cleared by Clear Everything)
+  if (localStorage.getItem('ccTracker_newsletterSubmitted')) return;
   if (sessionStorage.getItem('ccTracker_newsletterShown')) return;
   // Don't show while tour is active — endTour() will call us when it's done
   if (state.tourActive) return;

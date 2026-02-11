@@ -245,11 +245,11 @@
         </div>
         <div class="controls-right">
           <!-- Upgrade button removed for Pro -->
-          <button class="btn btn-secondary" id="helpBtn">❓ Help</button>
-          <button class="btn btn-secondary" id="configBtn">⚙️ Card Mapping</button>
-          <button class="btn btn-secondary" id="cardConfigBtn">📋 Card Config</button>
+          <button class="btn btn-secondary" id="helpBtn" title="How the tracker works and how to get the most out of it">❓ Help</button>
+          <button class="btn btn-secondary" id="configBtn" title="Reassign card numbers to rewards cards">⚙️ Card Mapping</button>
+          <button class="btn btn-secondary" id="cardConfigBtn" title="Adjust annual fees, credits, and card-specific settings">📋 Card Config</button>
           <div style="position:relative;display:inline-block;">
-            <button class="btn btn-secondary" id="manageDataBtn">📁 Manage Data ▾</button>
+            <button class="btn btn-secondary" id="manageDataBtn" title="Export, clear, or reset your data and settings">📁 Manage Data ▾</button>
             <div id="manageDataDropdown" class="hidden" style="position:absolute;top:100%;right:0;margin-top:4px;background:#fff;border:1px solid #e7e5e4;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.1);min-width:260px;z-index:100;">
               <button class="dropdown-item" id="exportData" style="display:block;width:100%;text-align:left;padding:10px 14px;border:none;background:none;cursor:pointer;font-size:13px;border-bottom:1px solid #f5f5f4;">
                 <div>💾 Export Data</div>
@@ -273,7 +273,7 @@
               </button>
             </div>
           </div>
-          <label class="btn btn-secondary" style="cursor:pointer;">
+          <label class="btn btn-secondary" style="cursor:pointer;" title="Import another CSV or restore a backup">
             <input type="file" id="newFileInput" accept=".csv,.json">
             📄 New Upload
           </label>

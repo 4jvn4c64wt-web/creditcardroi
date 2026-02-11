@@ -400,6 +400,10 @@
       <h2 class="section-title">Frequently Asked Questions</h2>
       <div class="faq-list">
         <div class="faq-item">
+          <div class="faq-q">Where can I suggest new features or cards?</div>
+          <div class="faq-a">Send your ideas to <span id="faqFeatureEmail" style="color:#2563eb;cursor:pointer;text-decoration:underline;"></span> — whether it's a card you want supported, a feature you'd find useful, or anything else. Feedback shapes what gets built next.</div>
+        </div>
+        <div class="faq-item">
           <div class="faq-q">Is my data safe?</div>
           <div class="faq-a">Your data never leaves your browser. No servers or uploads — everything runs locally.</div>
         </div>
@@ -426,10 +430,6 @@
         <div class="faq-item">
           <div class="faq-q">Can I use this for cards you don't support yet?</div>
           <div class="faq-a">Not yet, but new cards are added regularly. Reach out and let us know which card you'd like to see next.</div>
-        </div>
-        <div class="faq-item">
-          <div class="faq-q">Will there be paid plans?</div>
-          <div class="faq-a">Yes — paid tiers are coming soon with features like full transaction history editing, per-card deep analysis, data export, and more. The free tracker gives you everything you need to get started today.</div>
         </div>
         <div class="faq-item">
           <div class="faq-q">Who built this?</div>
@@ -459,5 +459,20 @@
     </div>
   </footer>
 
+<script>
+(function() {
+  var u = 'creditcardvaluetracker';
+  var d = 'gmail';
+  var t = 'com';
+  var addr = u + '\u0040' + d + '.' + t;
+  var el = document.getElementById('faqFeatureEmail');
+  if (el) {
+    el.textContent = addr;
+    el.onclick = function() {
+      window.location.href = 'mai' + 'lto:' + addr + '?subject=' + encodeURIComponent('Feature Request — Credit Card Value Tracker');
+    };
+  }
+})();
+</script>
 </body>
 </html>

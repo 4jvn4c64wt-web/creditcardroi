@@ -96,25 +96,49 @@ window.CardTracker.csvParser.detectCSVFormat = function(headers) {
   }
 
   // Generic detection - try to match common column names
+  // Two-pass approach: exact match first, then word-boundary partial match
+  // Detection order: specific multi-word fields first, then generic single-word fields
+  const alreadyMapped = new Set();
+
   const findHeader = (patterns) => {
+    // Pass 1: exact match only
     for (const pattern of patterns) {
-      const found = normalizedHeaders.find(h => h === pattern || h.includes(pattern));
-      if (found) return found;
+      const found = normalizedHeaders.find(h => h === pattern && !alreadyMapped.has(h));
+      if (found) { alreadyMapped.add(found); return found; }
+    }
+    // Pass 2: word-boundary partial match (avoids "account" matching inside "accountid")
+    for (const pattern of patterns) {
+      const re = new RegExp('(?:^|\\W)' + pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:$|\\W)');
+      const found = normalizedHeaders.find(h => re.test(h) && !alreadyMapped.has(h));
+      if (found) { alreadyMapped.add(found); return found; }
     }
     return null;
   };
 
+  // Detect specific multi-word fields FIRST (before generic single-word fields can steal them)
+  const original = findHeader(['original statement', 'original description', 'memo', 'original']);
+  const accountName = findHeader(['account name', 'card name', 'account nickname']);
+  const accountType = findHeader(['account type']);
+
+  // Then detect generic fields
+  const date = findHeader(['post date', 'posting date', 'date', 'transaction date', 'trans date']);
+  const merchant = findHeader(['merchant', 'description', 'payee', 'name']);
+  const category = findHeader(['category']);
+  const account = findHeader(['account number', 'card number', 'account', 'card', 'card no']);
+  const amount = findHeader(['amount', 'debit', 'credit']);
+
+  // Only fall back to bare "type" for accountType if it wasn't already detected
+  const finalAccountType = accountType || findHeader(['type']);
+
   const genericMapping = {
-    // Prefer 'post date' over 'transaction date' - points are earned when transaction POSTS, not when made
-    // Bank CSVs often have both; budgeting apps use adjusted 'date' which is fine
-    date: findHeader(['post date', 'posting date', 'date', 'transaction date', 'trans date']),
-    merchant: findHeader(['merchant', 'description', 'payee', 'name']),
-    category: findHeader(['category']),
-    account: findHeader(['account', 'card', 'card no', 'card number']),
-    accountName: findHeader(['account name', 'card name', 'account nickname']),
-    accountType: findHeader(['account type', 'type']),
-    amount: findHeader(['amount', 'debit', 'credit']),
-    original: findHeader(['original statement', 'original', 'statement', 'memo'])
+    date,
+    merchant,
+    category,
+    account,
+    accountName,
+    accountType: finalAccountType,
+    amount,
+    original
   };
 
   return { formatId: 'generic', formatName: 'Unknown Format', mapping: genericMapping };

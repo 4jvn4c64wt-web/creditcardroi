@@ -70,6 +70,8 @@
     .help-icon { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: #e7e5e4; color: #78716c; font-size: 11px; cursor: help; margin-left: 4px; }
     .help-icon:hover { background: #d6d3d1; }
     .tooltip-multiline:hover::after { white-space: pre-line; text-align: left; min-width: 140px; }
+    .tooltip-right:hover::after { left: auto; right: 0; transform: none; }
+    .tooltip-right:hover::before { left: auto; right: 10px; transform: none; }
     .card-year-toggle { transition: background 0.15s; }
     .card-year-toggle:hover { transform: scale(1.2); }
     @media (max-width: 900px) { .metrics-grid { grid-template-columns: repeat(2, 1fr); } .metric:nth-child(2), .metric:nth-child(4) { border-right: none; } }
@@ -244,12 +246,12 @@
           <span id="transactionCount" style="font-size:13px;color:#78716c;"></span>
         </div>
         <div class="controls-right">
-          <button class="btn btn-secondary" id="upgradeBtn" style="color:#059669;border-color:#bbf7d0;">Upgrade to Pro</button>
-          <button class="btn btn-secondary" id="helpBtn">❓ Help</button>
-          <button class="btn btn-secondary" id="configBtn">⚙️ Card Mapping</button>
-          <button class="btn btn-secondary" id="cardConfigBtn">📋 Card Config</button>
+          <button class="btn btn-secondary" id="upgradeBtn" style="color:#059669;border-color:#bbf7d0;" title="Unlock editing, full history, and more">Upgrade to Pro</button>
+          <button class="btn btn-secondary" id="helpBtn" title="How the tracker works and how to get the most out of it">❓ Help</button>
+          <button class="btn btn-secondary" id="configBtn" title="Reassign card numbers to rewards cards">⚙️ Card Mapping</button>
+          <button class="btn btn-secondary" id="cardConfigBtn" title="Adjust annual fees, credits, and card-specific settings">📋 Card Config</button>
           <div style="position:relative;display:inline-block;">
-            <button class="btn btn-secondary" id="manageDataBtn">📁 Manage Data ▾</button>
+            <button class="btn btn-secondary" id="manageDataBtn" title="Export, clear, or reset your data and settings">📁 Manage Data ▾</button>
             <div id="manageDataDropdown" class="hidden" style="position:absolute;top:100%;right:0;margin-top:4px;background:#fff;border:1px solid #e7e5e4;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.1);min-width:260px;z-index:100;">
               <button class="dropdown-item" id="exportData" style="display:block;width:100%;text-align:left;padding:10px 14px;border:none;background:none;cursor:pointer;font-size:13px;border-bottom:1px solid #f5f5f4;">
                 <div>💾 Export Data</div>
@@ -273,7 +275,7 @@
               </button>
             </div>
           </div>
-          <label class="btn btn-secondary" style="cursor:pointer;">
+          <label class="btn btn-secondary" style="cursor:pointer;" title="Import another CSV or restore a backup">
             <input type="file" id="newFileInput" accept=".csv,.json">
             📄 New Upload
           </label>
@@ -285,7 +287,7 @@
         <div class="metric"><div class="metric-value" id="metricPoints">0</div><div class="metric-label">Points Earned<span class="help-icon tooltip" data-tooltip="Points earned minus points lost from refunds/credits">?</span></div></div>
         <div class="metric"><div class="metric-value" id="metricPointsValue">$0</div><div class="metric-label">Points Value<span class="help-icon tooltip" data-tooltip="Points × estimated cent-per-point value">?</span></div></div>
         <div class="metric"><div class="metric-value" id="metricCredits">$0</div><div class="metric-label">Credits Used<span class="help-icon tooltip" data-tooltip="Statement credits detected + manually claimed">?</span></div></div>
-        <div class="metric"><div class="metric-value" id="metricNetValue">$0</div><div class="metric-label">Net Value<span class="help-icon tooltip" data-tooltip="Points Value + Credits − Annual Fees">?</span></div></div>
+        <div class="metric"><div class="metric-value" id="metricNetValue">$0</div><div class="metric-label">Net Value<span class="help-icon tooltip tooltip-right" data-tooltip="Points Value + Credits − Annual Fees">?</span></div></div>
       </div>
 
       <div class="tabs">
@@ -1157,6 +1159,7 @@ function mapToCardCategory(genericCategory, cardId, txnDate = null) {
     'travel-ota': ['travel-ota', 'travel', 'other'],
     'travel': ['travel', 'other'], // Generic travel NEVER maps to card-specific portals
     'car-rental': ['car-rental', 'travel', 'other'],
+    'parking': ['parking', 'travel', 'other'],
     'cruise': ['cruise', 'travel', 'other'],
     'transit': ['transit', 'travel', 'ground-transport', 'other'],
     'lyft': ['lyft', 'transit', 'travel', 'ground-transport', 'other'],

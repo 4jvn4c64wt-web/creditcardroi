@@ -5605,30 +5605,54 @@ document.addEventListener('DOMContentLoaded', async () => {
           state.detectedAnnualFees = {};
           state.dpBannersDismissed = {};
 
-          // Clear all localStorage EXCEPT tier access keys
-          const tierKeys = ['ccTracker_decisionPasses', 'ccTracker_proAccess'];
+          // Clear ALL localStorage including tier access keys
           const keysToRemove = [];
           for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
-            if (key && key.startsWith('ccTracker_') && !tierKeys.includes(key)) {
+            if (key && key.startsWith('ccTracker_')) {
               keysToRemove.push(key);
             }
           }
           keysToRemove.forEach(key => localStorage.removeItem(key));
 
-          alert('All data has been deleted. Your upgrade access has been preserved.');
-          updateStoredTxnCount();
-          document.getElementById('resultsSection').classList.add('hidden');
-          document.getElementById('uploadSection').classList.remove('hidden');
-          // Reset file inputs
-          document.getElementById('fileInput').value = '';
-          document.getElementById('newFileInput').value = '';
-          // Reset tour state in memory and start tour
-          state.tourComplete = false;
-          state.tourStep = 0;
-          state.tourActive = false;
-          state.featureEducation = {};
-          startTour();
+          // Ask which version to load
+          const versionChoice = prompt('Which version would you like to load?\n\n1 = Base (app.html - free)\n2 = Decision Pass (app.html with Decision Pass)\n3 = Pro (app-pro.html)\n\nEnter 1, 2, or 3:');
+
+          if (versionChoice === '2') {
+            // Set up Decision Pass access (test key for quick switching)
+            const testDP = {
+              key: 'TESTDP-SWITCH',
+              cardId: 'chase-sapphire-reserve', // Default card, user can change later
+              activatedAt: Date.now()
+            };
+            localStorage.setItem('ccTracker_decisionPasses', JSON.stringify([testDP]));
+            alert('Data cleared. Loading app.html with Decision Pass enabled.');
+            window.location.reload();
+          } else if (versionChoice === '3') {
+            // Set up Pro access (test key for quick switching)
+            const testPro = {
+              key: 'TESTPRO-SWITCH',
+              activatedAt: Date.now()
+            };
+            localStorage.setItem('ccTracker_proAccess', JSON.stringify(testPro));
+            alert('Data cleared. Switching to Pro version.');
+            window.location.href = 'app-pro.html';
+          } else {
+            // Default to base version (no upgrades)
+            alert('Data cleared. Loading base version.');
+            updateStoredTxnCount();
+            document.getElementById('resultsSection').classList.add('hidden');
+            document.getElementById('uploadSection').classList.remove('hidden');
+            // Reset file inputs
+            document.getElementById('fileInput').value = '';
+            document.getElementById('newFileInput').value = '';
+            // Reset tour state in memory and start tour
+            state.tourComplete = false;
+            state.tourStep = 0;
+            state.tourActive = false;
+            state.featureEducation = {};
+            startTour();
+          }
         } else if (confirmation === 'TESTDP-PASS-001' || confirmation === 'TESTPRO-PASS-001') {
           // Secret reset: revert to free tier (clear DP and Pro access only)
           state.decisionPasses = [];

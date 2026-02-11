@@ -267,7 +267,7 @@ const TOUR_STEPS = [
     id: 'config-credits-section',
     target: '#configCreditsSection',
     title: 'Statement Credits \u{1F4B3}',
-    content: 'Some credits (like streaming or airline incidentals) are <strong>auto-detected</strong> from your transactions. Others (like Uber Cash or Amex Offers) don\'t appear in transaction data \u2014 those are marked \u26A1 and you track them manually. Toggle any credit ON/OFF to include or exclude it from your ROI.',
+    content: 'Your statement credits are <strong>auto-detected</strong> from transactions (like streaming or airline incidentals). Others marked \u26A1 (like Uber Cash) require manual tracking. <span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING SOON</span> Toggle individual credits ON/OFF to customize your ROI calculation.',
     position: 'top',
     clickRequired: false
   },

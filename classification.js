@@ -27,7 +27,6 @@ window.CardTracker.classification.CATEGORY_HIERARCHY = {
   'car-wash': 'gas',
   'car-maintenance': 'automotive',
   'car-repair': 'automotive',
-  'parking': 'automotive',
   'toll': 'automotive',
   'automotive': 'other',
 
@@ -36,6 +35,8 @@ window.CardTracker.classification.CATEGORY_HIERARCHY = {
   'resort': 'hotels-direct',
   'vacation-rental': 'travel',
   'airbnb': 'travel',
+  'car-rental': 'travel',
+  'parking': 'travel',
 
   // Transit children (Note: lyft is top-level due to Chase partnership bonuses)
   'uber-ride': 'transit',

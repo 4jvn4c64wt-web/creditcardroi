@@ -70,6 +70,8 @@
     .help-icon { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: #e7e5e4; color: #78716c; font-size: 11px; cursor: help; margin-left: 4px; }
     .help-icon:hover { background: #d6d3d1; }
     .tooltip-multiline:hover::after { white-space: pre-line; text-align: left; min-width: 140px; }
+    .tooltip-right:hover::after { left: auto; right: 0; transform: none; }
+    .tooltip-right:hover::before { left: auto; right: 10px; transform: none; }
     .card-year-toggle { transition: background 0.15s; }
     .card-year-toggle:hover { transform: scale(1.2); }
     @media (max-width: 900px) { .metrics-grid { grid-template-columns: repeat(2, 1fr); } .metric:nth-child(2), .metric:nth-child(4) { border-right: none; } }
@@ -285,7 +287,7 @@
         <div class="metric"><div class="metric-value" id="metricPoints">0</div><div class="metric-label">Points Earned<span class="help-icon tooltip" data-tooltip="Points earned minus points lost from refunds/credits">?</span></div></div>
         <div class="metric"><div class="metric-value" id="metricPointsValue">$0</div><div class="metric-label">Points Value<span class="help-icon tooltip" data-tooltip="Points × estimated cent-per-point value">?</span></div></div>
         <div class="metric"><div class="metric-value" id="metricCredits">$0</div><div class="metric-label">Credits Used<span class="help-icon tooltip" data-tooltip="Statement credits detected + manually claimed">?</span></div></div>
-        <div class="metric"><div class="metric-value" id="metricNetValue">$0</div><div class="metric-label">Net Value<span class="help-icon tooltip" data-tooltip="Points Value + Credits − Annual Fees">?</span></div></div>
+        <div class="metric"><div class="metric-value" id="metricNetValue">$0</div><div class="metric-label">Net Value<span class="help-icon tooltip tooltip-right" data-tooltip="Points Value + Credits − Annual Fees">?</span></div></div>
       </div>
 
       <div class="tabs">

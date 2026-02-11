@@ -828,7 +828,7 @@ function endTour() {
 
   // Show newsletter popup now that the tour is done (if not already shown this session)
   if (typeof showNewsletterPopup === 'function') {
-    showNewsletterPopup();
+    showNewsletterPopup(5000);
   }
 }
 

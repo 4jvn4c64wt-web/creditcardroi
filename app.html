@@ -3677,6 +3677,12 @@ function showResults(results, isNewUpload = false) {
   //   document.getElementById('lowConfidenceCount').textContent = lowConfidenceCount;
   //   document.getElementById('lowConfidenceModal').classList.remove('hidden');
   // }
+
+  // Newsletter popup: show on card performance page (not during tour)
+  // New users (just uploaded): 5s delay. Returning users: 2s delay.
+  if (typeof showNewsletterPopup === 'function') {
+    showNewsletterPopup(isNewUpload ? 5000 : 2000);
+  }
 }
 
 function renderView(view) {
@@ -6243,18 +6249,22 @@ function initNewsletterPopup() {
   document.getElementById('newsletterEmail').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') document.getElementById('newsletterSubmit').click();
   });
-
-  // Show immediately only if tour is already complete; otherwise endTour() will call showNewsletterPopup()
-  if (state.tourComplete) {
-    showNewsletterPopup();
-  }
 }
 
-// Show the newsletter popup if it hasn't been shown this session
-function showNewsletterPopup() {
+// Show the newsletter popup if it hasn't been shown this session.
+// Called from showResults() (with appropriate delay) or from endTour() in tutorial.js.
+// Only shows when the card performance / results page is visible.
+function showNewsletterPopup(delayMs) {
   if (sessionStorage.getItem('ccTracker_newsletterShown')) return;
+  // Don't show while tour is active — endTour() will call us when it's done
+  if (state.tourActive) return;
+  // Only show on the card performance page, not the upload/CSV page
+  var results = document.getElementById('resultsSection');
+  if (!results || results.classList.contains('hidden')) return;
   sessionStorage.setItem('ccTracker_newsletterShown', 'true');
-  document.getElementById('newsletterPopup').classList.remove('hidden');
+  setTimeout(() => {
+    document.getElementById('newsletterPopup').classList.remove('hidden');
+  }, delayMs || 2000);
 }
 
 // Assemble feedback email dynamically to prevent scraping

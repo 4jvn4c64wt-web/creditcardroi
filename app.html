@@ -1800,6 +1800,17 @@ function getEffectiveAnnualFee(cardId, transactions = []) {
 
   // Fall back to card definition logic
 
+  // Handle cards where annual fee started from a specific date (e.g., Bilt Obsidian/Palladium - no fee before Feb 7, 2026)
+  if (card.annualFeeStartDate) {
+    const startDate = new Date(card.annualFeeStartDate);
+    if (cardTxns.length > 0) {
+      const hasPostStart = cardTxns.some(t => new Date(t.date) >= startDate);
+      return hasPostStart ? card.annualFee : 0;
+    }
+    // No transactions for this card - default to current annual fee
+    return card.annualFee || 0;
+  }
+
   // Special handling for CSR legacy annual fee
   if (cardId === 'chase-sapphire-reserve' && card.legacyCutoffDate) {
     const cutoff = new Date(card.legacyCutoffDate);

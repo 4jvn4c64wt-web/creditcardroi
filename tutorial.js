@@ -167,9 +167,8 @@ const TOUR_STEPS = [
     id: 'welcome',
     title: 'Welcome to Credit Card ROI Tracker! \u{1F44B}',
     content: `
-      <p>This app analyzes your actual credit card transactions to calculate whether each card is earning you more in rewards than it costs in annual fees.</p>
-      <p style="margin-top:12px;">Here's how it works: <strong>upload your transactions</strong> \u2192 the app <strong>classifies your spending</strong> into categories \u2192 you see your <strong>net value per card</strong> (points earned + credits \u2212 annual fees).</p>
-      <p style="margin-top:12px;font-size:12px;color:#78716c;">\u{1F512} Your data never leaves your device. All calculations happen locally in your browser \u2014 nothing is uploaded to any server.</p>
+      <p>Upload transactions \u2192 the app classifies your spending \u2192 you see your <strong>net value per card</strong> (points + credits \u2212 annual fees).</p>
+      <p style="margin-top:12px;font-size:12px;color:#78716c;">\u{1F512} Your data never leaves your device. All calculations happen locally in your browser.</p>
     `,
     buttons: [{ text: 'Get Started \u2192', action: 'next', primary: true }]
   },
@@ -179,13 +178,8 @@ const TOUR_STEPS = [
     id: 'upload',
     title: 'Step 1: Upload Your Transactions \u{1F4C4}',
     content: `
-      <p style="text-align:left;">First, you'll need to upload a CSV file of your transactions. We support exports from most credit card companies and money management software, including:</p>
-      <ul style="margin:12px 0 12px 40px;line-height:1.8;text-align:left;">
-        <li>Chase, Amex, Bilt, Capital One</li>
-        <li>Monarch Money, Copilot, Mint</li>
-        <li>Most other bank CSV exports</li>
-      </ul>
-      <p style="text-align:left;">After you click Continue, drag & drop your CSV or click to browse.</p>
+      <p style="text-align:left;">First, you'll need to upload a CSV file of your transactions. We support exports from most credit card companies and money management apps.</p>
+      <p style="text-align:left;margin-top:12px;">After you click Continue, drag & drop your CSV or click to browse.</p>
     `,
     buttons: [{ text: 'Continue \u2192', action: 'next', primary: true }],
     onNext: () => { /* Will show upload section */ }
@@ -272,7 +266,7 @@ const TOUR_STEPS = [
     id: 'config-point-value',
     target: '#configPointValue',
     title: 'Point Valuation \u{1F4B0}',
-    content: 'This is how much each point is worth when you redeem it. For example, at 2.0\u00A2 per point, 1,000 points = $20 in value. Adjust based on how you actually use your points \u2014 cash back users might set 1.0\u00A2, travel redeemers might set 1.5\u20132.0\u00A2.',
+    content: '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING SOON</span><br>This is how much each point is worth when you redeem it. For example, at 2.0\u00A2 per point, 1,000 points = $20 in value. Cash back users might set 1.0\u00A2, travel redeemers might set 1.5\u20132.0\u00A2.',
     position: 'right',
     clickRequired: false
   },
@@ -353,7 +347,7 @@ const TOUR_STEPS = [
       <span style="background:#dcfce7;padding:2px 6px;border-radius:4px;">Green</span> = Best card in your wallet for that purchase<br>
       <span style="background:#fef9c3;padding:2px 6px;border-radius:4px;">Yellow</span> = Good, but a better option exists<br>
       <span style="background:#fee2e2;padding:2px 6px;border-radius:4px;">Red</span> = Another card would have earned more<br><br>
-      This helps you optimize which card to use going forward. <strong>Click any badge</strong> to change the category or create a rule for similar merchants.
+      This helps you optimize which card to use going forward.
     `,
     position: 'right',
     clickRequired: false
@@ -361,8 +355,18 @@ const TOUR_STEPS = [
   {
     type: 'spotlight',
     phase: 'transactions-tour',
+    id: 'recategorize',
+    target: '.category-badge',
+    title: 'Recategorize Transactions \u{1F3F7}\uFE0F',
+    content: '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING SOON</span><br>Click any badge to change a transaction\'s category or create a rule for similar merchants. This lets you correct misclassified transactions and improve accuracy over time.',
+    position: 'right',
+    clickRequired: false
+  },
+  {
+    type: 'spotlight',
+    phase: 'transactions-tour',
     id: 'filter-bar',
-    target: '#filterYear',
+    target: '#filterRow',
     title: 'Filter Your Transactions \u{1F50D}',
     content: 'Filter by year, month, card, or category to find specific transactions. Great for reviewing spending patterns.',
     position: 'bottom',
@@ -390,8 +394,28 @@ const TOUR_STEPS = [
     position: 'bottom',
     clickRequired: false
   },
+  {
+    type: 'spotlight',
+    phase: 'transactions-tour',
+    id: 'card-mapping',
+    target: '#configBtn',
+    title: 'Card Mapping \u2699\uFE0F',
+    content: 'Opens the page where you matched account numbers to reward cards. Come back here if you need to reassign a card or if you add a new card to your wallet.',
+    position: 'bottom',
+    clickRequired: false
+  },
+  {
+    type: 'spotlight',
+    phase: 'transactions-tour',
+    id: 'new-upload',
+    target: '#newUploadBtn',
+    title: 'New Upload \u{1F4C4}',
+    content: 'Upload additional transaction files here anytime. The app automatically detects and removes duplicates, so it\'s safe to upload overlapping date ranges. Your existing data and rules are preserved.',
+    position: 'bottom',
+    clickRequired: false
+  },
 
-  // Phase 5: Complete - step 21
+  // Phase 5: Complete
   {
     type: 'modal',
     phase: 'complete',

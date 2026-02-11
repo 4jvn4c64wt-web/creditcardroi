@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; form-action 'none'; base-uri 'self';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://api.buttondown.com; form-action 'none'; base-uri 'self';">
   <title>Credit Card Value Tracker</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💳</text></svg>">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -107,9 +107,43 @@
     .tour-modal-buttons { display: flex; gap: 12px; justify-content: center; }
     .tour-confirm-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 10005; }
     .tour-confirm-content { background: #ffffff; border-radius: 12px; padding: 24px; max-width: 400px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.4); }
+
+    /* Newsletter Popup */
+    .newsletter-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 11000; }
+    .newsletter-modal { background: #ffffff; border-radius: 16px; padding: 32px; max-width: 440px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.4); position: relative; }
+    .newsletter-close { position: absolute; top: 12px; left: 14px; background: none; border: none; font-size: 22px; cursor: pointer; color: #78716c; line-height: 1; padding: 4px; }
+    .newsletter-close:hover { color: #1c1917; }
+    .newsletter-title { font-size: 20px; font-weight: 600; margin-bottom: 10px; text-align: center; margin-top: 8px; }
+    .newsletter-body { font-size: 14px; color: #57534e; line-height: 1.6; margin-bottom: 20px; text-align: center; }
+    .newsletter-form { display: flex; gap: 8px; margin-bottom: 12px; }
+    .newsletter-input { flex: 1; padding: 10px 14px; border: 1px solid #d6d3d1; border-radius: 8px; font-size: 14px; font-family: inherit; outline: none; }
+    .newsletter-input:focus { border-color: #1c1917; box-shadow: 0 0 0 2px rgba(28,25,23,0.1); }
+    .newsletter-submit { padding: 10px 18px; background: #1c1917; color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; font-family: inherit; white-space: nowrap; }
+    .newsletter-submit:hover { background: #292524; }
+    .newsletter-submit:disabled { background: #a8a29e; cursor: not-allowed; }
+    .newsletter-skip { display: block; text-align: center; color: #78716c; font-size: 13px; cursor: pointer; background: none; border: none; font-family: inherit; margin: 0 auto; }
+    .newsletter-skip:hover { color: #1c1917; text-decoration: underline; }
+    .newsletter-msg { font-size: 13px; text-align: center; margin-top: 8px; }
+    .newsletter-msg.success { color: #059669; }
+    .newsletter-msg.error { color: #dc2626; }
   </style>
 </head>
 <body>
+  <!-- Newsletter Signup Popup (free mode only, once per session) -->
+  <div id="newsletterPopup" class="newsletter-overlay hidden">
+    <div class="newsletter-modal">
+      <button class="newsletter-close" id="newsletterClose" title="Close">&times;</button>
+      <div class="newsletter-title">This App Will Keep Getting Better</div>
+      <div class="newsletter-body">New cards, smarter classification, and features like scenario calculators are in development. Leave your email to get notified when updates drop — a few times a year at most. Your email stays with us and is never shared or sold.</div>
+      <div class="newsletter-form">
+        <input type="email" class="newsletter-input" id="newsletterEmail" placeholder="you@example.com" autocomplete="email">
+        <button class="newsletter-submit" id="newsletterSubmit">Keep Me Posted</button>
+      </div>
+      <div id="newsletterMsg" class="newsletter-msg hidden"></div>
+      <button class="newsletter-skip" id="newsletterSkip">Skip</button>
+    </div>
+  </div>
+
   <div class="container">
     <div class="header">
       <h1>Credit Card Value Tracker <span style="display:inline-block;font-size:11px;font-weight:600;background:#f59e0b;color:#fff;padding:2px 8px;border-radius:9999px;vertical-align:middle;letter-spacing:0.04em;position:relative;top:-2px;">BETA</span></h1>
@@ -6132,6 +6166,80 @@ document.addEventListener('DOMContentLoaded', async () => {
       errorEl.style.display = 'block';
     }
   });
+
+  // Newsletter popup (free mode only, once per session)
+  if (!sessionStorage.getItem('ccTracker_newsletterShown')) {
+    sessionStorage.setItem('ccTracker_newsletterShown', 'true');
+    const popup = document.getElementById('newsletterPopup');
+    popup.classList.remove('hidden');
+
+    function closeNewsletter() {
+      popup.classList.add('hidden');
+    }
+
+    document.getElementById('newsletterClose').addEventListener('click', closeNewsletter);
+    document.getElementById('newsletterSkip').addEventListener('click', closeNewsletter);
+    popup.addEventListener('click', (e) => { if (e.target === popup) closeNewsletter(); });
+
+    document.getElementById('newsletterSubmit').addEventListener('click', async () => {
+      const emailInput = document.getElementById('newsletterEmail');
+      const email = emailInput.value.trim();
+      const msgEl = document.getElementById('newsletterMsg');
+      const submitBtn = document.getElementById('newsletterSubmit');
+
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        msgEl.textContent = 'Please enter a valid email address.';
+        msgEl.className = 'newsletter-msg error';
+        msgEl.classList.remove('hidden');
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Sending...';
+      msgEl.classList.add('hidden');
+
+      try {
+        const resp = await fetch('https://api.buttondown.com/v1/subscribers', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Token 01f8cbb3-0608-43b9-b983-c41b1c2f2c78',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ email: email })
+        });
+
+        if (resp.ok || resp.status === 201) {
+          msgEl.textContent = 'You\'re in! We\'ll keep you posted.';
+          msgEl.className = 'newsletter-msg success';
+          msgEl.classList.remove('hidden');
+          setTimeout(closeNewsletter, 2000);
+        } else {
+          const data = await resp.json().catch(() => ({}));
+          if (resp.status === 400 && JSON.stringify(data).includes('already')) {
+            msgEl.textContent = 'You\'re already subscribed!';
+            msgEl.className = 'newsletter-msg success';
+          } else {
+            msgEl.textContent = 'Something went wrong. Please try again.';
+            msgEl.className = 'newsletter-msg error';
+          }
+          msgEl.classList.remove('hidden');
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Keep Me Posted';
+        }
+      } catch (err) {
+        msgEl.textContent = 'Network error. Please try again.';
+        msgEl.className = 'newsletter-msg error';
+        msgEl.classList.remove('hidden');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Keep Me Posted';
+      }
+    });
+
+    // Allow Enter key to submit
+    document.getElementById('newsletterEmail').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') document.getElementById('newsletterSubmit').click();
+    });
+  }
 
   // Initialize tutorial system (help, tour, guidance - defined in tutorial.js)
   initTutorial();

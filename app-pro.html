@@ -2672,8 +2672,8 @@ function showCardConfigEditor(preselectedCardId = null) {
       saveBtn.title = '';
     }
 
-    // Check for feature education (only after tour is complete)
-    if (state.tourComplete && typeof checkFeatureEducation === 'function') {
+    // Check for feature education (only after tour is fully complete and not actively running)
+    if (state.tourComplete && !state.tourActive && typeof checkFeatureEducation === 'function') {
       setTimeout(() => checkFeatureEducation(cardId), 100);
     }
 

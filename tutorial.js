@@ -564,12 +564,18 @@ function showTourModal(step) {
 }
 
 // Show spotlight tour step
-function showTourSpotlight(step) {
+function showTourSpotlight(step, retryCount = 0) {
   document.getElementById('tourModal').classList.add('hidden');
 
   const target = document.querySelector(step.target);
   if (!target) {
-    console.warn('Tour target not found:', step.target);
+    // Element may not be rendered yet (e.g. after navigating to transactions view).
+    // Retry up to 5 times (1.5s total) before skipping.
+    if (retryCount < 5) {
+      setTimeout(() => showTourSpotlight(step, retryCount + 1), 300);
+      return;
+    }
+    console.warn('Tour target not found after retries:', step.target);
     state.tourStep++;
     renderTourStep();
     return;
@@ -755,7 +761,7 @@ function handleSpotlightClick(step) {
     setTimeout(() => {
       state.tourStep++;
       renderTourStep();
-    }, 300);
+    }, 600);
   }
 }
 
@@ -816,8 +822,8 @@ function checkFeatureEducation(cardId) {
   const card = CARDS[cardId];
   if (!card) return;
 
-  // Already completed full tour? Check for new features
-  if (!state.tourComplete) return;
+  // Only show feature education AFTER tour is fully complete and not actively running
+  if (!state.tourComplete || state.tourActive) return;
 
   const disabledForCard = state.disabledCredits[cardId] || [];
   const enabledCredits = (card.credits || []).filter(c => !disabledForCard.includes(c.name));

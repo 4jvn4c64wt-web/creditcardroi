@@ -6167,83 +6167,95 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // Newsletter popup (free mode only, once per session)
-  if (!sessionStorage.getItem('ccTracker_newsletterShown')) {
-    sessionStorage.setItem('ccTracker_newsletterShown', 'true');
-    const popup = document.getElementById('newsletterPopup');
-    popup.classList.remove('hidden');
-
-    function closeNewsletter() {
-      popup.classList.add('hidden');
-    }
-
-    document.getElementById('newsletterClose').addEventListener('click', closeNewsletter);
-    document.getElementById('newsletterSkip').addEventListener('click', closeNewsletter);
-    popup.addEventListener('click', (e) => { if (e.target === popup) closeNewsletter(); });
-
-    document.getElementById('newsletterSubmit').addEventListener('click', async () => {
-      const emailInput = document.getElementById('newsletterEmail');
-      const email = emailInput.value.trim();
-      const msgEl = document.getElementById('newsletterMsg');
-      const submitBtn = document.getElementById('newsletterSubmit');
-
-      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        msgEl.textContent = 'Please enter a valid email address.';
-        msgEl.className = 'newsletter-msg error';
-        msgEl.classList.remove('hidden');
-        return;
-      }
-
-      submitBtn.disabled = true;
-      submitBtn.textContent = 'Sending...';
-      msgEl.classList.add('hidden');
-
-      try {
-        const resp = await fetch('https://api.buttondown.com/v1/subscribers', {
-          method: 'POST',
-          headers: {
-            'Authorization': 'Token 01f8cbb3-0608-43b9-b983-c41b1c2f2c78',
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ email: email })
-        });
-
-        if (resp.ok || resp.status === 201) {
-          msgEl.textContent = 'You\'re in! We\'ll keep you posted.';
-          msgEl.className = 'newsletter-msg success';
-          msgEl.classList.remove('hidden');
-          setTimeout(closeNewsletter, 2000);
-        } else {
-          const data = await resp.json().catch(() => ({}));
-          if (resp.status === 400 && JSON.stringify(data).includes('already')) {
-            msgEl.textContent = 'You\'re already subscribed!';
-            msgEl.className = 'newsletter-msg success';
-          } else {
-            msgEl.textContent = 'Something went wrong. Please try again.';
-            msgEl.className = 'newsletter-msg error';
-          }
-          msgEl.classList.remove('hidden');
-          submitBtn.disabled = false;
-          submitBtn.textContent = 'Keep Me Posted';
-        }
-      } catch (err) {
-        msgEl.textContent = 'Network error. Please try again.';
-        msgEl.className = 'newsletter-msg error';
-        msgEl.classList.remove('hidden');
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Keep Me Posted';
-      }
-    });
-
-    // Allow Enter key to submit
-    document.getElementById('newsletterEmail').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') document.getElementById('newsletterSubmit').click();
-    });
-  }
+  // Newsletter popup setup (free mode only, once per session, after tour completes)
+  initNewsletterPopup();
 
   // Initialize tutorial system (help, tour, guidance - defined in tutorial.js)
   initTutorial();
 });
+
+// Newsletter popup (free mode only, once per session, deferred until tour completes)
+function initNewsletterPopup() {
+  const popup = document.getElementById('newsletterPopup');
+
+  function closeNewsletter() {
+    popup.classList.add('hidden');
+  }
+
+  document.getElementById('newsletterClose').addEventListener('click', closeNewsletter);
+  document.getElementById('newsletterSkip').addEventListener('click', closeNewsletter);
+  popup.addEventListener('click', (e) => { if (e.target === popup) closeNewsletter(); });
+
+  document.getElementById('newsletterSubmit').addEventListener('click', async () => {
+    const emailInput = document.getElementById('newsletterEmail');
+    const email = emailInput.value.trim();
+    const msgEl = document.getElementById('newsletterMsg');
+    const submitBtn = document.getElementById('newsletterSubmit');
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      msgEl.textContent = 'Please enter a valid email address.';
+      msgEl.className = 'newsletter-msg error';
+      msgEl.classList.remove('hidden');
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Sending...';
+    msgEl.classList.add('hidden');
+
+    try {
+      const resp = await fetch('https://api.buttondown.com/v1/subscribers', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Token 01f8cbb3-0608-43b9-b983-c41b1c2f2c78',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email: email })
+      });
+
+      if (resp.ok || resp.status === 201) {
+        msgEl.textContent = 'You\'re in! We\'ll keep you posted.';
+        msgEl.className = 'newsletter-msg success';
+        msgEl.classList.remove('hidden');
+        setTimeout(closeNewsletter, 2000);
+      } else {
+        const data = await resp.json().catch(() => ({}));
+        if (resp.status === 400 && JSON.stringify(data).includes('already')) {
+          msgEl.textContent = 'You\'re already subscribed!';
+          msgEl.className = 'newsletter-msg success';
+        } else {
+          msgEl.textContent = 'Something went wrong. Please try again.';
+          msgEl.className = 'newsletter-msg error';
+        }
+        msgEl.classList.remove('hidden');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Keep Me Posted';
+      }
+    } catch (err) {
+      msgEl.textContent = 'Network error. Please try again.';
+      msgEl.className = 'newsletter-msg error';
+      msgEl.classList.remove('hidden');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Keep Me Posted';
+    }
+  });
+
+  document.getElementById('newsletterEmail').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('newsletterSubmit').click();
+  });
+
+  // Show immediately only if tour is already complete; otherwise endTour() will call showNewsletterPopup()
+  if (state.tourComplete) {
+    showNewsletterPopup();
+  }
+}
+
+// Show the newsletter popup if it hasn't been shown this session
+function showNewsletterPopup() {
+  if (sessionStorage.getItem('ccTracker_newsletterShown')) return;
+  sessionStorage.setItem('ccTracker_newsletterShown', 'true');
+  document.getElementById('newsletterPopup').classList.remove('hidden');
+}
 
 // Assemble feedback email dynamically to prevent scraping
 function initFeedbackEmail() {

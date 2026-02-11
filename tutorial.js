@@ -184,6 +184,7 @@ const TOUR_STEPS = [
     buttons: [{ text: 'Continue \u2192', action: 'next', primary: true }],
     onNext: () => { /* Will show upload section */ }
   },
+
   {
     type: 'wait-for-upload',
     phase: 'setup',
@@ -223,16 +224,6 @@ const TOUR_STEPS = [
     target: '.detail-toggle',
     title: 'Credit Details \u25BC',
     content: 'Click the \u25BC arrow to see a breakdown of which credits were detected for each card. Credits marked \u26A1 require manual tracking.',
-    position: 'left',
-    clickRequired: false
-  },
-  {
-    type: 'spotlight',
-    phase: 'summary-tour',
-    id: 'card-year-toggle',
-    target: '.card-year-toggle',
-    title: 'Card Year View \u{1F4C5}',
-    content: 'Calendar Year shows results January\u2013December. <strong>Card Year</strong> shows results based on your card\'s anniversary date \u2014 this matters because some credits and annual fees reset on the anniversary, not January 1st. If you\'re deciding whether to keep a card at renewal, Card Year is usually more useful.',
     position: 'left',
     clickRequired: false
   },
@@ -456,6 +447,16 @@ function startTour(isManualRestart = false) {
     state.tourStep = 0;
     state.tourComplete = false;
     localStorage.removeItem('ccTracker_tourComplete');
+
+    // Navigate back to summary view so tour steps can find their targets
+    const cardConfigSection = document.getElementById('cardConfigSection');
+    if (cardConfigSection && !cardConfigSection.classList.contains('hidden')) {
+      cardConfigSection.classList.add('hidden');
+    }
+    if (state.results) {
+      document.getElementById('resultsSection').classList.remove('hidden');
+      renderView('summary');
+    }
   }
 
   state.tourActive = true;
@@ -526,6 +527,10 @@ function showTourModal(step) {
   const stepNum = getDisplayStepNumber(state.tourStep);
   const totalSteps = getTourStepCount();
 
+  // For the upload step, add "Skip Upload" button if user already has data
+  const hasExistingData = state.savedTransactions && state.savedTransactions.length > 0;
+  const showSkipUpload = step.id === 'upload' && hasExistingData;
+
   content.innerHTML = `
     <div class="tour-modal-icon">${step.title.split(' ').pop()}</div>
     <div class="tour-modal-title">${step.title.replace(/\s*[\u{1F300}-\u{1F9FF}]/gu, '')}</div>
@@ -536,6 +541,11 @@ function showTourModal(step) {
           ${btn.text}
         </button>
       `).join('')}
+      ${showSkipUpload ? `
+        <button class="btn btn-secondary" data-action="skip-upload" style="margin-top:8px;">
+          Skip Upload \u2014 I already have data \u2192
+        </button>
+      ` : ''}
     </div>
     <div style="margin-top:16px;font-size:12px;color:#a8a29e;">
       Step ${stepNum} of ${totalSteps}
@@ -553,6 +563,21 @@ function showTourModal(step) {
         state.tourStep++;
         modal.classList.add('hidden');
         renderTourStep();
+      } else if (action === 'skip-upload') {
+        // Skip past upload and mapping wait steps, go to summary tour
+        modal.classList.add('hidden');
+        // Advance past wait-for-upload and wait-for-mapping steps
+        while (TOUR_STEPS[state.tourStep] &&
+               (TOUR_STEPS[state.tourStep].type === 'wait-for-upload' ||
+                TOUR_STEPS[state.tourStep].type === 'wait-for-mapping' ||
+                TOUR_STEPS[state.tourStep].id === 'upload')) {
+          state.tourStep++;
+        }
+        // Make sure summary view is showing
+        document.getElementById('resultsSection').classList.remove('hidden');
+        document.getElementById('uploadSection').classList.add('hidden');
+        renderView('summary');
+        setTimeout(() => renderTourStep(), 300);
       } else if (action === 'finish') {
         endTour();
       }
@@ -586,9 +611,11 @@ function showTourSpotlight(step, retryCount = 0) {
   const tooltip = document.getElementById('tourTooltip');
   const arrow = document.getElementById('tourTooltipArrow');
 
+  // Show overlay immediately but hide spotlight/tooltip until positioned
+  // (prevents flash at old position during scroll)
   overlay.classList.remove('hidden');
-  spotlight.classList.remove('hidden');
-  tooltip.classList.remove('hidden');
+  spotlight.classList.add('hidden');
+  tooltip.classList.add('hidden');
 
   // Make spotlight clickable if required (set this before positioning)
   // Exception: for 'select-card' action, keep spotlight non-blocking so users can click the dropdown
@@ -657,7 +684,7 @@ function showTourSpotlight(step, retryCount = 0) {
     backBtn.addEventListener('click', backHandler);
   }
 
-  // Function to position spotlight and tooltip
+  // Function to position spotlight and tooltip, then reveal them
   function positionElements() {
     const rect = target.getBoundingClientRect();
     const padding = 8;
@@ -701,9 +728,13 @@ function showTourSpotlight(step, retryCount = 0) {
 
     tooltip.style.left = tooltipLeft + 'px';
     tooltip.style.top = tooltipTop + 'px';
+
+    // Now reveal spotlight and tooltip at the correct position
+    spotlight.classList.remove('hidden');
+    tooltip.classList.remove('hidden');
   }
 
-  // Scroll target into view first, then position
+  // Scroll target into view first, then position and reveal
   target.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
   // Position after scroll completes

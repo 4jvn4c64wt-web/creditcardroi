@@ -1714,6 +1714,22 @@ function getMultiplier(cardId, category, txnDate = null, merchantDesc = '') {
     return { rate: 5, reason: '5x Capital One Travel (default — flights/vacation rentals/unknown)' };
   }
 
+  // Amex Platinum: portal bookings earn 5x on hotels & flights, 1x on everything else (car rentals, etc.)
+  // Check the merchant description for travel sub-type keywords to decide 5x vs 1x.
+  if (cardId === 'amex-platinum' && category === 'amex-travel' && merchantDesc) {
+    const normDesc = merchantDesc.toLowerCase().replace(/[^a-z0-9\s]/g, '');
+    // Check for hotel keywords in Amex Travel transactions (e.g., "AMEXTRAVEL.COM PREPAID HOTEL")
+    if (normDesc.includes('hotel') || normDesc.includes('prepaid hotel')) {
+      return { rate: 5, reason: '5x Amex Travel (hotel)' };
+    }
+    // Check for flight keywords in Amex Travel transactions (e.g., "AMEXTRAVEL.COM AIRFARE")
+    if (normDesc.includes('airfare') || normDesc.includes('flight') || normDesc.includes('airline')) {
+      return { rate: 5, reason: '5x Amex Travel (flight)' };
+    }
+    // Car rentals and everything else through Amex Travel get 1x base rate
+    return { rate: 1, reason: '1x Amex Travel (car rental or other)' };
+  }
+
   // Use hierarchy to find the best matching category for this card
   const effectiveCat = getEffectiveCategory(category, cardId);
 
@@ -5613,6 +5629,44 @@ document.addEventListener('DOMContentLoaded', async () => {
           state.tourActive = false;
           state.featureEducation = {};
           startTour();
+        } else if (confirmation === 'SWITCH') {
+          // Secret dev tool: switch versions without clearing data
+          const versionChoice = prompt('Switch to which version?\n\n1 = Base (app.html - free)\n2 = Decision Pass (app.html with Decision Pass)\n3 = Pro (app-pro.html)\n\nEnter 1, 2, or 3:');
+
+          // Clear tier keys first
+          localStorage.removeItem('ccTracker_decisionPasses');
+          localStorage.removeItem('ccTracker_proAccess');
+
+          if (versionChoice === '2') {
+            // Set up Decision Pass access
+            const testDP = {
+              key: 'TESTDP-SWITCH',
+              cardId: 'chase-sapphire-reserve',
+              activatedAt: Date.now()
+            };
+            state.decisionPasses = [testDP];
+            state.proAccess = null;
+            localStorage.setItem('ccTracker_decisionPasses', JSON.stringify([testDP]));
+            alert('Switched to Decision Pass. Reloading...');
+            window.location.reload();
+          } else if (versionChoice === '3') {
+            // Set up Pro access
+            const testPro = {
+              key: 'TESTPRO-SWITCH',
+              activatedAt: Date.now()
+            };
+            state.proAccess = testPro;
+            state.decisionPasses = [];
+            localStorage.setItem('ccTracker_proAccess', JSON.stringify(testPro));
+            alert('Switched to Pro. Redirecting...');
+            window.location.href = 'app-pro.html';
+          } else {
+            // Base version - clear all tier access
+            state.decisionPasses = [];
+            state.proAccess = null;
+            alert('Switched to Base version. Reloading...');
+            window.location.reload();
+          }
         } else if (confirmation === 'TESTDP-PASS-001' || confirmation === 'TESTPRO-PASS-001') {
           // Secret reset: revert to free tier (clear DP and Pro access only)
           state.decisionPasses = [];

@@ -6,7 +6,7 @@ window.CardTracker.cards['amex-platinum'] = {
   shortName: 'Amex Plat',
   annualFee: 895,
   pointValue: 0.02,
-  multipliers: { 'flights-direct': 5, 'hotels-direct': 5, 'amex-travel': 5 },
+  multipliers: { 'flights-direct': 5, 'amex-travel': 5 },
   baseRate: 1,
   credits: [
     { name: 'Hotel Credit', amount: 600, keywords: ['FINE HOTELS', 'FHR', 'HOTEL COLLECTION'], manual: false },
@@ -21,5 +21,5 @@ window.CardTracker.cards['amex-platinum'] = {
     { name: 'Equinox', amount: 300, keywords: ['EQUINOX'], manual: false },
     { name: 'Global Entry/TSA PreCheck', amount: 120, keywords: ['GLOBAL ENTRY', 'TSA PRECHECK', 'KNOWN TRAVELER', 'TRUSTED TRAVELER'], manual: false },
   ],
-  categories: ['flights-direct', 'hotels-direct', 'amex-travel', 'other']
+  categories: ['flights-direct', 'amex-travel', 'other']
 };

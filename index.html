@@ -92,7 +92,7 @@
 
     /* Pricing tiers */
     .pricing-section { padding: 64px 0; }
-    .pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 48px; }
+    .pricing-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; margin-top: 48px; max-width: 700px; margin-left: auto; margin-right: auto; }
     .pricing-card { background: #fff; border: 1px solid #e7e5e4; border-radius: 12px; padding: 32px 24px; display: flex; flex-direction: column; }
     .pricing-card.featured { border-color: #1c1917; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
     .pricing-tier { font-size: 13px; font-weight: 600; color: #059669; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
@@ -327,7 +327,7 @@
   <section class="pricing-section" id="pricing">
     <div class="container">
       <h2 class="section-title">Choose Your Plan</h2>
-      <p class="section-subtitle">Start free. Upgrade when you need a deeper answer.</p>
+      <p class="section-subtitle">Start free today. Paid upgrades coming soon.</p>
 
       <div class="pricing-grid">
 
@@ -337,45 +337,51 @@
           <div class="pricing-price">$0</div>
           <div class="pricing-headline">See what your cards are really earning</div>
           <ul class="pricing-features">
-            <li>Last 3 months of transactions</li>
+            <li>Last 12 months of transactions</li>
             <li>Unlimited cards</li>
+            <li>Read-only — see your full ROI breakdown</li>
           </ul>
-          <a href="app.html" class="btn btn-secondary">Start Free</a>
+          <a href="app.html" class="btn btn-primary">Start Free</a>
         </div>
 
-        <!-- Decision Pass -->
+        <!-- COMING SOON: Uncomment Decision Pass card when paid plans launch
         <div class="pricing-card featured">
           <div class="pricing-tier">Decision Pass</div>
           <div class="pricing-price">$12</div>
           <div class="pricing-headline">Make your annual fee decision</div>
           <ul class="pricing-features">
-            <li>One-time payment, 7 days of access</li>
-            <li>Upload full year of transactions</li>
-            <li>1 card</li>
-            <li>Complete ROI analysis</li>
-            <li>Perfect for annual fee time</li>
+            <li>Unlock 1 card for 7 days</li>
+            <li>Full transaction history (not just 1 year)</li>
+            <li>Edit categories &amp; card settings</li>
+            <li>Card Year anniversary toggle</li>
+            <li>Export your data</li>
+            <li>Perfect for annual fee renewals</li>
           </ul>
-          <!-- TODO: link to purchase flow -->
-          <a href="#purchase-decision-pass" class="btn btn-primary">Get Decision Pass</a>
+          <a href="app.html" class="btn btn-primary">Start Free, Then Upgrade</a>
         </div>
+        -->
 
-        <!-- Pro -->
-        <div class="pricing-card">
-          <div class="pricing-tier">Pro</div>
-          <div class="pricing-price">$24 <span class="period">/ year</span></div>
-          <div class="pricing-headline">Track your whole portfolio</div>
-          <ul class="pricing-features">
-            <li>Unlimited transaction history</li>
-            <li>Unlimited cards</li>
-            <li>Complete ROI analysis</li>
-            <li>Scenario calculator — see what adding or dropping a card would do</li>
-            <li>Check before every annual fee</li>
-          </ul>
-          <!-- TODO: link to purchase flow -->
-          <a href="#purchase-pro" class="btn btn-primary">Get Pro</a>
+        <!-- Pro (coming soon — details blurred) -->
+        <div class="pricing-card" style="position:relative;">
+          <div class="pricing-tier" style="color:#059669;">Pro</div>
+          <div style="filter:blur(6px);-webkit-filter:blur(6px);user-select:none;pointer-events:none;opacity:0.5;">
+            <div class="pricing-price">$12 <span class="period">/ year</span></div>
+            <div class="pricing-headline">Track your whole portfolio</div>
+            <ul class="pricing-features">
+              <li>Everything unlocked, all cards</li>
+              <li>Full transaction history</li>
+              <li>Edit all categories &amp; settings</li>
+              <li>Export all data</li>
+              <li>Scenario calculator</li>
+              <li>Priority support</li>
+            </ul>
+          </div>
+          <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(255,255,255,0.85);border-radius:8px;padding:10px 20px;font-size:14px;font-weight:600;color:#57534e;white-space:nowrap;">Coming Soon</div>
         </div>
 
       </div>
+
+      <!-- COMING SOON: Restore grid-template-columns: repeat(3, 1fr) and remove max-width/margin from .pricing-grid -->
     </div>
   </section>
 
@@ -393,6 +399,10 @@
     <div class="container">
       <h2 class="section-title">Frequently Asked Questions</h2>
       <div class="faq-list">
+        <div class="faq-item">
+          <div class="faq-q">Where can I suggest new features or cards?</div>
+          <div class="faq-a">Send your ideas to <span id="faqFeatureEmail" style="color:#2563eb;cursor:pointer;text-decoration:underline;"></span> — whether it's a card you want supported, a feature you'd find useful, or anything else. Feedback shapes what gets built next.</div>
+        </div>
         <div class="faq-item">
           <div class="faq-q">Is my data safe?</div>
           <div class="faq-a">Your data never leaves your browser. No servers or uploads — everything runs locally.</div>
@@ -422,10 +432,6 @@
           <div class="faq-a">Not yet, but new cards are added regularly. Reach out and let us know which card you'd like to see next.</div>
         </div>
         <div class="faq-item">
-          <div class="faq-q">What's the difference between Decision Pass and Pro?</div>
-          <div class="faq-a">Decision Pass gives you a full year of analysis for one card — perfect when an annual fee is coming due. Pro removes all limits and adds tools to optimize your spending going forward.</div>
-        </div>
-        <div class="faq-item">
           <div class="faq-q">Who built this?</div>
           <div class="faq-a">A lawyer who got tired of spreadsheets.</div>
         </div>
@@ -453,5 +459,20 @@
     </div>
   </footer>
 
+<script>
+(function() {
+  var u = 'creditcardvaluetracker';
+  var d = 'gmail';
+  var t = 'com';
+  var addr = u + '\u0040' + d + '.' + t;
+  var el = document.getElementById('faqFeatureEmail');
+  if (el) {
+    el.textContent = addr;
+    el.onclick = function() {
+      window.location.href = 'mai' + 'lto:' + addr + '?subject=' + encodeURIComponent('Feature Request — Credit Card Value Tracker');
+    };
+  }
+})();
+</script>
 </body>
 </html>

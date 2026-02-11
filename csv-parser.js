@@ -45,79 +45,94 @@ window.CardTracker.csvParser.isWellsFargoFormat = function(fields) {
   return isDate && isAmount && isAsterisk && isEmpty && hasMerchant;
 };
 
-// Known CSV formats for auto-detection
-window.CardTracker.csvParser.CSV_FORMATS = {
-  monarch: {
-    name: 'Monarch Money',
-    // Monarch has exact column names: Date, Merchant, Category, Account, Original Statement, Notes, Amount, Tags, Owner
-    detect: (headers) => headers.includes('merchant') && headers.includes('account') && headers.includes('original statement'),
-    mapping: { date: 'date', merchant: 'merchant', category: 'category', account: 'account', amount: 'amount', original: 'original statement' }
-  },
-  chase: {
-    name: 'Chase',
-    // Chase CSVs have both 'transaction date' and 'post date' - use post date for accurate point calculation
-    detect: (headers) => headers.includes('transaction date') && headers.includes('post date') && headers.includes('description'),
-    mapping: { date: 'post date', merchant: 'description', category: 'category', account: null, amount: 'amount', original: null }
-  },
-  amex: {
-    name: 'American Express',
-    detect: (headers) => headers.includes('date') && headers.includes('description') && headers.includes('card member'),
-    mapping: { date: 'date', merchant: 'description', category: 'category', account: 'card member', amount: 'amount', original: null }
-  },
-  bilt: {
-    name: 'Bilt',
-    detect: (headers) => headers.includes('transaction date') && headers.includes('description') && headers.includes('member since'),
-    mapping: { date: 'transaction date', merchant: 'description', category: 'category', account: null, amount: 'amount', original: null }
-  }
-};
-
 // Generate a "shape" key for a CSV based on headers (used to remember mappings)
 window.CardTracker.csvParser.getCSVShapeKey = function(headers) {
   return headers.map(h => h.toLowerCase().trim()).sort().join('|').substring(0, 200);
 };
 
 // Auto-detect CSV format and suggest column mappings
-window.CardTracker.csvParser.detectCSVFormat = function(headers) {
-  const CSV_FORMATS = window.CardTracker.csvParser.CSV_FORMATS;
+window.CardTracker.csvParser.detectCSVFormat = function(headers, previewRows) {
   const normalizedHeaders = headers.map(h => h.toLowerCase().trim());
+  const detectColumnDataType = window.CardTracker.csvParser.detectColumnDataType;
 
-  // Try to match known formats
-  for (const [formatId, format] of Object.entries(CSV_FORMATS)) {
-    if (format.detect(normalizedHeaders)) {
-      // Convert format mapping to use actual header indices
-      const mapping = {};
-      for (const [field, headerName] of Object.entries(format.mapping)) {
-        if (headerName) {
-          mapping[field] = headerName;
+  // Three-pass approach: (1) exact phrase within header, (2) data format inspection, (3) word-boundary partial
+  // Detection order: specific multi-word fields first, then generic single-word fields
+  const alreadyMapped = new Set();
+
+  const findHeader = (patterns, expectedDataType) => {
+    // Pass 1: Exact phrase within header — h.includes(pattern)
+    for (const pattern of patterns) {
+      const found = normalizedHeaders.find(h => h.includes(pattern) && !alreadyMapped.has(h));
+      if (found) { alreadyMapped.add(found); return found; }
+    }
+    // Pass 2: Data format inspection — check actual cell values in unmapped columns
+    if (expectedDataType && previewRows && previewRows.length > 0) {
+      for (let i = 0; i < normalizedHeaders.length; i++) {
+        if (alreadyMapped.has(normalizedHeaders[i])) continue;
+        const sampleValues = previewRows.map(row => row[i]);
+        if (detectColumnDataType(sampleValues) === expectedDataType) {
+          alreadyMapped.add(normalizedHeaders[i]);
+          return normalizedHeaders[i];
         }
       }
-      return { formatId, formatName: format.name, mapping };
     }
-  }
-
-  // Generic detection - try to match common column names
-  const findHeader = (patterns) => {
+    // Pass 3: Word-boundary partial match
     for (const pattern of patterns) {
-      const found = normalizedHeaders.find(h => h === pattern || h.includes(pattern));
-      if (found) return found;
+      const re = new RegExp('(?:^|\\W)' + pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:$|\\W)');
+      const found = normalizedHeaders.find(h => re.test(h) && !alreadyMapped.has(h));
+      if (found) { alreadyMapped.add(found); return found; }
     }
     return null;
   };
 
+  // Detect specific multi-word fields FIRST (before generic single-word fields can steal them)
+  const original = findHeader(['original statement', 'original description', 'memo', 'original']);
+  const accountName = findHeader(['account name', 'card name', 'account nickname'], 'accountName');
+  const accountType = findHeader(['account type'], 'accountType');
+
+  // Then detect generic fields
+  const date = findHeader(['post date', 'posting date', 'date', 'transaction date', 'trans date'], 'date');
+  const merchant = findHeader(['merchant', 'description', 'payee', 'name']);
+  const category = findHeader(['category']);
+  const account = findHeader(['account number', 'card number', 'account', 'card', 'card no'], 'account');
+  const amount = findHeader(['amount', 'debit', 'credit'], 'amount');
+
+  // Only fall back to bare "type" for accountType if it wasn't already detected
+  const finalAccountType = accountType || findHeader(['type'], 'accountType');
+
   const genericMapping = {
-    // Prefer 'post date' over 'transaction date' - points are earned when transaction POSTS, not when made
-    // Bank CSVs often have both; budgeting apps use adjusted 'date' which is fine
-    date: findHeader(['post date', 'posting date', 'date', 'transaction date', 'trans date']),
-    merchant: findHeader(['merchant', 'description', 'payee', 'name']),
-    category: findHeader(['category']),
-    account: findHeader(['account', 'card', 'card no', 'card number']),
-    accountName: findHeader(['account name', 'card name', 'account nickname']),
-    accountType: findHeader(['account type', 'type']),
-    amount: findHeader(['amount', 'debit', 'credit']),
-    original: findHeader(['original statement', 'original', 'statement', 'memo'])
+    date,
+    merchant,
+    category,
+    account,
+    accountName,
+    accountType: finalAccountType,
+    amount,
+    original
   };
 
-  return { formatId: 'generic', formatName: 'Unknown Format', mapping: genericMapping };
+  // Post-pass: account subtype reclassification
+  // If a column was mapped to generic 'account' by header name, inspect data
+  // to determine if it's actually accountName, accountType, or accountCombined
+  if (genericMapping.account && previewRows && previewRows.length > 0) {
+    const accountIdx = normalizedHeaders.indexOf(genericMapping.account);
+    if (accountIdx >= 0) {
+      const sampleValues = previewRows.map(row => row[accountIdx]);
+      const detectedType = detectColumnDataType(sampleValues);
+      if (detectedType === 'accountName' && !genericMapping.accountName) {
+        genericMapping.accountName = genericMapping.account;
+        genericMapping.account = null;
+      } else if (detectedType === 'accountType' && !genericMapping.accountType) {
+        genericMapping.accountType = genericMapping.account;
+        genericMapping.account = null;
+      } else if (detectedType === 'accountCombined') {
+        genericMapping.accountCombined = genericMapping.account;
+        genericMapping.account = null;
+      }
+    }
+  }
+
+  return { formatId: 'generic', formatName: 'Auto-detected', mapping: genericMapping };
 };
 
 // Determine if a column value represents a Card Number, Account Type, Account Name, or Combined
@@ -168,6 +183,65 @@ window.CardTracker.csvParser.detectAccountColumnType = function(sampleValue) {
   if (textContent.length > 5 && textContent.length > numericContent.length) {
     return 'accountName';
   }
+
+  return 'unknown';
+};
+
+// Inspect sample cell values to classify a column's data type
+// Returns: 'date' | 'amount' | 'account' | 'accountName' | 'accountType' | 'accountCombined' | 'unknown'
+window.CardTracker.csvParser.detectColumnDataType = function(sampleValues) {
+  if (!sampleValues || sampleValues.length === 0) return 'unknown';
+
+  const values = sampleValues.map(v => (v || '').trim()).filter(v => v.length > 0);
+  if (values.length === 0) return 'unknown';
+
+  const total = values.length;
+  const threshold = 0.5;
+
+  // Check for date patterns (most specific)
+  const datePatterns = [
+    /^\d{1,2}\/\d{1,2}\/\d{2,4}$/,   // MM/DD/YYYY
+    /^\d{4}-\d{2}-\d{2}$/,             // YYYY-MM-DD
+    /^\d{1,2}-\d{1,2}-\d{2,4}$/,      // MM-DD-YYYY
+    /^\d{4}\/\d{2}\/\d{2}$/            // YYYY/MM/DD
+  ];
+  const dateCount = values.filter(v => datePatterns.some(p => p.test(v))).length;
+  if (dateCount / total >= threshold) return 'date';
+
+  // Check for account-related types BEFORE amounts (since "1234" is both a valid amount and card number)
+  // Use detectAccountColumnType but only trust strong signals, not the text-length fallback
+  const detectAccountColumnType = window.CardTracker.csvParser.detectAccountColumnType;
+  const cardNameKeywords = ['visa', 'mastercard', 'amex', 'american express', 'discover',
+                            'sapphire', 'reserve', 'freedom', 'unlimited', 'preferred',
+                            'gold', 'platinum', 'rewards', 'cash back', 'cashback',
+                            'venture', 'quicksilver', 'double cash', 'custom cash',
+                            'blue cash', 'everyday', 'boundless', 'world elite'];
+  const typeCounts = { cardNumber: 0, accountName: 0, accountType: 0, combined: 0 };
+  values.forEach(v => {
+    const t = detectAccountColumnType(v);
+    if (t === 'cardNumber' || t === 'accountType' || t === 'combined') {
+      typeCounts[t]++;
+    } else if (t === 'accountName') {
+      // Only count keyword-based matches, not the generic text-length heuristic
+      // This prevents merchant names like "AMAZON PRIME" from being classified as account names
+      if (cardNameKeywords.some(k => v.toLowerCase().includes(k))) {
+        typeCounts.accountName++;
+      }
+    }
+  });
+
+  if (typeCounts.cardNumber / total >= threshold) return 'account';
+  if (typeCounts.combined / total >= threshold) return 'accountCombined';
+  if (typeCounts.accountName / total >= threshold) return 'accountName';
+  if (typeCounts.accountType / total >= threshold) return 'accountType';
+
+  // Check for amount/currency patterns (after account checks)
+  const isAmountValue = (v) => {
+    const cleaned = v.replace(/[$,\s]/g, '');
+    return /^-?\d+(\.\d+)?$/.test(cleaned) || /^\(\d+(\.\d+)?\)$/.test(cleaned);
+  };
+  const amountCount = values.filter(v => isAmountValue(v)).length;
+  if (amountCount / total >= threshold) return 'amount';
 
   return 'unknown';
 };
@@ -256,50 +330,7 @@ window.CardTracker.csvParser.showColumnMapping = function(csvText) {
       }
     };
   } else {
-    detected = detectCSVFormat(headers);
-
-    // Smart column detection: examine first data row to determine if "account" column
-    // is actually Card Number, Account Type, Account Name, or Combined
-    if (!savedMapping && previewRows.length > 0) {
-      const normalizedHeaders = headers.map(h => h.toLowerCase().trim());
-
-      // Check each column that might need smart detection
-      for (let i = 0; i < normalizedHeaders.length; i++) {
-        const header = normalizedHeaders[i];
-        const sampleValue = previewRows[0][i];
-
-        // If header is "account", "account name", "account type", or similar - detect what it really is
-        if (header === 'account' || header === 'account name' || header === 'account type' || header === 'type') {
-          const columnType = detectAccountColumnType(sampleValue);
-
-          // Clear any existing mappings for this header first
-          const clearExistingMappings = () => {
-            if (detected.mapping.account === headers[i]) detected.mapping.account = null;
-            if (detected.mapping.accountName === headers[i]) detected.mapping.accountName = null;
-            if (detected.mapping.accountType === headers[i]) detected.mapping.accountType = null;
-            if (detected.mapping.accountCombined === headers[i]) detected.mapping.accountCombined = null;
-          };
-
-          // Remap based on detected type
-          if (columnType === 'cardNumber') {
-            clearExistingMappings();
-            detected.mapping.account = headers[i];
-          } else if (columnType === 'accountType') {
-            // It's an account type column (e.g., "Checking", "Credit Card", "Savings")
-            clearExistingMappings();
-            detected.mapping.accountType = headers[i];
-          } else if (columnType === 'accountName') {
-            // It's a card name column (e.g., "Chase Sapphire Reserve", "Amex Gold")
-            clearExistingMappings();
-            detected.mapping.accountName = headers[i];
-          } else if (columnType === 'combined') {
-            // It's a combined column (e.g., "Chase Sapphire Reserve (...1234)")
-            clearExistingMappings();
-            detected.mapping.accountCombined = headers[i];
-          }
-        }
-      }
-    }
+    detected = detectCSVFormat(headers, previewRows);
   }
 
   // Use saved mapping if available, but MERGE with detected mapping

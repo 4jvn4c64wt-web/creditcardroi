@@ -373,10 +373,7 @@
         <div style="font-size:40px;margin-bottom:12px;">🚀</div>
         <h3 style="font-size:20px;font-weight:600;margin:0 0 8px;">More Features Coming Soon</h3>
         <p style="font-size:14px;color:#57534e;line-height:1.6;margin-bottom:20px;">
-          We're working on new features to help you get even more out of your tracker. Expect custom point valuations, editable spending categories, credit tracking, and more.
-        </p>
-        <p style="font-size:13px;color:#78716c;margin-bottom:24px;">
-          Stay tuned — we'll let you know when they're ready.
+          New features to help you get even more out of your tracker are coming soon. Expect custom point valuations, editable spending categories, credit tracking, and more. Let me know what features you would like to see at <span id="comingSoonEmail" style="color:#2563eb;cursor:pointer;text-decoration:underline;"></span>.
         </p>
         <button id="closeComingSoon" class="btn btn-secondary" style="width:100%;justify-content:center;">Got it</button>
       </div>
@@ -5900,6 +5897,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   // COMING SOON: Intercept all upgrade entry points with coming-soon modal
   // To restore paid flow: remove comingSoonModal HTML, delete this block,
   // and uncomment the original handlers below.
+  (function() {
+    var u = 'creditcardvaluetracker';
+    var d = 'gmail';
+    var t = 'com';
+    var addr = u + '\u0040' + d + '.' + t;
+    var el = document.getElementById('comingSoonEmail');
+    if (el) {
+      el.textContent = addr;
+      el.onclick = function() {
+        window.location.href = 'mai' + 'lto:' + addr + '?subject=' + encodeURIComponent('Feature Request — Credit Card Value Tracker');
+      };
+    }
+  })();
   document.getElementById('closeComingSoon').addEventListener('click', () => {
     document.getElementById('comingSoonModal').classList.add('hidden');
   });

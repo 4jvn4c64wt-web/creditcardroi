@@ -3606,13 +3606,14 @@ function showResults(results, isNewUpload = false) {
   initFeedbackEmail();
 
   renderView('summary');
-  
+
   // Show low-confidence review modal on new upload if there are items to review
   // BUT NOT during the tour - it will be explained later
-  if (isNewUpload && lowConfidenceCount > 0 && !state.tourActive) {
-    document.getElementById('lowConfidenceCount').textContent = lowConfidenceCount;
-    document.getElementById('lowConfidenceModal').classList.remove('hidden');
-  }
+  // COMING SOON: Restore this popup when editing features are available
+  // if (isNewUpload && lowConfidenceCount > 0 && !state.tourActive) {
+  //   document.getElementById('lowConfidenceCount').textContent = lowConfidenceCount;
+  //   document.getElementById('lowConfidenceModal').classList.remove('hidden');
+  // }
 }
 
 function renderView(view) {

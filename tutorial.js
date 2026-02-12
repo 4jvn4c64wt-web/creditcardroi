@@ -257,7 +257,7 @@ const TOUR_STEPS = [
     id: 'config-point-value',
     target: '#configPointValue',
     title: 'Point Valuation \u{1F4B0}',
-    content: '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING SOON</span><br>This is how much each point is worth when you redeem it. For example, at 2.0\u00A2 per point, 1,000 points = $20 in value. Cash back users might set 1.0\u00A2, travel redeemers might set 1.5\u20132.0\u00A2.',
+    content: 'This value represents how much each point or mile is worth when redeemed. It\u2019s based on commonly accepted valuations for your card\u2019s rewards program and is used to calculate the dollar value of the points you earn.<br><br><span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING TO PRO</span> Pro users will be able to edit point valuations to match their personal redemption strategy\u2014whether you value points at 1.0\u00A2 for cash back or 2.0\u00A2+ for premium travel redemptions.',
     position: 'right',
     clickRequired: false
   },
@@ -267,7 +267,7 @@ const TOUR_STEPS = [
     id: 'config-credits-section',
     target: '#configCreditsSection',
     title: 'Statement Credits \u{1F4B3}',
-    content: 'Your statement credits are <strong>auto-detected</strong> from transactions (like streaming or airline incidentals). Others marked \u26A1 (like Uber Cash) require manual tracking. <span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING SOON</span> Toggle individual credits ON/OFF to customize your ROI calculation.',
+    content: 'Your statement credits are <strong>auto-detected</strong> from transactions (like streaming or airline incidentals). Others marked \u26A1 (like Uber Cash) require manual tracking.<br><br><span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING TO PRO</span> Toggle individual credits ON/OFF to customize your ROI calculation.',
     position: 'top',
     clickRequired: false
   },
@@ -349,7 +349,7 @@ const TOUR_STEPS = [
     id: 'recategorize',
     target: '#transactionsBody .badge',
     title: 'Recategorize Transactions \u{1F3F7}\uFE0F',
-    content: '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING SOON</span><br>You\'ll be able to recategorize spending categories and credits by clicking any badge. You can also add rules for specific merchants so they\'re always classified correctly.',
+    content: '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING TO PRO</span> You\'ll be able to recategorize spending categories and credits by clicking any badge. You can also add rules for specific merchants so they\'re always classified correctly.',
     position: 'right',
     clickRequired: false
   },
@@ -415,9 +415,8 @@ const TOUR_STEPS = [
     content: `
       <p><strong>What to do next:</strong></p>
       <ol style="margin:16px 0;line-height:2;text-align:left;">
-        <li>\u26A0\uFE0F <strong>Review flagged transactions</strong> \u2014 Fix any marked "Needs Review" to improve accuracy</li>
-        <li>\u2699\uFE0F <strong>Check Card Config</strong> \u2014 Verify credits and point values are set correctly for each card</li>
-        <li>\u{1F4CA} <strong>Check your Summary</strong> \u2014 See which cards are earning their keep</li>
+        <li>\u{1F4CA} <strong>Card Performance</strong> \u2014 See each card\u2019s ROI, rewards earned vs. annual fee, and whether it\u2019s paying for itself</li>
+        <li>\u{1F4CB} <strong>All Transactions</strong> \u2014 Filter by card, category, or date to see how your spending was classified</li>
       </ol>
       <p style="margin-top:12px;font-size:12px;color:#78716c;">Click the <strong>?</strong> button on any page for help, or to restart this tour.</p>
     `,
@@ -853,102 +852,6 @@ function continueTourAfterMapping() {
   }
 }
 
-// Feature education mini-tours (for first-time card feature encounters)
-function checkFeatureEducation(cardId) {
-  const card = CARDS[cardId];
-  if (!card) return;
-
-  // Only show feature education AFTER tour is fully complete and not actively running
-  if (!state.tourComplete || state.tourActive) return;
-
-  const disabledForCard = state.disabledCredits[cardId] || [];
-  const enabledCredits = (card.credits || []).filter(c => !disabledForCard.includes(c.name));
-  const hasManualCredits = enabledCredits.some(c => c.manual);
-  const hasQuarterly = cardId === 'chase-freedom-flex' || cardId === 'us-bank-cash-plus';
-
-  // Check if we need to show manual credits education
-  if (hasManualCredits && !state.featureEducation.manualCredits) {
-    showFeatureEducation('manualCredits');
-  } else if (hasQuarterly && !state.featureEducation.quarterlyCategories) {
-    showFeatureEducation('quarterlyCategories');
-  }
-}
-
-// Show feature-specific mini education
-function showFeatureEducation(feature) {
-  const content = {
-    manualCredits: {
-      title: 'New Feature: Manual Credits \u26A1',
-      text: 'This card has credits that aren\'t auto-detected (like Uber Cash). Click each <strong>month button</strong> when you\'ve used the credit. The year dropdown determines which year you\'re tracking.',
-      target: '.manual-credit-row'
-    },
-    quarterlyCategories: {
-      title: 'New Feature: Quarterly Categories \u{1F4C5}',
-      text: 'This card has rotating bonus categories that are automatically applied each quarter based on Chase\'s published calendar.',
-      target: '#quarterlySection'
-    }
-  };
-
-  const info = content[feature];
-  if (!info) return;
-
-  const target = document.querySelector(info.target);
-  if (!target) return;
-
-  // Mark as shown
-  state.featureEducation[feature] = true;
-  safeLocalStorageSet('ccTracker_featureEducation', state.featureEducation);
-
-  // Scroll target into view first, then position tooltip after scroll completes
-  target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-  // Wait for scroll to complete before positioning tooltip
-  setTimeout(() => {
-    // Show a simple tooltip
-    const tooltip = document.createElement('div');
-    tooltip.className = 'tour-tooltip';
-    tooltip.style.cssText = 'position:fixed;z-index:10000;max-width:360px;';
-    tooltip.innerHTML = `
-      <div class="tour-tooltip-title">${info.title}</div>
-      <div class="tour-tooltip-content">${info.text}</div>
-      <div style="text-align:right;margin-top:12px;">
-        <button class="btn btn-primary" onclick="this.closest('.tour-tooltip').remove()">Got it!</button>
-      </div>
-    `;
-
-    document.body.appendChild(tooltip);
-
-    // Position near target, ensuring it stays within viewport
-    const rect = target.getBoundingClientRect();
-    const tooltipHeight = tooltip.offsetHeight;
-    const viewportHeight = window.innerHeight;
-
-    // Calculate positions
-    let tooltipTop;
-    const spaceBelow = viewportHeight - rect.bottom;
-    const spaceAbove = rect.top;
-
-    // Prefer positioning below, but move above if not enough space
-    if (spaceBelow >= tooltipHeight + 20) {
-      tooltipTop = rect.bottom + 10;
-    } else if (spaceAbove >= tooltipHeight + 20) {
-      tooltipTop = rect.top - tooltipHeight - 10;
-    } else {
-      // Not enough space either way - center in viewport
-      tooltipTop = Math.max(20, (viewportHeight - tooltipHeight) / 2);
-    }
-
-    // Ensure horizontal position stays in viewport
-    const tooltipWidth = tooltip.offsetWidth;
-    let tooltipLeft = Math.max(20, rect.left);
-    if (tooltipLeft + tooltipWidth > window.innerWidth - 20) {
-      tooltipLeft = window.innerWidth - tooltipWidth - 20;
-    }
-
-    tooltip.style.top = tooltipTop + 'px';
-    tooltip.style.left = tooltipLeft + 'px';
-  }, 400); // Wait for scroll animation
-}
 
 // =============================================================================
 // TUTORIAL INITIALIZATION

@@ -3229,7 +3229,7 @@ function showResults(results, isNewUpload = false) {
     ${results.cards.length} cards tracked${lowConfBadge}
     <div style="margin-top:10px;padding-top:10px;border-top:1px dashed #d6d3d1;">
       <span style="background:#f59e0b;color:#fff;font-size:10px;font-weight:600;padding:1px 6px;border-radius:9999px;letter-spacing:0.04em;">BETA</span>
-      <span style="margin-left:6px;">This tool is in beta — features may change and bugs may exist. Feedback welcome: <span id="feedbackEmail" style="color:#2563eb;cursor:pointer;text-decoration:underline;" title="Click to send feedback"></span></span>
+      <span style="margin-left:6px;">This tool is in beta — features may change and bugs may exist. Feedback welcome: <span id="feedbackEmail" style="color:#2563eb;cursor:pointer;text-decoration:underline;" title="Click to send feedback"></span> · <a href="https://docs.google.com/forms/d/e/1FAIpQLSdv50_OOmmuoArTW8FkmCuZhy7WuQH8A0GE1M8mYgTseakdOw/viewform?usp=publish-editor" target="_blank" rel="noopener" style="color:#78716c;text-decoration:underline;text-underline-offset:2px;" title="Submit feedback form">Feedback</a></span>
     </div>
   `;
   initFeedbackEmail();

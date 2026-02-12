@@ -308,7 +308,7 @@ let state = {
 // =============================================================================
 const DECISION_PASS_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const FREE_DATA_MONTHS = 12; // Free users see 1 year of data
-const PRO_DATA_MONTHS = 48; // Pro users see 4 years of data
+const PRO_DATA_MONTHS = 72; // Pro users see 6 years of data
 
 // Expire old Decision Passes on page load
 (function expireDecisionPasses() {
@@ -368,8 +368,8 @@ function isCardEditable(cardId, editType = 'config') {
 
 /**
  * Apply per-card tier-based date filtering to a set of transactions (display-time safety net)
- * Free users: 12 months of data (DP cards: 4 years)
- * Pro: 4 years
+ * Free users: 12 months of data (DP cards: 6 years)
+ * Pro: 6 years
  * @param {Array} transactions - Processed transactions to filter
  * @returns {Array} Filtered transactions
  */
@@ -400,7 +400,7 @@ function applyTierDateFiltering(transactions) {
 /**
  * Prune transactions for storage based on tier-appropriate data windows.
  * Called before saving to localStorage to prevent unbounded growth.
- * Free: 1 year (DP cards: 4 years). Pro: 4 years.
+ * Free: 1 year (DP cards: 6 years). Pro: 6 years.
  * @param {Array} transactions - Raw transactions to prune
  * @returns {Array} Pruned transactions
  */
@@ -413,10 +413,18 @@ function pruneTransactionsForStorage(transactions) {
   const freeCutoff = new Date(now.getFullYear(), now.getMonth() - FREE_DATA_MONTHS, now.getDate());
   const dpCutoff = new Date(now.getFullYear(), now.getMonth() - PRO_DATA_MONTHS, now.getDate());
 
+  // For unmapped transactions, use the most generous cutoff so they survive
+  // until the user maps them, but still cap at the tier's maximum window
+  const unmappedCutoff = isPro || Object.keys(dpLookup).length > 0 ? proCutoff : freeCutoff;
+
   return transactions.filter(t => {
-    if (!t.cardId || t.cardId === 'skip') return true;
     const parsed = parseDateString(t.date);
     if (!parsed) return true;
+
+    // Unmapped/skipped transactions: prune using the most generous applicable cutoff
+    if (!t.cardId || t.cardId === 'skip') {
+      return parsed.date >= unmappedCutoff;
+    }
 
     if (isPro) {
       return parsed.date >= proCutoff;

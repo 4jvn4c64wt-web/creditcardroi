@@ -19,6 +19,7 @@ window.CardTracker.cards['amex-platinum'] = {
     { name: 'CLEAR+', amount: 209, keywords: ['CLEAR', 'CLEARME', 'CLEAR PLUS', 'AMEX CLEAR'], manual: false },
     { name: 'Saks', amount: 100, keywords: ['SAKS'], manual: false },
     { name: 'Equinox', amount: 300, keywords: ['EQUINOX'], manual: false },
+    { name: 'Walmart+', amount: 155.40, keywords: [], manual: true, streamingBenefit: true },
     { name: 'Global Entry/TSA PreCheck', amount: 120, keywords: ['GLOBAL ENTRY', 'TSA PRECHECK', 'KNOWN TRAVELER', 'TRUSTED TRAVELER'], manual: false },
   ],
   categories: ['flights-direct', 'amex-travel', 'other']

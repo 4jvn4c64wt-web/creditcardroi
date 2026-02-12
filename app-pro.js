@@ -241,6 +241,8 @@ let state = {
   creditOverrides: safeLocalStorageGet('ccTracker_creditOverrides', {}),
   disabledCredits: safeLocalStorageGet('ccTracker_disabledCredits', {}),
   monthlyCredits: safeLocalStorageGet('ccTracker_monthlyCredits', {}),
+  streamingCredits: safeLocalStorageGet('ccTracker_streamingCredits', {}),
+  activeStreamingService: 'paramount',
   merchantRules: safeLocalStorageGet('ccTracker_merchantRules', {}),
   confirmedTransactions: safeLocalStorageGet('ccTracker_confirmedTxns', {}), // txnId -> category (single-txn confirmations)
   cashPlusCategories: safeLocalStorageGet('ccTracker_cashPlusCategories', {}),
@@ -1476,6 +1478,25 @@ function getCardYearManualCredits(cardId, startDate, endDate) {
     }
   }
 
+  // Add streaming credits (Paramount+ or Peacock via Walmart+)
+  if (card.credits?.some(cr => cr.streamingBenefit)) {
+    const isDisabled = (state.disabledCredits[cardId] || []).includes('Walmart+');
+    if (!isDisabled) {
+      const streamingForCard = state.streamingCredits[cardId] || {};
+      for (const [yearStr, yearData] of Object.entries(streamingForCard)) {
+        const year = parseInt(yearStr);
+        if (typeof yearData !== 'object') continue;
+        for (const [monthStr, svc] of Object.entries(yearData)) {
+          const monthIndex = parseInt(monthStr);
+          const claimDate = new Date(year, monthIndex, 15);
+          if (claimDate >= startDate && claimDate < endDate) {
+            total += svc === 'paramount' ? 7.99 : (svc === 'peacock' ? 10.99 : 0);
+          }
+        }
+      }
+    }
+  }
+
   return total;
 }
 
@@ -1535,6 +1556,29 @@ function getCardYearCreditsUsed(cardId, startDate, endDate, allTransactions) {
           if (!result[credit.name]) result[credit.name] = 0;
           result[credit.name] += monthlyAmount;
         }
+      }
+    }
+  }
+
+  // Add streaming credits (Paramount+ or Peacock via Walmart+)
+  if (card.credits?.some(cr => cr.streamingBenefit)) {
+    const isStreamingDisabled = (state.disabledCredits[cardId] || []).includes('Walmart+');
+    if (!isStreamingDisabled) {
+      const streamingForCard = state.streamingCredits[cardId] || {};
+      let streamingTotal = 0;
+      for (const [yearStr, yearData] of Object.entries(streamingForCard)) {
+        const year = parseInt(yearStr);
+        if (typeof yearData !== 'object') continue;
+        for (const [monthStr, svc] of Object.entries(yearData)) {
+          const monthIndex = parseInt(monthStr);
+          const claimDate = new Date(year, monthIndex, 15);
+          if (claimDate >= startDate && claimDate < endDate) {
+            streamingTotal += svc === 'paramount' ? 7.99 : (svc === 'peacock' ? 10.99 : 0);
+          }
+        }
+      }
+      if (streamingTotal > 0) {
+        result['Paramount+ or Peacock'] = (result['Paramount+ or Peacock'] || 0) + streamingTotal;
       }
     }
   }
@@ -2661,8 +2705,71 @@ function showCardConfigEditor(preselectedCardId = null) {
       const availableYears = txnYears.length > 0 ? txnYears : [currentYear];
       const selectedCreditYear = state.selectedCreditYear || availableYears[0];
 
+      // Helper to render the Paramount+/Peacock streaming benefit sub-section
+      const renderStreamingBenefitSection = (selectedCreditYear) => {
+        const isWalmartDisabled = disabled.includes('Walmart+');
+        if (isWalmartDisabled) return '';
+
+        const streamingData = state.streamingCredits?.[cardId]?.[selectedCreditYear] || {};
+        const activeService = state.activeStreamingService || 'paramount';
+
+        let paramountTotal = 0, peacockTotal = 0;
+        for (const svc of Object.values(streamingData)) {
+          if (svc === 'paramount') paramountTotal += 7.99;
+          else if (svc === 'peacock') peacockTotal += 10.99;
+        }
+        const totalClaimed = paramountTotal + peacockTotal;
+
+        const monthsHtml = MONTHS.map((month, idx) => {
+          const service = streamingData[idx];
+          let bg = '#fff', borderColor = '#e7e5e4';
+          if (service === 'paramount') { bg = '#dbeafe'; borderColor = '#3b82f6'; }
+          else if (service === 'peacock') { bg = '#ede9fe'; borderColor = '#7c3aed'; }
+          return `
+            <div class="streaming-month-toggle" data-month="${idx}"
+              style="display:flex;align-items:center;justify-content:center;width:42px;padding:6px 0;border:2px solid ${borderColor};border-radius:4px;cursor:pointer;font-size:11px;background:${bg};user-select:none;"
+              title="Click to toggle ${month}">
+              ${month}
+            </div>
+          `;
+        }).join('');
+
+        return `
+          <div style="padding:12px;background:#fafaf9;border:1px solid #e7e5e4;border-radius:8px;margin-top:-4px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+              <div>
+                <div style="font-size:13px;font-weight:500;">Paramount+ and Peacock</div>
+                <div style="font-size:11px;color:#78716c;">Included with Walmart+ — select a service, then toggle months</div>
+              </div>
+              <span id="streamingClaimedTotal" style="font-size:12px;color:#059669;font-weight:500;">$${totalClaimed.toFixed(2)} claimed</span>
+            </div>
+            <div style="display:flex;gap:8px;margin-bottom:12px;">
+              <label style="display:flex;align-items:center;gap:6px;padding:6px 12px;border:2px solid ${activeService === 'paramount' ? '#3b82f6' : '#e7e5e4'};border-radius:6px;cursor:pointer;background:${activeService === 'paramount' ? '#dbeafe' : '#fff'};font-size:12px;font-weight:500;color:${activeService === 'paramount' ? '#1d4ed8' : '#78716c'};">
+                <input type="radio" name="streamingService" value="paramount" ${activeService === 'paramount' ? 'checked' : ''} class="streaming-service-radio" style="display:none;">
+                <span style="width:8px;height:8px;border-radius:50%;background:#3b82f6;display:inline-block;flex-shrink:0;"></span>
+                Paramount+ ($7.99/mo)
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;padding:6px 12px;border:2px solid ${activeService === 'peacock' ? '#7c3aed' : '#e7e5e4'};border-radius:6px;cursor:pointer;background:${activeService === 'peacock' ? '#ede9fe' : '#fff'};font-size:12px;font-weight:500;color:${activeService === 'peacock' ? '#5b21b6' : '#78716c'};">
+                <input type="radio" name="streamingService" value="peacock" ${activeService === 'peacock' ? 'checked' : ''} class="streaming-service-radio" style="display:none;">
+                <span style="width:8px;height:8px;border-radius:50%;background:#7c3aed;display:inline-block;flex-shrink:0;"></span>
+                Peacock ($10.99/mo)
+              </label>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px;padding-top:8px;border-top:1px solid #f5f5f4;">
+              ${monthsHtml}
+            </div>
+          </div>
+        `;
+      };
+
       // Build credits grid HTML
-      const creditsHtml = card.credits.map(cr => renderCreditRow(cr, selectedCreditYear)).join('');
+      const creditsHtml = card.credits.map(cr => {
+        let html = renderCreditRow(cr, selectedCreditYear);
+        if (cr.streamingBenefit) {
+          html += renderStreamingBenefitSection(selectedCreditYear);
+        }
+        return html;
+      }).join('');
 
       creditsSection = `
         <div id="configCreditsSection">
@@ -2784,6 +2891,59 @@ function showCardConfigEditor(preselectedCardId = null) {
       cb.addEventListener('change', () => {
         const label = cb.closest('label');
         label.style.background = cb.checked ? '#dcfce7' : '#fff';
+      });
+    });
+
+    // Streaming service radio selector - re-render to update styling
+    document.querySelectorAll('.streaming-service-radio').forEach(radio => {
+      radio.addEventListener('change', () => {
+        state.activeStreamingService = radio.value;
+        renderCardConfig();
+      });
+    });
+
+    // Streaming month toggles (Paramount+/Peacock)
+    document.querySelectorAll('.streaming-month-toggle').forEach(el => {
+      el.addEventListener('click', () => {
+        const month = parseInt(el.dataset.month);
+        const selectedYear = state.selectedCreditYear || new Date().getFullYear();
+        const activeService = state.activeStreamingService || 'paramount';
+
+        if (!state.streamingCredits[cardId]) state.streamingCredits[cardId] = {};
+        if (!state.streamingCredits[cardId][selectedYear]) state.streamingCredits[cardId][selectedYear] = {};
+
+        const yearData = state.streamingCredits[cardId][selectedYear];
+
+        if (yearData[month] === activeService) {
+          delete yearData[month];
+        } else {
+          yearData[month] = activeService;
+        }
+
+        // Update visual
+        const service = yearData[month];
+        if (service === 'paramount') {
+          el.style.background = '#dbeafe';
+          el.style.borderColor = '#3b82f6';
+        } else if (service === 'peacock') {
+          el.style.background = '#ede9fe';
+          el.style.borderColor = '#7c3aed';
+        } else {
+          el.style.background = '#fff';
+          el.style.borderColor = '#e7e5e4';
+        }
+
+        // Update claimed total
+        const totalEl = document.getElementById('streamingClaimedTotal');
+        if (totalEl) {
+          let pt = 0, pc = 0;
+          const yd = state.streamingCredits?.[cardId]?.[selectedYear] || {};
+          for (const s of Object.values(yd)) {
+            if (s === 'paramount') pt += 7.99;
+            else if (s === 'peacock') pc += 10.99;
+          }
+          totalEl.textContent = `$${(pt + pc).toFixed(2)} claimed`;
+        }
       });
     });
 
@@ -3191,7 +3351,31 @@ function renderView(view) {
           }
         }
       }
-      
+
+      // Add streaming credits (Paramount+ or Peacock via Walmart+)
+      if (availableCredits.some(cr => cr.streamingBenefit)) {
+        const isStreamingDisabled = (state.disabledCredits[c.cardId] || []).includes('Walmart+');
+        if (!isStreamingDisabled) {
+          const streamingForCard = state.streamingCredits[c.cardId] || {};
+          let streamingTotal = 0;
+          if (displayYear) {
+            const yd = streamingForCard[displayYear] || {};
+            for (const svc of Object.values(yd)) {
+              streamingTotal += svc === 'paramount' ? 7.99 : (svc === 'peacock' ? 10.99 : 0);
+            }
+          } else {
+            for (const yd of Object.values(streamingForCard)) {
+              if (typeof yd === 'object') {
+                for (const svc of Object.values(yd)) {
+                  streamingTotal += svc === 'paramount' ? 7.99 : (svc === 'peacock' ? 10.99 : 0);
+                }
+              }
+            }
+          }
+          totalCredits += streamingTotal;
+        }
+      }
+
       // Add Bilt Cash as credit if enabled (for Bilt cards with Flexible option)
       let biltCashCredit = 0;
       if (cardDef?.isBilt) {
@@ -3351,14 +3535,43 @@ function renderView(view) {
         }
       }
     }
-    
+
+    // Add streaming credits (Paramount+ or Peacock) to credits used map
+    for (const [cardId, yearMap] of Object.entries(state.streamingCredits)) {
+      if (!creditsUsedByCard[cardId]) creditsUsedByCard[cardId] = {};
+      const cardDef = CARDS[cardId];
+      if (!cardDef || !cardDef.credits?.some(cr => cr.streamingBenefit)) continue;
+      const isDisabled = (state.disabledCredits[cardId] || []).includes('Walmart+');
+      if (isDisabled) continue;
+
+      let streamingTotal = 0;
+      if (displayYear) {
+        const yd = yearMap[displayYear] || {};
+        for (const svc of Object.values(yd)) {
+          streamingTotal += svc === 'paramount' ? 7.99 : (svc === 'peacock' ? 10.99 : 0);
+        }
+      } else {
+        for (const yd of Object.values(yearMap)) {
+          if (typeof yd === 'object') {
+            for (const svc of Object.values(yd)) {
+              streamingTotal += svc === 'paramount' ? 7.99 : (svc === 'peacock' ? 10.99 : 0);
+            }
+          }
+        }
+      }
+      if (streamingTotal > 0) {
+        creditsUsedByCard[cardId]['Paramount+ or Peacock'] = (creditsUsedByCard[cardId]['Paramount+ or Peacock'] || 0) + streamingTotal;
+        totalManualCredits += streamingTotal;
+      }
+    }
+
     // Calculate total annual fees (only count if we have transactions for that card in this period)
     // Uses date-aware fee calculation for cards like CSR with legacy rates
     const activeCardIds = new Set(filteredProcessed.map(t => t.cardId).filter(id => id && id !== 'skip'));
     activeCardIds.forEach(cardId => {
       totalAnnualFees += getEffectiveAnnualFee(cardId, filteredProcessed);
     });
-    
+
     // Calculate total credits, respecting CY capping for toggled cards
     // For CY-active cards, use their capped totalCredits from cardDisplayData
     // For other cards, use their uncapped totalCredits
@@ -3503,6 +3716,14 @@ function renderView(view) {
                             `;
                           }).join('')}
                         ` : '<div style="color:#78716c;">No credits available</div>'}
+                        ${(displayCreditsUsed['Paramount+ or Peacock'] || 0) > 0 ? `
+                          <div style="margin-bottom:6px;">
+                            <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
+                              <span>Paramount+ or Peacock ⚡</span>
+                              <span>$${(displayCreditsUsed['Paramount+ or Peacock']).toFixed(0)}</span>
+                            </div>
+                          </div>
+                        ` : ''}
                         ${(displayMetrics.annualBonusValue || 0) > 0 ? `
                           <div style="margin-top:6px;padding-top:6px;border-top:1px dashed #d6d3d1;">
                             <div style="display:flex;justify-content:space-between;">
@@ -3863,7 +4084,32 @@ function renderView(view) {
           }
         }
       }
-      
+
+      // Add streaming credits (Paramount+ or Peacock) for transaction view
+      for (const cardId of filteredCardIds) {
+        const cardDef = CARDS[cardId];
+        if (!cardDef?.credits?.some(cr => cr.streamingBenefit)) continue;
+        const isDisabled = (state.disabledCredits[cardId] || []).includes('Walmart+');
+        if (isDisabled) continue;
+        const streamingForCard = state.streamingCredits[cardId] || {};
+        let streamingTotal = 0;
+        if (yearFilter) {
+          const yd = streamingForCard[yearFilter] || {};
+          for (const svc of Object.values(yd)) {
+            streamingTotal += svc === 'paramount' ? 7.99 : (svc === 'peacock' ? 10.99 : 0);
+          }
+        } else {
+          for (const yd of Object.values(streamingForCard)) {
+            if (typeof yd === 'object') {
+              for (const svc of Object.values(yd)) {
+                streamingTotal += svc === 'paramount' ? 7.99 : (svc === 'peacock' ? 10.99 : 0);
+              }
+            }
+          }
+        }
+        totalManualCredits += streamingTotal;
+      }
+
       // Add anniversary bonus points value for applicable cards (tied to annual fee detection)
       const bonusYear = yearFilter ? parseInt(yearFilter) : null;
       let totalAnnualBonus = 0;
@@ -4523,7 +4769,8 @@ function buildExportData() {
     cffCategories: state.cffCategories,
     biltConfig: state.biltConfig,
     columnMappings: state.columnMappings,
-    customAnnualBonusPoints: state.customAnnualBonusPoints
+    customAnnualBonusPoints: state.customAnnualBonusPoints,
+    streamingCredits: state.streamingCredits
   };
 }
 
@@ -4670,7 +4917,7 @@ async function handleFile(file) {
       const objectFields = ['cardMappings', 'customPointValues', 'creditOverrides',
                            'disabledCredits', 'monthlyCredits', 'merchantRules',
                            'confirmedTransactions', 'cashPlusCategories', 'cffCategories',
-                           'biltConfig', 'columnMappings'];
+                           'biltConfig', 'columnMappings', 'streamingCredits'];
       for (const field of objectFields) {
         if (backup[field] && (typeof backup[field] !== 'object' || Array.isArray(backup[field]))) {
           validationErrors.push(`${field} must be an object`);
@@ -4714,6 +4961,10 @@ async function handleFile(file) {
       if (backup.monthlyCredits) {
         state.monthlyCredits = backup.monthlyCredits;
         safeLocalStorageSet('ccTracker_monthlyCredits', backup.monthlyCredits);
+      }
+      if (backup.streamingCredits) {
+        state.streamingCredits = backup.streamingCredits;
+        safeLocalStorageSet('ccTracker_streamingCredits', backup.streamingCredits);
       }
       if (backup.merchantRules) {
         state.merchantRules = backup.merchantRules;
@@ -5002,6 +5253,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       state.creditOverrides = {};
       state.disabledCredits = {};
       state.monthlyCredits = {};
+      state.streamingCredits = {};
       state.merchantRules = {};
       state.merchantCache = {};
       state.confirmedTransactions = {};
@@ -5018,6 +5270,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       localStorage.removeItem('ccTracker_creditOverrides');
       localStorage.removeItem('ccTracker_disabledCredits');
       localStorage.removeItem('ccTracker_monthlyCredits');
+      localStorage.removeItem('ccTracker_streamingCredits');
       localStorage.removeItem('ccTracker_merchantRules');
       localStorage.removeItem('ccTracker_merchantCache');
       localStorage.removeItem('ccTracker_confirmedTxns');
@@ -5052,6 +5305,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           state.creditOverrides = {};
           state.disabledCredits = {};
           state.monthlyCredits = {};
+          state.streamingCredits = {};
           state.merchantRules = {};
           state.confirmedTransactions = {};
           state.cashPlusCategories = {};
@@ -5324,8 +5578,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
       });
       safeLocalStorageSet('ccTracker_monthlyCredits', state.monthlyCredits);
+
+      // Save streaming credits (Paramount+/Peacock)
+      safeLocalStorageSet('ccTracker_streamingCredits', state.streamingCredits);
     }
-    
+
     // Save Cash+ quarterly categories for selected year
     // Use consistent fallback: most recent transaction year, or current year if no transactions
     if (cardId === 'us-bank-cash-plus') {

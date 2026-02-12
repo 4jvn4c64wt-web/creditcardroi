@@ -541,6 +541,9 @@ window.CardTracker.csvParser.applyColumnMappingAndParse = function() {
   state.columnMappings[shapeKey] = headerMapping;
   safeLocalStorageSet('ccTracker_columnMappings', state.columnMappings);
 
+  // Compute source format hash from all CSV headers
+  const sourceFormat = generateSourceFormatHash(state.pendingCSVData.headers);
+
   // Parse the CSV using the mapping
   // Use dataLines which already accounts for headerless CSVs (includes all data rows)
   const transactions = [];
@@ -612,7 +615,8 @@ window.CardTracker.csvParser.applyColumnMappingAndParse = function() {
       amount,
       last4,
       accountName,  // Card name like "Chase Sapphire Reserve"
-      accountType   // Account type like "Credit Card", "Checking"
+      accountType,  // Account type like "Credit Card", "Checking"
+      sourceFormat  // Hash of CSV headers identifying the source format
     });
   }
 

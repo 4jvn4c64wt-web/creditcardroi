@@ -5128,8 +5128,17 @@ async function processAfterColumnMapping() {
     const cardList = overlapCards.map(l4 => '...' + l4).join(', ');
     const proceed = await showSourceFormatWarning(cardList);
     if (!proceed) {
-      // User cancelled — do not merge
+      // User cancelled — do not merge; replicate full cancelColumnsBtn cleanup
       document.getElementById('columnMappingSection').classList.add('hidden');
+      // Reset file inputs so the same file can be re-selected
+      document.getElementById('fileInput').value = '';
+      document.getElementById('newFileInput').value = '';
+      // Restore the prior visible section
+      if (state.savedTransactions.length > 0 && state.results) {
+        document.getElementById('resultsSection').classList.remove('hidden');
+      } else {
+        document.getElementById('uploadSection').classList.remove('hidden');
+      }
       return;
     }
     showLoading(true, 'Merging transactions...');

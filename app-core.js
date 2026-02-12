@@ -3503,7 +3503,7 @@ function renderView(view) {
     cards.forEach(c => {
       const cardDef = CARDS[c.cardId];
       const availableCredits = cardDef?.credits || [];
-      const showCardYearToggle = displayYear && canShowCardYearToggle(c.cardId) && (isCardEditable(c.cardId, 'config') || CARDS[c.cardId]?.isBilt);
+      const showCardYearToggle = displayYear && canShowCardYearToggle(c.cardId) && isCardEditable(c.cardId, 'config');
       const isCardYearActive = showCardYearToggle && state.cardYearToggles[c.cardId];
 
       if (isCardYearActive && displayYear) {
@@ -3706,7 +3706,7 @@ function renderView(view) {
 
                 // Use pre-calculated card year data if available
                 const cyData = cardDisplayData[c.cardId];
-                const showCardYearToggle = displayYear && canShowCardYearToggle(c.cardId) && (isCardEditable(c.cardId, 'config') || CARDS[c.cardId]?.isBilt);
+                const showCardYearToggle = displayYear && canShowCardYearToggle(c.cardId) && isCardEditable(c.cardId, 'config');
                 const isCardYearActive = cyData?.isCardYearActive || false;
                 const cardYearPeriod = cyData?.cardYearPeriod || null;
                 const displayCreditsUsed = cyData?.creditsUsed || creditsUsedByCard[c.cardId] || {};

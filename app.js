@@ -2223,8 +2223,10 @@ function showCardConfigEditor(preselectedCardId = null) {
     const biltEditable = (card.isBilt) || cardEditable;
 
     // Update save button and show locked notice
+    // Save button is enabled when the card has any editable section, including manual credit month toggles
+    const hasManualCredits = card.credits && card.credits.some(cr => cr.manual);
     const saveBtn = document.getElementById('saveCardConfig');
-    if (!cardEditable && !cashPlusEditable && !biltEditable) {
+    if (!cardEditable && !cashPlusEditable && !biltEditable && !hasManualCredits) {
       saveBtn.disabled = true;
       saveBtn.title = 'Unlock editing with Decision Pass or Pro';
     } else {
@@ -2618,10 +2620,12 @@ function showCardConfigEditor(preselectedCardId = null) {
         `).join('');
       }
 
+      // Non-manual credits are fully greyed out for free users; manual credits only lock the on/off checkbox
+      const rowLocked = !creditsEditable && !isManual;
       return `
-        <div class="${isManual && !isDisabled ? 'manual-credit-row' : ''}" style="padding:12px;background:${isDisabled ? '#fafaf9' : '#fff'};border:1px solid #e7e5e4;border-radius:8px;${isDisabled ? 'opacity:0.5;' : ''}">
+        <div class="${isManual && !isDisabled ? 'manual-credit-row' : ''}" style="padding:12px;background:${isDisabled ? '#fafaf9' : '#fff'};border:1px solid #e7e5e4;border-radius:8px;${isDisabled ? 'opacity:0.5;' : (rowLocked ? 'opacity:0.55;pointer-events:none;' : '')}">
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:${isManual && !isDisabled ? '12px' : '0'};">
-            <input type="checkbox" class="credit-toggle-checkbox" data-credit-name="${escapeHtml(cr.name)}" ${!isDisabled ? 'checked' : ''} title="Include this credit in ROI calculation">
+            <input type="checkbox" class="credit-toggle-checkbox" data-credit-name="${escapeHtml(cr.name)}" ${!isDisabled ? 'checked' : ''} ${!creditsEditable ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''} title="${!creditsEditable ? 'Upgrade to toggle credits on/off' : 'Include this credit in ROI calculation'}">
             <div style="flex:1;">
               <div style="font-size:13px;font-weight:500;${isDisabled ? 'text-decoration:line-through;' : ''}">${escapeHtml(cr.name)}${isManual ? ' ⚡' : ''}</div>
               <div style="font-size:11px;color:#78716c;">$${cr.amount}/yr${isManual ? ` (~$${monthlyAmount.toFixed(0)}/mo)` : ' — Auto-detected from transactions'}</div>
@@ -2690,7 +2694,9 @@ function showCardConfigEditor(preselectedCardId = null) {
     const lockedStyle = !cardEditable ? 'pointer-events:none;opacity:0.55;' : '';
     // Bilt config sections are always editable, credits are not (unless DP active)
     const biltLockedStyle = !biltEditable ? 'pointer-events:none;opacity:0.55;' : '';
-    const creditsLockedStyle = !creditsEditable ? 'pointer-events:none;opacity:0.55;' : '';
+    // Note: creditsLockedStyle removed — manual credit month toggles are now available for all users.
+    // Non-manual credits are greyed out per-row in renderCreditRow; the credit on/off checkbox is
+    // disabled for free users but month claim toggles remain interactive.
 
     document.getElementById('cardConfigContent').innerHTML = `
       ${lockedNotice}
@@ -2758,7 +2764,7 @@ function showCardConfigEditor(preselectedCardId = null) {
         </div>
         ` : ''}
         -->
-        <div style="${creditsLockedStyle}">${creditsSection}</div>
+        <div>${creditsSection}</div>
       </div>
     `;
     
@@ -5292,8 +5298,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       safeLocalStorageSet('ccTracker_disabledCredits', state.disabledCredits);
     }
 
-    // Save monthly credit claims - NOW YEAR-SPECIFIC (only if credits editable)
-    if (isCardEditable(cardId, 'credits')) {
+    // Save monthly credit claims - NOW YEAR-SPECIFIC
+    // Monthly claim toggles are available for all users (free, DP, Pro) on all cards
+    {
       const selectedYear = state.selectedCreditYear || new Date().getFullYear();
       if (!state.monthlyCredits[cardId]) state.monthlyCredits[cardId] = {};
 

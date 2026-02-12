@@ -2662,8 +2662,9 @@ function showCardConfigEditor(preselectedCardId = null) {
         `).join('');
       }
 
+      const hasStreamingSub = cr.streamingBenefit && !isDisabled;
       return `
-        <div class="${isManual && !isDisabled ? 'manual-credit-row' : ''}" style="padding:12px;background:${isDisabled ? '#fafaf9' : '#fff'};border:1px solid #e7e5e4;border-radius:8px;${isDisabled ? 'opacity:0.5;' : ''}">
+        <div class="${isManual && !isDisabled ? 'manual-credit-row' : ''}" style="padding:12px;background:${isDisabled ? '#fafaf9' : '#fff'};border:1px solid #e7e5e4;border-radius:${hasStreamingSub ? '8px 8px 0 0' : '8px'};${isDisabled ? 'opacity:0.5;' : ''}">
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:${isManual && !isDisabled ? '12px' : '0'};">
             <input type="checkbox" class="credit-toggle-checkbox" data-credit-name="${escapeHtml(cr.name)}" ${!isDisabled ? 'checked' : ''} title="Include this credit in ROI calculation">
             <div style="flex:1;">
@@ -2718,7 +2719,7 @@ function showCardConfigEditor(preselectedCardId = null) {
         }).join('');
 
         return `
-          <div style="padding:12px;background:#fafaf9;border:1px solid #e7e5e4;border-radius:8px;margin-top:-4px;">
+          <div style="padding:12px;background:#fafaf9;border:1px solid #e7e5e4;border-top:1px dashed #d6d3d1;border-radius:0 0 8px 8px;margin-top:-1px;">
             <div class="streaming-section-header" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;">
               <div style="display:flex;align-items:center;gap:8px;">
                 <span class="streaming-toggle-arrow" style="font-size:10px;color:#78716c;transition:transform 0.2s;display:inline-block;">&#9654;</span>
@@ -3737,14 +3738,19 @@ function renderView(view) {
                             `;
                           }).join('')}
                         ` : '<div style="color:#78716c;">No credits available</div>'}
-                        ${(displayCreditsUsed['Paramount+ or Peacock'] || 0) > 0 ? `
-                          <div style="margin-bottom:6px;">
+                        ${availableCredits.some(cr => cr.streamingBenefit) ? (() => {
+                          const streamDisabled = (state.disabledCredits[c.cardId] || []).includes('Walmart+');
+                          const streamUsed = streamDisabled ? 0 : (displayCreditsUsed['Paramount+ or Peacock'] || 0);
+                          const streamCap = (7.99 + 10.99) * 12; // max if both services all year
+                          const streamPct = isCardYearActive ? Math.min(100, (streamUsed / streamCap) * 100) : 100;
+                          return `
+                          <div style="margin-bottom:6px;${streamDisabled ? 'opacity:0.4;' : ''}">
                             <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
-                              <span>Paramount+ or Peacock ⚡</span>
-                              <span>$${(displayCreditsUsed['Paramount+ or Peacock']).toFixed(0)}</span>
+                              <span style="${streamDisabled ? 'text-decoration:line-through;' : ''}">Paramount+ / Peacock${streamDisabled ? ' (off)' : ' ⚡'}</span>
+                              <span>$${streamUsed.toFixed(0)}</span>
                             </div>
-                          </div>
-                        ` : ''}
+                          </div>`;
+                        })() : ''}
                         ${(displayMetrics.annualBonusValue || 0) > 0 ? `
                           <div style="margin-top:6px;padding-top:6px;border-top:1px dashed #d6d3d1;">
                             <div style="display:flex;justify-content:space-between;">

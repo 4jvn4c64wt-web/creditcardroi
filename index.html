@@ -94,6 +94,9 @@
     .faq-list { max-width: 640px; margin: 0 auto; }
     .faq-item { border-bottom: 1px solid #e7e5e4; }
     .faq-item:first-child { border-top: 1px solid #e7e5e4; }
+    .faq-more .faq-item:first-child { border-top: none; }
+    .faq-toggle { display: block; margin: 24px auto 0; padding: 10px 24px; background: none; border: 1px solid #d6d3d1; border-radius: 8px; font-size: 14px; font-weight: 500; color: #57534e; cursor: pointer; transition: border-color 0.15s, color 0.15s; }
+    .faq-toggle:hover { border-color: #1c1917; color: #1c1917; }
     .faq-q { font-size: 16px; font-weight: 600; padding: 20px 32px 20px 0; cursor: pointer; position: relative; list-style: none; }
     .faq-q::-webkit-details-marker { display: none; }
     .faq-q::after { content: "+"; position: absolute; right: 0; top: 20px; font-size: 20px; font-weight: 400; color: #a8a29e; transition: transform 0.2s; }
@@ -356,6 +359,7 @@
     <div class="container">
       <h2 class="section-title">Frequently Asked Questions</h2>
       <div class="faq-list">
+        <!-- Primary questions (always visible) -->
         <details class="faq-item">
           <summary class="faq-q">Where can I suggest new features or cards?</summary>
           <div class="faq-a">Send your ideas to <span id="faqFeatureEmail" style="color:#2563eb;cursor:pointer;text-decoration:underline;"></span>. Whether it's a card you want supported, a feature you'd find useful, or anything else, your feedback shapes what gets built next.</div>
@@ -369,26 +373,6 @@
           <div class="faq-a">Any bank or budgeting app that lets you export a CSV. The tracker auto-detects the format.</div>
         </details>
         <details class="faq-item">
-          <summary class="faq-q">Do you have a privacy policy?</summary>
-          <div class="faq-a">We don't collect your transaction data, period. Everything runs locally in your browser. Future Pro users will need to verify a license key online, and Cloudflare handles basic site hosting and analytics. That's it.</div>
-        </details>
-        <details class="faq-item">
-          <summary class="faq-q">How accurate is the categorization?</summary>
-          <div class="faq-a">The tracker uses a rule-based engine with hundreds of known merchants. When it doesn't recognize a merchant, it looks at other details embedded in the transaction to classify it. If it's still unsure, it defaults safely and flags it for your review. Pro users will be able to add their own merchant rules to improve accuracy over time.</div>
-        </details>
-        <details class="faq-item">
-          <summary class="faq-q">Can I map more than one card number to a single card?</summary>
-          <div class="faq-a">Yes. This is useful if your card was lost, stolen, or reissued with a new number. You can map multiple card numbers to the same rewards card so all transactions count toward that card's totals.</div>
-        </details>
-        <details class="faq-item">
-          <summary class="faq-q">Can I use this on my phone?</summary>
-          <div class="faq-a">Yes. It runs in any modern browser, including mobile.</div>
-        </details>
-        <details class="faq-item">
-          <summary class="faq-q">What happens if I clear my browser?</summary>
-          <div class="faq-a">Because the tracker stores everything in your browser's local storage, your data will be cleared too. Export a JSON backup before clearing your browser and upload it instead of a CSV next time you boot up the tracker. The backup file will restore all your data and preferences.</div>
-        </details>
-        <details class="faq-item">
           <summary class="faq-q">How is this different from real-time card optimization tools?</summary>
           <div class="faq-a">Those tools help you maximize future purchases by suggesting which card to use at checkout or auto-applying offers. We do something different: we analyze past transaction data to tell you how much value you got from each card and whether the annual fee was worth it.</div>
         </details>
@@ -400,10 +384,36 @@
           <summary class="faq-q">Can I use this for cards you don't support yet?</summary>
           <div class="faq-a">Not yet, but new cards are added regularly. Reach out to <span id="faqCardEmail" style="color:#2563eb;cursor:pointer;text-decoration:underline;"></span> and let us know which card you'd like to see next.</div>
         </details>
-        <details class="faq-item">
-          <summary class="faq-q">Who built this?</summary>
-          <div class="faq-a">A lawyer who got tired of spreadsheets.</div>
-        </details>
+
+        <!-- More questions (hidden by default) -->
+        <div id="faqMore" class="faq-more" style="display:none;">
+          <details class="faq-item">
+            <summary class="faq-q">Do you have a privacy policy?</summary>
+            <div class="faq-a">We don't collect your transaction data, period. Everything runs locally in your browser. Future Pro users will need to verify a license key online, and Cloudflare handles basic site hosting and analytics. That's it.</div>
+          </details>
+          <details class="faq-item">
+            <summary class="faq-q">How accurate is the categorization?</summary>
+            <div class="faq-a">The tracker uses a rule-based engine with hundreds of known merchants. When it doesn't recognize a merchant, it looks at other details embedded in the transaction to classify it. If it's still unsure, it defaults safely and flags it for your review. Pro users will be able to add their own merchant rules to improve accuracy over time.</div>
+          </details>
+          <details class="faq-item">
+            <summary class="faq-q">Can I map more than one card number to a single card?</summary>
+            <div class="faq-a">Yes. This is useful if your card was lost, stolen, or reissued with a new number. You can map multiple card numbers to the same rewards card so all transactions count toward that card's totals.</div>
+          </details>
+          <details class="faq-item">
+            <summary class="faq-q">Can I use this on my phone?</summary>
+            <div class="faq-a">Yes. It runs in any modern browser, including mobile.</div>
+          </details>
+          <details class="faq-item">
+            <summary class="faq-q">What happens if I clear my browser?</summary>
+            <div class="faq-a">Because the tracker stores everything in your browser's local storage, your data will be cleared too. Export a JSON backup before clearing your browser and upload it instead of a CSV next time you boot up the tracker. The backup file will restore all your data and preferences.</div>
+          </details>
+          <details class="faq-item">
+            <summary class="faq-q">Who built this?</summary>
+            <div class="faq-a">A lawyer who got tired of spreadsheets.</div>
+          </details>
+        </div>
+
+        <button id="faqToggle" class="faq-toggle" onclick="var m=document.getElementById('faqMore');var b=this;if(m.style.display==='none'){m.style.display='block';b.textContent='Show fewer questions';}else{m.style.display='none';b.textContent='Show more questions';}">Show more questions</button>
       </div>
     </div>
   </section>

@@ -243,6 +243,7 @@ let state = {
   monthlyCredits: safeLocalStorageGet('ccTracker_monthlyCredits', {}),
   streamingCredits: safeLocalStorageGet('ccTracker_streamingCredits', {}),
   activeStreamingService: 'paramount',
+  streamingSectionExpanded: false,
   merchantRules: safeLocalStorageGet('ccTracker_merchantRules', {}),
   confirmedTransactions: safeLocalStorageGet('ccTracker_confirmedTxns', {}), // txnId -> category (single-txn confirmations)
   cashPlusCategories: safeLocalStorageGet('ccTracker_cashPlusCategories', {}),
@@ -2739,7 +2740,7 @@ function showCardConfigEditor(preselectedCardId = null) {
           <div style="padding:12px;background:#fafaf9;border:1px solid #e7e5e4;border-top:1px dashed #d6d3d1;border-radius:0 0 8px 8px;margin-top:-1px;">
             <div class="streaming-section-header" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;">
               <div style="display:flex;align-items:center;gap:8px;">
-                <span class="streaming-toggle-arrow" style="font-size:10px;color:#78716c;transition:transform 0.2s;display:inline-block;">&#9654;</span>
+                <span class="streaming-toggle-arrow" style="font-size:10px;color:#78716c;transition:transform 0.2s;display:inline-block;${state.streamingSectionExpanded ? 'transform:rotate(90deg);' : ''}">&#9654;</span>
                 <div>
                   <div style="font-size:13px;font-weight:500;">Paramount+ and Peacock</div>
                   <div style="font-size:11px;color:#78716c;">Included with Walmart+ — select a service, then toggle months</div>
@@ -2747,7 +2748,7 @@ function showCardConfigEditor(preselectedCardId = null) {
               </div>
               <span id="streamingClaimedTotal" style="font-size:12px;color:#059669;font-weight:500;">$${totalClaimed.toFixed(2)} claimed</span>
             </div>
-            <div class="streaming-section-content" style="display:none;margin-top:10px;">
+            <div class="streaming-section-content" style="display:${state.streamingSectionExpanded ? 'block' : 'none'};margin-top:10px;">
               <div style="display:flex;gap:8px;margin-bottom:12px;">
                 <label style="display:flex;align-items:center;gap:6px;padding:6px 12px;border:2px solid ${activeService === 'paramount' ? '#3b82f6' : '#e7e5e4'};border-radius:6px;cursor:pointer;background:${activeService === 'paramount' ? '#dbeafe' : '#fff'};font-size:12px;font-weight:500;color:${activeService === 'paramount' ? '#1d4ed8' : '#78716c'};">
                   <input type="radio" name="streamingService" value="paramount" ${activeService === 'paramount' ? 'checked' : ''} class="streaming-service-radio" style="display:none;">
@@ -2973,6 +2974,7 @@ function showCardConfigEditor(preselectedCardId = null) {
         const isHidden = content.style.display === 'none';
         content.style.display = isHidden ? 'block' : 'none';
         arrow.style.transform = isHidden ? 'rotate(90deg)' : 'rotate(0deg)';
+        state.streamingSectionExpanded = isHidden;
       }
     });
 

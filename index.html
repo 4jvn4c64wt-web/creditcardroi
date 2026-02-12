@@ -89,20 +89,6 @@
     .card-logos { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
     .card-chip { display: inline-block; background: #f5f5f4; border: 1px solid #e7e5e4; border-radius: 6px; padding: 6px 14px; font-size: 13px; font-weight: 500; color: #57534e; }
 
-    /* Pricing tiers */
-    .pricing-section { padding: 64px 0; }
-    .pricing-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; margin-top: 48px; max-width: 700px; margin-left: auto; margin-right: auto; }
-    .pricing-card { background: #fff; border: 1px solid #e7e5e4; border-radius: 12px; padding: 32px 24px; display: flex; flex-direction: column; }
-    .pricing-card.featured { border-color: #1c1917; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-    .pricing-tier { font-size: 13px; font-weight: 600; color: #059669; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
-    .pricing-price { font-family: 'IBM Plex Mono', monospace; font-size: 32px; font-weight: 700; margin-bottom: 4px; }
-    .pricing-price .period { font-size: 15px; font-weight: 400; color: #78716c; }
-    .pricing-headline { font-size: 16px; font-weight: 500; color: #57534e; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e7e5e4; }
-    .pricing-features { list-style: none; padding: 0; margin: 0 0 20px; flex-grow: 1; }
-    .pricing-features li { font-size: 14px; padding: 5px 0; padding-left: 22px; position: relative; color: #44403c; }
-    .pricing-features li::before { content: "✓"; position: absolute; left: 0; color: #059669; font-weight: 600; }
-    .pricing-card .btn { width: 100%; justify-content: center; margin-top: auto; }
-
     /* FAQ accordion */
     .faq-section { padding: 64px 0; border-top: 1px solid #e7e5e4; }
     .faq-list { max-width: 640px; margin: 0 auto; }
@@ -151,7 +137,6 @@
       .mock-metrics { grid-template-columns: repeat(3, 1fr); }
       .section-title { font-size: 24px; }
       .value-privacy-grid { grid-template-columns: 1fr; }
-      .pricing-grid { grid-template-columns: 1fr; max-width: 400px; margin-left: auto; margin-right: auto; }
       .bottom-cta h2 { font-size: 26px; }
       .btn { padding: 12px 22px; font-size: 15px; }
     }
@@ -363,67 +348,6 @@
         <span class="card-chip">Amazon Prime Rewards Visa</span>
         <span class="card-chip">U.S. Bank Cash+</span>
       </div>
-    </div>
-  </section>
-
-  <!-- Pricing -->
-  <section class="pricing-section" id="pricing">
-    <div class="container">
-      <h2 class="section-title">Choose Your Plan</h2>
-
-      <div class="pricing-grid">
-
-        <!-- Free -->
-        <div class="pricing-card">
-          <div class="pricing-tier">Free</div>
-          <div class="pricing-price">$0</div>
-          <div class="pricing-headline">See what your cards are really earning</div>
-          <ul class="pricing-features">
-            <li>Last 12 months of transactions</li>
-            <li>Unlimited cards</li>
-            <li>See your full ROI breakdown</li>
-          </ul>
-          <a href="app.html" class="btn btn-primary">Start Free</a>
-        </div>
-
-        <!-- COMING SOON: Uncomment Decision Pass card when paid plans launch
-        <div class="pricing-card featured">
-          <div class="pricing-tier">Decision Pass</div>
-          <div class="pricing-price">$12</div>
-          <div class="pricing-headline">Make your annual fee decision</div>
-          <ul class="pricing-features">
-            <li>Unlock 1 card for 7 days</li>
-            <li>Full transaction history (not just 1 year)</li>
-            <li>Edit categories &amp; card settings</li>
-            <li>Card Year anniversary toggle</li>
-            <li>Export your data</li>
-            <li>Perfect for annual fee renewals</li>
-          </ul>
-          <a href="app.html" class="btn btn-primary">Start Free, Then Upgrade</a>
-        </div>
-        -->
-
-        <!-- Pro (coming soon — details blurred) -->
-        <div class="pricing-card" style="position:relative;">
-          <div class="pricing-tier" style="color:#059669;">Pro</div>
-          <div style="filter:blur(6px);-webkit-filter:blur(6px);user-select:none;pointer-events:none;opacity:0.5;">
-            <div class="pricing-price">$12 <span class="period">/ year</span></div>
-            <div class="pricing-headline">Track your whole portfolio</div>
-            <ul class="pricing-features">
-              <li>Everything unlocked, all cards</li>
-              <li>Full transaction history</li>
-              <li>Edit all categories &amp; settings</li>
-              <li>Export all data</li>
-              <li>Scenario calculator</li>
-              <li>Priority support</li>
-            </ul>
-          </div>
-          <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(255,255,255,0.85);border-radius:8px;padding:10px 20px;font-size:14px;font-weight:600;color:#57534e;white-space:nowrap;">Coming Soon</div>
-        </div>
-
-      </div>
-
-      <!-- COMING SOON: Restore grid-template-columns: repeat(3, 1fr) and remove max-width/margin from .pricing-grid -->
     </div>
   </section>
 

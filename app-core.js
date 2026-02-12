@@ -438,6 +438,33 @@ function pruneTransactionsForStorage(transactions) {
 }
 
 /**
+ * Check if a single transaction's low-confidence state should be visible.
+ * Free/Pro: all low-confidence non-payment transactions visible.
+ * DP: only visible if the transaction's card has an active Decision Pass.
+ * @param {Object} t - A processed transaction
+ * @param {Object} [dpLookup] - Optional pre-built DP lookup (avoids repeated calls)
+ * @returns {boolean}
+ */
+function isNeedsReviewVisible(t, dpLookup) {
+  if (t.isPayment || t.confidence >= CONFIDENCE_THRESHOLD) return false;
+  if (window.TIER_CONFIG === 'pro' || window.TIER_CONFIG === 'free') return true;
+  // Decision Pass: only for DP-activated cards
+  const lookup = dpLookup || getActiveDecisionPassLookup();
+  return !!lookup[t.cardId];
+}
+
+/**
+ * Get low-confidence transactions visible for the current tier.
+ * Convenience wrapper around isNeedsReviewVisible for bulk filtering.
+ * @param {Array} transactions - Processed transactions
+ * @returns {Array} Visible low-confidence transactions
+ */
+function getVisibleLowConfidenceTransactions(transactions) {
+  const dpLookup = getActiveDecisionPassLookup();
+  return transactions.filter(t => isNeedsReviewVisible(t, dpLookup));
+}
+
+/**
  * Validate a Gumroad-style license key format
  * Basic format check: alphanumeric with hyphens, reasonable length
  * @param {string} key - The license key to validate
@@ -3276,14 +3303,13 @@ function showResults(results, isNewUpload = false) {
   netEl.textContent = formatCurrency(t.netValue);
   netEl.className = `metric-value ${t.netValue >= 0 ? 'positive' : 'negative'}`;
   
-  // Count low-confidence transactions (exclude payments which are always 0 confidence)
-  const lowConfidenceCount = results.processed.filter(txn => 
-    !txn.isPayment && txn.confidence < CONFIDENCE_THRESHOLD
-  ).length;
-  
-  // Stats footer - include low-confidence count
-  const lowConfBadge = lowConfidenceCount > 0 
-    ? `<span style="color:#b45309;"> • ${lowConfidenceCount} need review</span>` 
+  // Count low-confidence transactions actionable by this tier
+  const actionableLowConf = getVisibleLowConfidenceTransactions(results.processed);
+  const lowConfidenceCount = actionableLowConf.length;
+
+  // Stats footer - include low-confidence count (only for tiers that can act on them)
+  const lowConfBadge = lowConfidenceCount > 0
+    ? `<span style="color:#b45309;"> • ${lowConfidenceCount} need review</span>`
     : '';
   const isPro = window.TIER_CONFIG === 'pro';
   const tierBadge = isPro
@@ -3306,7 +3332,8 @@ function showResults(results, isNewUpload = false) {
 
   // Show low-confidence review modal on new upload if there are items to review
   // BUT NOT during the tour - it will be explained later
-  if (isNewUpload && lowConfidenceCount > 0 && !state.tourActive) {
+  // Free users see badges but skip the popup (they can't reclassify — it's an upsell)
+  if (isNewUpload && lowConfidenceCount > 0 && !state.tourActive && window.TIER_CONFIG !== 'free') {
     document.getElementById('lowConfidenceCount').textContent = lowConfidenceCount;
     document.getElementById('lowConfidenceModal').classList.remove('hidden');
   }
@@ -3933,8 +3960,8 @@ function renderView(view) {
         </p>
         
         ${(() => {
-          // Count low-confidence transactions
-          const lowConfCount = r.processed.filter(t => !t.isPayment && t.confidence < CONFIDENCE_THRESHOLD).length;
+          // Count low-confidence transactions actionable by this tier
+          const lowConfCount = getVisibleLowConfidenceTransactions(r.processed).length;
           const needsReviewBadge = lowConfCount > 0 ? `<span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:10px;font-size:11px;font-weight:600;margin-left:4px;">${lowConfCount}</span>` : '';
           return `
         <div id="filterRow" style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
@@ -4061,7 +4088,7 @@ function renderView(view) {
         txns = txns.filter(t => (t.merchant || '').toLowerCase().includes(merchantSearch));
       }
       if (creditsOnly) txns = txns.filter(t => t.isCredit);
-      if (needsReview) txns = txns.filter(t => !t.isPayment && t.confidence < CONFIDENCE_THRESHOLD);
+      if (needsReview) txns = txns.filter(t => isNeedsReviewVisible(t));
 
       // Sort filtered transactions
       const sort = state.txnSortState;
@@ -4306,7 +4333,7 @@ function renderView(view) {
         <td class="text-right mono">${multiDisplay}</td>
         <td class="text-right mono" style="color:${pointsColor};">${pointsDisplay}</td>
         <td style="font-size:11px;color:#78716c;max-width:180px;">
-          ${!t.isPayment && t.confidence < CONFIDENCE_THRESHOLD ? '<span title="Low confidence - may need review" style="color:#b45309;">⚠️ </span>' : ''}${t.isCredit && !t.isPayment && isCardEditable(t.cardId, 'category') ? `
+          ${isNeedsReviewVisible(t) ? '<span title="Low confidence - may need review" style="color:#b45309;">⚠️ </span>' : ''}${t.isCredit && !t.isPayment && isCardEditable(t.cardId, 'category') ? `
             <span class="credit-toggle" data-txn-id="${escapeHtml(t.id)}" data-card-id="${escapeHtml(t.cardId)}"
                   style="cursor:pointer;text-decoration:underline;color:#2563eb;">
               ${escapeHtml(t.reason)}

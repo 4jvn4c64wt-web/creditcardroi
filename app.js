@@ -2670,7 +2670,7 @@ function showCardConfigEditor(preselectedCardId = null) {
               <div style="font-size:13px;font-weight:500;${isDisabled ? 'text-decoration:line-through;' : ''}">${escapeHtml(cr.name)}${isManual ? ' ⚡' : ''}</div>
               <div style="font-size:11px;color:#78716c;">$${cr.amount}/yr${isManual ? ` (~$${monthlyAmount.toFixed(0)}/mo)` : ' — Auto-detected from transactions'}</div>
             </div>
-            ${isManual && !isDisabled ? `<span style="font-size:12px;color:#059669;font-weight:500;">$${totalClaimed.toFixed(0)} claimed</span>` : ''}
+            ${isManual && !isDisabled ? `<span class="credit-claimed-display" data-monthly-amount="${monthlyAmount}" style="font-size:12px;color:#059669;font-weight:500;">$${totalClaimed.toFixed(0)} claimed</span>` : ''}
           </div>
           ${isManual && !isDisabled ? `
             <div style="display:flex;flex-wrap:wrap;gap:4px;padding-top:8px;border-top:1px solid #f5f5f4;">
@@ -2719,27 +2719,32 @@ function showCardConfigEditor(preselectedCardId = null) {
 
         return `
           <div style="padding:12px;background:#fafaf9;border:1px solid #e7e5e4;border-radius:8px;margin-top:-4px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-              <div>
-                <div style="font-size:13px;font-weight:500;">Paramount+ and Peacock</div>
-                <div style="font-size:11px;color:#78716c;">Included with Walmart+ — select a service, then toggle months</div>
+            <div class="streaming-section-header" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span class="streaming-toggle-arrow" style="font-size:10px;color:#78716c;transition:transform 0.2s;display:inline-block;">&#9654;</span>
+                <div>
+                  <div style="font-size:13px;font-weight:500;">Paramount+ and Peacock</div>
+                  <div style="font-size:11px;color:#78716c;">Included with Walmart+ — select a service, then toggle months</div>
+                </div>
               </div>
               <span id="streamingClaimedTotal" style="font-size:12px;color:#059669;font-weight:500;">$${totalClaimed.toFixed(2)} claimed</span>
             </div>
-            <div style="display:flex;gap:8px;margin-bottom:12px;">
-              <label style="display:flex;align-items:center;gap:6px;padding:6px 12px;border:2px solid ${activeService === 'paramount' ? '#3b82f6' : '#e7e5e4'};border-radius:6px;cursor:pointer;background:${activeService === 'paramount' ? '#dbeafe' : '#fff'};font-size:12px;font-weight:500;color:${activeService === 'paramount' ? '#1d4ed8' : '#78716c'};">
-                <input type="radio" name="streamingService" value="paramount" ${activeService === 'paramount' ? 'checked' : ''} class="streaming-service-radio" style="display:none;">
-                <span style="width:8px;height:8px;border-radius:50%;background:#3b82f6;display:inline-block;flex-shrink:0;"></span>
-                Paramount+ ($7.99/mo)
-              </label>
-              <label style="display:flex;align-items:center;gap:6px;padding:6px 12px;border:2px solid ${activeService === 'peacock' ? '#7c3aed' : '#e7e5e4'};border-radius:6px;cursor:pointer;background:${activeService === 'peacock' ? '#ede9fe' : '#fff'};font-size:12px;font-weight:500;color:${activeService === 'peacock' ? '#5b21b6' : '#78716c'};">
-                <input type="radio" name="streamingService" value="peacock" ${activeService === 'peacock' ? 'checked' : ''} class="streaming-service-radio" style="display:none;">
-                <span style="width:8px;height:8px;border-radius:50%;background:#7c3aed;display:inline-block;flex-shrink:0;"></span>
-                Peacock ($10.99/mo)
-              </label>
-            </div>
-            <div style="display:flex;flex-wrap:wrap;gap:4px;padding-top:8px;border-top:1px solid #f5f5f4;">
-              ${monthsHtml}
+            <div class="streaming-section-content" style="display:none;margin-top:10px;">
+              <div style="display:flex;gap:8px;margin-bottom:12px;">
+                <label style="display:flex;align-items:center;gap:6px;padding:6px 12px;border:2px solid ${activeService === 'paramount' ? '#3b82f6' : '#e7e5e4'};border-radius:6px;cursor:pointer;background:${activeService === 'paramount' ? '#dbeafe' : '#fff'};font-size:12px;font-weight:500;color:${activeService === 'paramount' ? '#1d4ed8' : '#78716c'};">
+                  <input type="radio" name="streamingService" value="paramount" ${activeService === 'paramount' ? 'checked' : ''} class="streaming-service-radio" style="display:none;">
+                  <span style="width:8px;height:8px;border-radius:50%;background:#3b82f6;display:inline-block;flex-shrink:0;"></span>
+                  Paramount+ ($7.99/mo)
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;padding:6px 12px;border:2px solid ${activeService === 'peacock' ? '#7c3aed' : '#e7e5e4'};border-radius:6px;cursor:pointer;background:${activeService === 'peacock' ? '#ede9fe' : '#fff'};font-size:12px;font-weight:500;color:${activeService === 'peacock' ? '#5b21b6' : '#78716c'};">
+                  <input type="radio" name="streamingService" value="peacock" ${activeService === 'peacock' ? 'checked' : ''} class="streaming-service-radio" style="display:none;">
+                  <span style="width:8px;height:8px;border-radius:50%;background:#7c3aed;display:inline-block;flex-shrink:0;"></span>
+                  Peacock ($10.99/mo)
+                </label>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:4px;padding-top:8px;border-top:1px solid #f5f5f4;">
+                ${monthsHtml}
+              </div>
             </div>
           </div>
         `;
@@ -2874,6 +2879,18 @@ function showCardConfigEditor(preselectedCardId = null) {
       cb.addEventListener('change', () => {
         const label = cb.closest('label');
         label.style.background = cb.checked ? '#dcfce7' : '#fff';
+
+        // Real-time update of claimed total
+        const row = cb.closest('.manual-credit-row');
+        if (row) {
+          const checkedCount = row.querySelectorAll('.month-claim:checked').length;
+          const claimedEl = row.querySelector('.credit-claimed-display');
+          if (claimedEl) {
+            const monthlyAmount = parseFloat(claimedEl.dataset.monthlyAmount);
+            const total = checkedCount * monthlyAmount;
+            claimedEl.textContent = `$${total.toFixed(0)} claimed`;
+          }
+        }
       });
     });
 
@@ -2930,8 +2947,19 @@ function showCardConfigEditor(preselectedCardId = null) {
       });
     });
 
+    // Streaming section collapsible toggle
+    document.querySelector('.streaming-section-header')?.addEventListener('click', () => {
+      const content = document.querySelector('.streaming-section-content');
+      const arrow = document.querySelector('.streaming-toggle-arrow');
+      if (content && arrow) {
+        const isHidden = content.style.display === 'none';
+        content.style.display = isHidden ? 'block' : 'none';
+        arrow.style.transform = isHidden ? 'rotate(90deg)' : 'rotate(0deg)';
+      }
+    });
+
     // CFF quarterly categories are now read-only from stored data (no event listeners needed)
-    
+
     // Limit Cash+ 5% selections to 2 PER QUARTER
     if (isCashPlus) {
       document.querySelectorAll('.cash-plus-5').forEach(cb => {

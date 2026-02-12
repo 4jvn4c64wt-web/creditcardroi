@@ -5198,6 +5198,11 @@ async function processAfterColumnMapping() {
     return t;
   });
 
+  // Prune stored transactions BEFORE conflict detection so expired data
+  // outside the tier's time window can't trigger false overlap warnings
+  state.savedTransactions = pruneTransactionsForStorage(state.savedTransactions);
+  safeLocalStorageSet('ccTracker_transactions', state.savedTransactions);
+
   // Check for cross-source duplicate risk before merging
   const overlapCards = detectCrossSourceOverlap(newTransactions, state.savedTransactions);
   if (overlapCards.length > 0) {

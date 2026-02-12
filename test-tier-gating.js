@@ -72,6 +72,25 @@ function parseDateString(dateStr) {
 const FREE_DATA_MONTHS = 12;
 const PRO_DATA_MONTHS = 72;
 
+function pruneTransactionsForStorage(transactions) {
+  const now = new Date();
+  const isPro = window.TIER_CONFIG === 'pro';
+  const dpLookup = getActiveDecisionPassLookup();
+  const proCutoff = new Date(now.getFullYear(), now.getMonth() - PRO_DATA_MONTHS, now.getDate());
+  const freeCutoff = new Date(now.getFullYear(), now.getMonth() - FREE_DATA_MONTHS, now.getDate());
+  const dpCutoff = new Date(now.getFullYear(), now.getMonth() - PRO_DATA_MONTHS, now.getDate());
+  const unmappedCutoff = isPro || Object.keys(dpLookup).length > 0 ? proCutoff : freeCutoff;
+
+  return transactions.filter(t => {
+    const parsed = parseDateString(t.date);
+    if (!parsed) return true;
+    if (!t.cardId || t.cardId === 'skip') return parsed.date >= unmappedCutoff;
+    if (isPro) return parsed.date >= proCutoff;
+    if (dpLookup[t.cardId]) return parsed.date >= dpCutoff;
+    return parsed.date >= freeCutoff;
+  });
+}
+
 function applyTierDateFiltering(transactions) {
   const isPro = window.TIER_CONFIG === 'pro';
   const dpLookup = getActiveDecisionPassLookup();
@@ -426,6 +445,256 @@ assert(isNeedsReviewVisible({ isPayment: false, confidence: 49, cardId: 'chase-s
   'Confidence just below threshold (49): visible');
 assert(!isNeedsReviewVisible({ isPayment: false, confidence: 100, cardId: 'chase-sapphire-reserve' }),
   'High confidence (100): NOT visible');
+
+// =============================================================================
+// Cross-source overlap detection (copied from app-core.js for testing)
+// =============================================================================
+
+function safeLocalStorageGet(key, fallback) {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
+}
+
+function detectCrossSourceOverlap(newTransactions, savedTransactions) {
+  const warnings = [];
+  const suppressWarning = safeLocalStorageGet('ccTracker_suppressSourceWarning', false);
+  if (suppressWarning) return warnings;
+
+  const newByCard = {};
+  for (const t of newTransactions) {
+    if (!t.last4 || !t.sourceFormat || !t.date) continue;
+    if (!newByCard[t.last4]) newByCard[t.last4] = [];
+    newByCard[t.last4].push(t);
+  }
+
+  for (const [last4, incoming] of Object.entries(newByCard)) {
+    const incomingFormats = new Set(incoming.map(t => t.sourceFormat));
+    const stored = savedTransactions.filter(t => t.last4 === last4 && t.sourceFormat);
+    if (stored.length === 0) continue;
+    const storedFormats = new Set(stored.map(t => t.sourceFormat));
+    const hasDifferentFormat = [...incomingFormats].some(f => !storedFormats.has(f));
+    if (!hasDifferentFormat) continue;
+
+    const incomingDates = incoming.map(t => new Date(t.date).getTime()).filter(d => !isNaN(d));
+    const storedDates = stored.map(t => new Date(t.date).getTime()).filter(d => !isNaN(d));
+    if (incomingDates.length === 0 || storedDates.length === 0) continue;
+
+    const inMin = Math.min(...incomingDates);
+    const inMax = Math.max(...incomingDates);
+    const stMin = Math.min(...storedDates);
+    const stMax = Math.max(...storedDates);
+    const twoDays = 2 * 24 * 60 * 60 * 1000;
+
+    if (inMin <= stMax + twoDays && inMax >= stMin - twoDays) {
+      warnings.push(last4);
+    }
+  }
+  return warnings;
+}
+
+// Helper: simulate the upload flow order (prune-then-check vs check-then-prune)
+function simulateUploadWithPruneThenCheck(savedTxns, newTxns) {
+  // This is the CORRECT order: prune saved first, then check overlap
+  const pruned = pruneTransactionsForStorage(savedTxns);
+  return detectCrossSourceOverlap(newTxns, pruned);
+}
+
+function simulateUploadWithoutPrune(savedTxns, newTxns) {
+  // OLD (buggy) order: check overlap against unpruned data
+  return detectCrossSourceOverlap(newTxns, savedTxns);
+}
+
+// =============================================================================
+// Test 15: Overlap detection is tier-agnostic (works for all tiers)
+// =============================================================================
+console.log('\n=== Test 15: Overlap detection works for all tiers ===');
+resetState();
+
+const formatA = 'aabbccdd';
+const formatB = '11223344';
+
+const storedTxns = [
+  { last4: '1234', sourceFormat: formatA, date: '2026-01-10', cardId: 'chase-sapphire-reserve' },
+  { last4: '1234', sourceFormat: formatA, date: '2026-01-15', cardId: 'chase-sapphire-reserve' },
+];
+const incomingDiffFormat = [
+  { last4: '1234', sourceFormat: formatB, date: '2026-01-12', cardId: 'chase-sapphire-reserve' },
+];
+const incomingSameFormat = [
+  { last4: '1234', sourceFormat: formatA, date: '2026-01-12', cardId: 'chase-sapphire-reserve' },
+];
+
+// Different format + overlapping dates → warning
+for (const tier of ['free', 'pro']) {
+  window.TIER_CONFIG = tier;
+  const warnings = detectCrossSourceOverlap(incomingDiffFormat, storedTxns);
+  assertEq(warnings.length, 1, `${tier}: diff format + overlap → warning`);
+  assertEq(warnings[0], '1234', `${tier}: warning includes correct last4`);
+}
+
+// Same format + overlapping dates → no warning
+window.TIER_CONFIG = 'free';
+const noWarnings = detectCrossSourceOverlap(incomingSameFormat, storedTxns);
+assertEq(noWarnings.length, 0, 'Same format + overlap → no warning');
+
+// Different format but no date overlap → no warning
+const incomingFarAway = [
+  { last4: '1234', sourceFormat: formatB, date: '2025-06-01', cardId: 'chase-sapphire-reserve' },
+];
+assertEq(detectCrossSourceOverlap(incomingFarAway, storedTxns).length, 0,
+  'Diff format but dates months apart → no warning');
+
+// Different format, within ±2 day tolerance → warning
+const incomingNearby = [
+  { last4: '1234', sourceFormat: formatB, date: '2026-01-17', cardId: 'chase-sapphire-reserve' },
+];
+assertEq(detectCrossSourceOverlap(incomingNearby, storedTxns).length, 1,
+  'Diff format + within 2-day tolerance of stored range → warning');
+
+const incomingJustOutside = [
+  { last4: '1234', sourceFormat: formatB, date: '2026-01-18', cardId: 'chase-sapphire-reserve' },
+];
+assertEq(detectCrossSourceOverlap(incomingJustOutside, storedTxns).length, 0,
+  'Diff format + outside 2-day tolerance → no warning');
+
+// =============================================================================
+// Test 16: Pruning before overlap eliminates ghost conflicts (free tier)
+// =============================================================================
+console.log('\n=== Test 16: Prune-before-check eliminates ghost conflicts (free) ===');
+resetState();
+window.TIER_CONFIG = 'free';
+
+const now2 = new Date();
+// Old transaction: 18 months ago (outside free 1-year window)
+const oldDate18mo = new Date(now2.getFullYear(), now2.getMonth() - 18, 10).toISOString().slice(0, 10);
+// Incoming transaction: also around 18 months ago (different format)
+const oldDate18moNearby = new Date(now2.getFullYear(), now2.getMonth() - 18, 12).toISOString().slice(0, 10);
+
+const ghostSaved = [
+  { last4: '5678', sourceFormat: formatA, date: oldDate18mo, cardId: 'amex-gold' },
+];
+const ghostIncoming = [
+  { last4: '5678', sourceFormat: formatB, date: oldDate18moNearby, cardId: 'amex-gold' },
+];
+
+// WITHOUT prune: ghost transaction triggers false conflict
+const buggyWarnings = simulateUploadWithoutPrune(ghostSaved, ghostIncoming);
+assertEq(buggyWarnings.length, 1,
+  'Without prune: 18-month-old ghost triggers false overlap warning');
+
+// WITH prune: ghost is pruned, no false conflict
+const correctWarnings = simulateUploadWithPruneThenCheck(ghostSaved, ghostIncoming);
+assertEq(correctWarnings.length, 0,
+  'With prune-first: 18-month-old ghost pruned → no false warning');
+
+// =============================================================================
+// Test 17: DP card retains old data, non-DP card pruned (mixed scenario)
+// =============================================================================
+console.log('\n=== Test 17: DP card keeps old data, non-DP pruned before check ===');
+resetState();
+window.TIER_CONFIG = 'free';
+activateDP('chase-sapphire-reserve');
+
+const mixedSaved = [
+  // CSR (has DP): 18 months old — within 6-year DP window, should stay
+  { last4: '1111', sourceFormat: formatA, date: oldDate18mo, cardId: 'chase-sapphire-reserve' },
+  // Amex Gold (no DP): 18 months old — outside 1-year free window, should be pruned
+  { last4: '2222', sourceFormat: formatA, date: oldDate18mo, cardId: 'amex-gold' },
+];
+
+// Incoming for both cards at similar dates (different format)
+const mixedIncoming = [
+  { last4: '1111', sourceFormat: formatB, date: oldDate18moNearby, cardId: 'chase-sapphire-reserve' },
+  { last4: '2222', sourceFormat: formatB, date: oldDate18moNearby, cardId: 'amex-gold' },
+];
+
+const mixedWarnings = simulateUploadWithPruneThenCheck(mixedSaved, mixedIncoming);
+assertEq(mixedWarnings.length, 1,
+  'DP card old txn survives prune → legitimate overlap warning');
+assertEq(mixedWarnings[0], '1111',
+  'Warning is for DP card (CSR, last4=1111), not the pruned non-DP card');
+
+// Verify the pruned set directly
+const prunedMixed = pruneTransactionsForStorage(mixedSaved);
+assertEq(prunedMixed.length, 1,
+  'After prune: only DP card txn remains');
+assertEq(prunedMixed[0].last4, '1111',
+  'Surviving txn is the DP card (last4=1111)');
+
+// =============================================================================
+// Test 18: Pro tier — no ghost pruning (all within 6-year window)
+// =============================================================================
+console.log('\n=== Test 18: Pro tier — 18-month txns are not ghost-pruned ===');
+resetState();
+window.TIER_CONFIG = 'pro';
+
+const proWarnings = simulateUploadWithPruneThenCheck(ghostSaved, ghostIncoming);
+assertEq(proWarnings.length, 1,
+  'Pro: 18-month-old txn survives prune → legitimate overlap warning');
+
+// Very old (beyond 6 years) still pruned even for pro
+const veryOldDateStr = new Date(now2.getFullYear(), now2.getMonth() - 80, 10).toISOString().slice(0, 10);
+const veryOldNearbyStr = new Date(now2.getFullYear(), now2.getMonth() - 80, 12).toISOString().slice(0, 10);
+
+const veryOldSaved = [
+  { last4: '9999', sourceFormat: formatA, date: veryOldDateStr, cardId: 'amex-gold' },
+];
+const veryOldIncoming = [
+  { last4: '9999', sourceFormat: formatB, date: veryOldNearbyStr, cardId: 'amex-gold' },
+];
+
+const proVeryOld = simulateUploadWithPruneThenCheck(veryOldSaved, veryOldIncoming);
+assertEq(proVeryOld.length, 0,
+  'Pro: 80-month-old ghost pruned → no false warning');
+
+// =============================================================================
+// Test 19: Recent transactions produce legitimate warnings in all tiers
+// =============================================================================
+console.log('\n=== Test 19: Recent transactions produce legitimate warnings (all tiers) ===');
+
+const recentDateStr = new Date(now2.getFullYear(), now2.getMonth() - 1, 10).toISOString().slice(0, 10);
+const recentNearbyStr = new Date(now2.getFullYear(), now2.getMonth() - 1, 12).toISOString().slice(0, 10);
+
+const recentSaved = [
+  { last4: '3333', sourceFormat: formatA, date: recentDateStr, cardId: 'amex-gold' },
+];
+const recentIncoming = [
+  { last4: '3333', sourceFormat: formatB, date: recentNearbyStr, cardId: 'amex-gold' },
+];
+
+for (const tier of ['free', 'pro']) {
+  resetState();
+  window.TIER_CONFIG = tier;
+  const w = simulateUploadWithPruneThenCheck(recentSaved, recentIncoming);
+  assertEq(w.length, 1,
+    `${tier}: recent diff-format overlap → legitimate warning survives prune`);
+}
+
+// DP user on free tier — recent non-DP card txn still gets warning
+resetState();
+window.TIER_CONFIG = 'free';
+activateDP('chase-sapphire-reserve'); // DP on different card
+const dpRecentW = simulateUploadWithPruneThenCheck(recentSaved, recentIncoming);
+assertEq(dpRecentW.length, 1,
+  'DP user: recent non-DP card overlap → legitimate warning');
+
+// =============================================================================
+// Test 20: Suppress warning flag bypasses all overlap detection
+// =============================================================================
+console.log('\n=== Test 20: Suppress warning flag ===');
+resetState();
+window.TIER_CONFIG = 'free';
+localStorage._data['ccTracker_suppressSourceWarning'] = 'true';
+
+const suppressedW = detectCrossSourceOverlap(incomingDiffFormat, storedTxns);
+assertEq(suppressedW.length, 0,
+  'Suppress flag set: no warnings even with real overlap');
+
+delete localStorage._data['ccTracker_suppressSourceWarning'];
+
+// Confirm it works again after clearing
+const unsuppressedW = detectCrossSourceOverlap(incomingDiffFormat, storedTxns);
+assertEq(unsuppressedW.length, 1,
+  'Suppress flag cleared: warnings resume');
 
 // =============================================================================
 // Summary

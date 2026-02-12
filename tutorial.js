@@ -257,7 +257,7 @@ const TOUR_STEPS = [
     id: 'config-point-value',
     target: '#configPointValue',
     title: 'Point Valuation \u{1F4B0}',
-    content: '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING TO PRO</span> This is how much each point is worth when you redeem it. For example, at 2.0\u00A2 per point, 1,000 points = $20 in value. Cash back users might set 1.0\u00A2, travel redeemers might set 1.5\u20132.0\u00A2.',
+    content: 'This value represents how much each point or mile is worth when redeemed. It\u2019s based on commonly accepted valuations for your card\u2019s rewards program and is used to calculate the dollar value of the points you earn.<br><br><span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING TO PRO</span> Pro users will be able to edit point valuations to match their personal redemption strategy\u2014whether you value points at 1.0\u00A2 for cash back or 2.0\u00A2+ for premium travel redemptions.',
     position: 'right',
     clickRequired: false
   },

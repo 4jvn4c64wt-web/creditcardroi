@@ -257,7 +257,7 @@ const TOUR_STEPS = [
     id: 'config-point-value',
     target: '#configPointValue',
     title: 'Point Valuation \u{1F4B0}',
-    content: '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING SOON</span><br>This is how much each point is worth when you redeem it. For example, at 2.0\u00A2 per point, 1,000 points = $20 in value. Cash back users might set 1.0\u00A2, travel redeemers might set 1.5\u20132.0\u00A2.',
+    content: '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING TO PRO</span> This is how much each point is worth when you redeem it. For example, at 2.0\u00A2 per point, 1,000 points = $20 in value. Cash back users might set 1.0\u00A2, travel redeemers might set 1.5\u20132.0\u00A2.',
     position: 'right',
     clickRequired: false
   },
@@ -267,7 +267,7 @@ const TOUR_STEPS = [
     id: 'config-credits-section',
     target: '#configCreditsSection',
     title: 'Statement Credits \u{1F4B3}',
-    content: 'Your statement credits are <strong>auto-detected</strong> from transactions (like streaming or airline incidentals). Others marked \u26A1 (like Uber Cash) require manual tracking. <span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING SOON</span> Toggle individual credits ON/OFF to customize your ROI calculation.',
+    content: 'Your statement credits are <strong>auto-detected</strong> from transactions (like streaming or airline incidentals). Others marked \u26A1 (like Uber Cash) require manual tracking.<br><br><span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING TO PRO</span> Toggle individual credits ON/OFF to customize your ROI calculation.',
     position: 'top',
     clickRequired: false
   },
@@ -349,7 +349,7 @@ const TOUR_STEPS = [
     id: 'recategorize',
     target: '#transactionsBody .badge',
     title: 'Recategorize Transactions \u{1F3F7}\uFE0F',
-    content: '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING SOON</span><br>You\'ll be able to recategorize spending categories and credits by clicking any badge. You can also add rules for specific merchants so they\'re always classified correctly.',
+    content: '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING TO PRO</span> You\'ll be able to recategorize spending categories and credits by clicking any badge. You can also add rules for specific merchants so they\'re always classified correctly.',
     position: 'right',
     clickRequired: false
   },

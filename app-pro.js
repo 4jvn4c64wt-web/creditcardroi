@@ -208,6 +208,24 @@ function generateTransactionId(date, merchant, amount, last4, existingIds = new 
   return uniqueId;
 }
 
+/**
+ * Generate a short hash from CSV headers to identify the source format.
+ * Same CSV structure always produces the same hash. For headerless CSVs,
+ * synthetic column names (e.g., "Column 1", "Column 2") are used.
+ * @param {string[]} headers - Array of CSV column headers
+ * @returns {string} 8-character hex hash string
+ */
+function generateSourceFormatHash(headers) {
+  const normalized = headers.map(h => h.toLowerCase().trim()).sort().join('|');
+  let hash = 0;
+  for (let i = 0; i < normalized.length; i++) {
+    const char = normalized.charCodeAt(i);
+    hash = ((hash << 5) - hash + char) | 0;
+  }
+  // Convert to unsigned 32-bit and return as 8-char hex
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
 // =============================================================================
 // CARD DEFINITIONS (loaded from individual card files via CardTracker namespace)
 // =============================================================================
@@ -5043,12 +5061,62 @@ async function handleFile(file) {
   showColumnMapping(text);
 }
 
+// Check for cross-source overlap: incoming transactions from a different CSV format
+// for the same card(s) and overlapping date range as stored transactions.
+// Returns an array of warning messages (empty if no overlap detected).
+function detectCrossSourceOverlap(newTransactions, savedTransactions) {
+  const warnings = [];
+  const suppressWarning = safeLocalStorageGet('ccTracker_suppressSourceWarning', false);
+  if (suppressWarning) return warnings;
+
+  // Group incoming transactions by last4
+  const newByCard = {};
+  for (const t of newTransactions) {
+    if (!t.last4 || !t.sourceFormat || !t.date) continue;
+    if (!newByCard[t.last4]) newByCard[t.last4] = [];
+    newByCard[t.last4].push(t);
+  }
+
+  for (const [last4, incoming] of Object.entries(newByCard)) {
+    // Get the source format(s) of incoming transactions for this card
+    const incomingFormats = new Set(incoming.map(t => t.sourceFormat));
+
+    // Get stored transactions for this card that have a sourceFormat
+    const stored = savedTransactions.filter(t => t.last4 === last4 && t.sourceFormat);
+    if (stored.length === 0) continue;
+
+    // Check if stored transactions have a different format
+    const storedFormats = new Set(stored.map(t => t.sourceFormat));
+    const hasDifferentFormat = [...incomingFormats].some(f => !storedFormats.has(f));
+    if (!hasDifferentFormat) continue;
+
+    // Check date range overlap (±2 days tolerance)
+    const incomingDates = incoming.map(t => new Date(t.date).getTime()).filter(d => !isNaN(d));
+    const storedDates = stored.map(t => new Date(t.date).getTime()).filter(d => !isNaN(d));
+    if (incomingDates.length === 0 || storedDates.length === 0) continue;
+
+    const inMin = Math.min(...incomingDates);
+    const inMax = Math.max(...incomingDates);
+    const stMin = Math.min(...storedDates);
+    const stMax = Math.max(...storedDates);
+
+    const twoDays = 2 * 24 * 60 * 60 * 1000;
+
+    // Overlap if incoming range is within ±2 days of stored range
+    if (inMin <= stMax + twoDays && inMax >= stMin - twoDays) {
+      warnings.push(last4);
+    }
+  }
+
+  return warnings;
+}
+
 // Called after user confirms column mapping
 async function processAfterColumnMapping() {
   showLoading(true, 'Parsing CSV...');
-  
+
   const newTransactions = applyColumnMappingAndParse();
-  
+
   // Migrate existing transactions if they have old-style IDs (txn-N format)
   // This ensures proper deduplication with the new content-based IDs
   state.savedTransactions = state.savedTransactions.map(t => {
@@ -5059,41 +5127,101 @@ async function processAfterColumnMapping() {
     }
     return t;
   });
-  
+
+  // Check for cross-source duplicate risk before merging
+  const overlapCards = detectCrossSourceOverlap(newTransactions, state.savedTransactions);
+  if (overlapCards.length > 0) {
+    showLoading(false);
+    const cardList = overlapCards.map(l4 => '...' + l4).join(', ');
+    const proceed = await showSourceFormatWarning(cardList);
+    if (!proceed) {
+      // User cancelled — do not merge
+      document.getElementById('columnMappingSection').classList.add('hidden');
+      return;
+    }
+    showLoading(true, 'Merging transactions...');
+  }
+
   // Merge with existing transactions (dedupe by ID)
   const existingIds = new Set(state.savedTransactions.map(t => t.id));
   const uniqueNew = newTransactions.filter(t => !existingIds.has(t.id));
-  
+
   // Combine: new unique + existing
   state.transactions = [...uniqueNew, ...state.savedTransactions];
-  
+
   // Sort by date descending
   state.transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
-  
+
   // Save merged transactions to localStorage
   state.savedTransactions = state.transactions;
   safeLocalStorageSet('ccTracker_transactions', state.transactions);
-  
+
   // Update the stored count display
   if (typeof updateStoredTxnCount === 'function') updateStoredTxnCount();
-  
+
   // Show merge summary
   const addedCount = uniqueNew.length;
   const totalCount = state.transactions.length;
-  
+
   const allLast4s = [...new Set(state.transactions.map(t => t.last4).filter(Boolean))];
   const unmapped = allLast4s.filter(l4 => !state.cardMappings[l4]);
-  
+
   showLoading(false);
-  
+
   // Hide column mapping section
   document.getElementById('columnMappingSection').classList.add('hidden');
-  
+
   if (unmapped.length > 0) {
     showMapping(allLast4s);
   } else {
     await runProcessing(true); // true = this is a new upload
   }
+}
+
+// Show the cross-source format warning modal and return a promise
+// that resolves to true (proceed) or false (cancel).
+function showSourceFormatWarning(cardList) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('sourceFormatWarningModal');
+    const cardSpan = document.getElementById('sourceFormatCardList');
+    const proceedBtn = document.getElementById('sourceFormatProceed');
+    const cancelBtn = document.getElementById('sourceFormatCancel');
+    const closeBtn = document.getElementById('closeSourceFormatWarning');
+    const checkbox = document.getElementById('sourceFormatDontShow');
+
+    cardSpan.textContent = cardList;
+    if (checkbox) checkbox.checked = false;
+    modal.classList.remove('hidden');
+
+    function cleanup(result) {
+      modal.classList.add('hidden');
+      proceedBtn.removeEventListener('click', onProceed);
+      cancelBtn.removeEventListener('click', onCancel);
+      closeBtn.removeEventListener('click', onCancel);
+      modal.removeEventListener('click', onBackdrop);
+      resolve(result);
+    }
+
+    function onProceed() {
+      if (checkbox && checkbox.checked) {
+        safeLocalStorageSet('ccTracker_suppressSourceWarning', true);
+      }
+      cleanup(true);
+    }
+
+    function onCancel() {
+      cleanup(false);
+    }
+
+    function onBackdrop(e) {
+      if (e.target === modal) cleanup(false);
+    }
+
+    proceedBtn.addEventListener('click', onProceed);
+    cancelBtn.addEventListener('click', onCancel);
+    closeBtn.addEventListener('click', onCancel);
+    modal.addEventListener('click', onBackdrop);
+  });
 }
 
 async function runProcessing(isNewUpload = false) {

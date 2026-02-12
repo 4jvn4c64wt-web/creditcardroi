@@ -228,6 +228,27 @@
       </div>
     </div>
 
+    <!-- Cross-Source Format Warning Modal -->
+    <div id="sourceFormatWarningModal" class="loading-overlay hidden" style="cursor:pointer;">
+      <div class="loading-modal" style="cursor:default;max-width:480px;text-align:left;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <h3 style="font-size:18px;font-weight:600;margin:0;">Possible Duplicate Risk</h3>
+          <button id="closeSourceFormatWarning" style="background:none;border:none;font-size:20px;cursor:pointer;color:#78716c;">&times;</button>
+        </div>
+        <p style="font-size:14px;color:#44403c;line-height:1.6;margin-bottom:16px;">
+          Card <strong><span id="sourceFormatCardList"></span></strong> already has data from a different source for part of this date range. Different sources may format the same transaction differently (e.g., different dates or merchant names), which can result in duplicates. Proceed?
+        </p>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#78716c;margin-bottom:20px;cursor:pointer;">
+          <input type="checkbox" id="sourceFormatDontShow" style="cursor:pointer;">
+          Don't show this warning again
+        </label>
+        <div style="display:flex;gap:12px;justify-content:flex-end;">
+          <button class="btn btn-secondary" id="sourceFormatCancel">Cancel</button>
+          <button class="btn btn-primary" id="sourceFormatProceed">Proceed</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Help Modal (context-sensitive) -->
     <div id="helpModal" class="loading-overlay hidden" style="cursor:pointer;">
       <div class="loading-modal" style="cursor:default;max-width:550px;text-align:left;max-height:80vh;overflow-y:auto;">

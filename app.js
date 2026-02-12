@@ -2232,10 +2232,6 @@ function showCardConfigEditor(preselectedCardId = null) {
       saveBtn.title = '';
     }
 
-    // Check for feature education (only after tour is fully complete and not actively running)
-    if (state.tourComplete && !state.tourActive && typeof checkFeatureEducation === 'function') {
-      setTimeout(() => checkFeatureEducation(cardId), 100);
-    }
 
     const currentPointValue = getPointValue(cardId) * 100;
     const defaultPointValue = card.pointValue * 100;

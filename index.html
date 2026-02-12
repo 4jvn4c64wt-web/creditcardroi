@@ -22,7 +22,6 @@
 
     /* Hero */
     .hero { padding: 80px 0 64px; text-align: center; }
-    .hero-badge { display: inline-block; font-size: 13px; font-weight: 500; color: #059669; background: #dcfce7; padding: 4px 14px; border-radius: 9999px; margin-bottom: 20px; }
     .hero h1 { font-size: 44px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.15; margin-bottom: 20px; }
     .hero .subtitle { font-size: 18px; color: #57534e; max-width: 560px; margin: 0 auto 36px; line-height: 1.6; }
     .cta-group { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
@@ -112,11 +111,22 @@
     .faq-q { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
     .faq-a { font-size: 15px; color: #57534e; line-height: 1.7; }
 
-    /* Privacy callout */
-    .privacy { text-align: center; padding: 48px 0; }
-    .privacy-icon { font-size: 32px; margin-bottom: 12px; }
-    .privacy h3 { font-size: 20px; font-weight: 600; margin-bottom: 8px; }
-    .privacy p { font-size: 15px; color: #57534e; max-width: 480px; margin: 0 auto; }
+    /* Problem section */
+    .problem-section { padding: 0 0 48px; }
+    .problem-box { max-width: 640px; margin: 0 auto; text-align: center; font-size: 17px; color: #57534e; line-height: 1.7; }
+
+    /* What we do */
+    .what-we-do-section { padding: 64px 0; border-top: 1px solid #e7e5e4; }
+    .value-list { max-width: 640px; margin: 32px auto 0; list-style: none; padding: 0; }
+    .value-list li { font-size: 16px; padding: 10px 0 10px 28px; position: relative; color: #44403c; line-height: 1.6; }
+    .value-list li::before { content: "✓"; position: absolute; left: 0; color: #059669; font-weight: 600; }
+
+    /* Local-first callout */
+    .local-first-section { padding: 48px 0; }
+    .local-first-box { max-width: 640px; margin: 0 auto; text-align: center; background: #f5f5f4; border: 1px solid #e7e5e4; border-radius: 12px; padding: 40px 32px; }
+    .local-first-icon { font-size: 32px; margin-bottom: 12px; }
+    .local-first-box h3 { font-size: 20px; font-weight: 600; margin-bottom: 10px; }
+    .local-first-box p { font-size: 15px; color: #57534e; line-height: 1.7; max-width: 480px; margin: 0 auto; }
 
     /* Bottom CTA */
     .bottom-cta { text-align: center; padding: 64px 0 48px; }
@@ -156,15 +166,22 @@
   <!-- Hero -->
   <section class="hero">
     <div class="container">
-      <div class="hero-badge">Free &amp; private — your data never leaves your device</div>
-      <h1>Know Which Cards Are Worth Keeping</h1>
-      <p class="subtitle">Upload your credit card transactions, see exactly how much value each card earns you, and decide which annual fees are actually paying off.</p>
+      <h1>Know which cards are worth keeping</h1>
+      <p class="subtitle">Upload your transactions. See what you actually earned. Make smarter annual fee decisions.</p>
       <div class="cta-group">
-        <a href="app.html" class="btn btn-primary">Start Free</a>
+        <a href="app.html" class="btn btn-primary">Try it free</a>
         <a href="demo.html" class="btn btn-secondary">See a Demo</a>
-        <a href="#pricing" class="btn btn-secondary">View Plans</a>
       </div>
-      <p class="cta-note">No signup required. Works in your browser.</p>
+      <p class="cta-note">No signup. No data upload. Everything runs in your browser.</p>
+    </div>
+  </section>
+
+  <!-- The Problem -->
+  <section class="problem-section">
+    <div class="container">
+      <div class="problem-box">
+        <p>Premium cards promise big rewards, but annual fees add up fast. Between unused credits and missed bonus categories, the math gets fuzzy. We calculate exactly what you earned versus what you paid, so you can make renewal decisions with confidence.</p>
+      </div>
     </div>
   </section>
 
@@ -181,7 +198,7 @@
           <div class="step-text">
             <div class="step-number">Step 1</div>
             <div class="step-title">Upload your transactions</div>
-            <p class="step-desc">Export a CSV from your online credit card account or from any budgeting app and drop it into the tracker.</p>
+            <p class="step-desc">Export a CSV from any bank, credit card issuer, or financial tool and drop it into the tracker.</p>
           </div>
           <div class="step-visual">
             <div class="mockup">
@@ -194,19 +211,19 @@
                 <div class="mock-upload">
                   <div class="mock-upload-icon">📄</div>
                   <div class="mock-upload-text">Drop your file here</div>
-                  <div class="mock-upload-sub">CSV from your bank or budgeting app</div>
+                  <div class="mock-upload-sub">CSV from your bank or financial tool</div>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Step 2: Map Cards -->
+        <!-- Step 2: Calculate -->
         <div class="step">
           <div class="step-text">
             <div class="step-number">Step 2</div>
-            <div class="step-title">Map your cards</div>
-            <p class="step-desc">The tracker finds each credit card account in your file and asks you to match it to a rewards card. It remembers your choices for next time.</p>
+            <div class="step-title">We calculate your net value</div>
+            <p class="step-desc">The tracker categorizes every transaction, applies the correct multipliers, tallies statement credits you used, and subtracts your annual fee.</p>
           </div>
           <div class="step-visual">
             <div class="mockup">
@@ -240,8 +257,8 @@
         <div class="step">
           <div class="step-text">
             <div class="step-number">Step 3</div>
-            <div class="step-title">See the real numbers</div>
-            <p class="step-desc">Points earned, statement credits, and annual fees all in one view. Instantly see which cards are earning their keep.</p>
+            <div class="step-title">See which cards earned their keep</div>
+            <p class="step-desc">Get a clear breakdown per card: rewards earned, credits used, annual fee paid, and net value. Every number links back to the transactions behind it.</p>
           </div>
           <div class="step-visual">
             <div class="mockup">
@@ -300,6 +317,20 @@
     </div>
   </section>
 
+  <!-- What We Do -->
+  <section class="what-we-do-section">
+    <div class="container">
+      <h2 class="section-title">What We Do</h2>
+      <ul class="value-list">
+        <li>Analyze past transaction data to show how much value you got from each card</li>
+        <li>Calculate actual rewards earned based on your real spending patterns</li>
+        <li>Factor in statement credits you used and annual fees you paid</li>
+        <li>Show net value per card with full transaction-level explanations</li>
+        <li>Work entirely in your browser. Your data never leaves your device.</li>
+      </ul>
+    </div>
+  </section>
+
   <!-- Supported Cards -->
   <section class="cards-section">
     <div class="container" style="padding-top:48px;padding-bottom:48px;">
@@ -319,6 +350,17 @@
         <span class="card-chip">Bilt Palladium</span>
         <span class="card-chip">Amazon Prime Rewards Visa</span>
         <span class="card-chip">U.S. Bank Cash+</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Why Local-First Matters -->
+  <section class="local-first-section">
+    <div class="container">
+      <div class="local-first-box">
+        <div class="local-first-icon">🔒</div>
+        <h3>Your transactions never leave your device.</h3>
+        <p>No account signup. No cloud storage. No Plaid connection. Just drop in a CSV, get your answer, and you're done. Use it once a year at renewal time, or track consistently with Pro. Your choice.</p>
       </div>
     </div>
   </section>
@@ -384,15 +426,6 @@
     </div>
   </section>
 
-  <!-- Privacy -->
-  <section class="privacy">
-    <div class="container">
-      <div class="privacy-icon">🔒</div>
-      <h3>Your data stays on your device</h3>
-      <p>Nothing is uploaded to a server. The tracker runs entirely in your browser using local storage. Export a JSON backup anytime to save or move your data.</p>
-    </div>
-  </section>
-
   <!-- FAQ -->
   <section class="faq-section">
     <div class="container">
@@ -431,8 +464,16 @@
           <div class="faq-a">Because the tracker stores everything in your browser's local storage, your data will be cleared too. Export a JSON backup before clearing your browser and upload it instead of a CSV next time you boot up the tracker. The backup file will restore all your data and preferences.</div>
         </div>
         <div class="faq-item">
+          <div class="faq-q">How is this different from real-time card optimization tools?</div>
+          <div class="faq-a">Those tools help you maximize future purchases by suggesting which card to use at checkout or auto-applying offers. We do something different: we analyze past transaction data to tell you how much value you got from each card and whether the annual fee was worth it.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">Do I need to use this regularly?</div>
+          <div class="faq-a">No. Many people use it just once or twice a year at renewal time. You're also welcome to review your card performance more frequently. You can easily see which credits you haven't used yet.</div>
+        </div>
+        <div class="faq-item">
           <div class="faq-q">Can I use this for cards you don't support yet?</div>
-          <div class="faq-a">Not yet, but new cards are added regularly. Reach out to cardvaluetracker@gmail.com and let us know which card you'd like to see next.</div>
+          <div class="faq-a">Not yet, but new cards are added regularly. Reach out to <span id="faqCardEmail" style="color:#2563eb;cursor:pointer;text-decoration:underline;"></span> and let us know which card you'd like to see next.</div>
         </div>
         <div class="faq-item">
           <div class="faq-q">Who built this?</div>
@@ -448,9 +489,8 @@
       <h2>Stop guessing. Start tracking.</h2>
       <p>Find out which cards are actually earning their annual fee.</p>
       <div class="cta-group">
-        <a href="app.html" class="btn btn-primary">Start Free</a>
+        <a href="app.html" class="btn btn-primary">Try it free</a>
         <a href="demo.html" class="btn btn-secondary">See a Demo</a>
-        <a href="#pricing" class="btn btn-secondary">View Plans</a>
       </div>
     </div>
   </section>
@@ -458,7 +498,7 @@
   <!-- Footer -->
   <footer>
     <div class="container">
-      <p class="footer-note">Built by a lawyer who got tired of spreadsheets, not a professional developer. If something breaks, that's probably why.</p>
+      <p class="footer-note"><span id="footerEmail" style="color:#2563eb;cursor:pointer;text-decoration:underline;"></span></p>
     </div>
   </footer>
 
@@ -468,11 +508,28 @@
   var d = 'gmail';
   var t = 'com';
   var addr = u + '\u0040' + d + '.' + t;
+
   var el = document.getElementById('faqFeatureEmail');
   if (el) {
     el.textContent = addr;
     el.onclick = function() {
       window.location.href = 'mai' + 'lto:' + addr + '?subject=' + encodeURIComponent('Feature Request — Credit Card Value Tracker');
+    };
+  }
+
+  var el2 = document.getElementById('faqCardEmail');
+  if (el2) {
+    el2.textContent = addr;
+    el2.onclick = function() {
+      window.location.href = 'mai' + 'lto:' + addr + '?subject=' + encodeURIComponent('Card Request — Credit Card Value Tracker');
+    };
+  }
+
+  var el3 = document.getElementById('footerEmail');
+  if (el3) {
+    el3.textContent = addr;
+    el3.onclick = function() {
+      window.location.href = 'mai' + 'lto:' + addr;
     };
   }
 })();

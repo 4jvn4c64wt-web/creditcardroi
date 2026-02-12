@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /
+Disallow: /app.html
+Disallow: /app-pro.html
+Disallow: /demo.html
+Disallow: /cards/
+Disallow: /app-core.js
+Disallow: /app.js
+Disallow: /app-pro.js
+Disallow: /csv-parser.js
+Disallow: /classification.js
+Disallow: /merchants.js
+Disallow: /tutorial.js
+
+Sitemap: https://creditcardvaluetracker.com/sitemap.xml

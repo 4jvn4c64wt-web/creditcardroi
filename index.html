@@ -103,30 +103,33 @@
     .pricing-features li::before { content: "✓"; position: absolute; left: 0; color: #059669; font-weight: 600; }
     .pricing-card .btn { width: 100%; justify-content: center; margin-top: auto; }
 
-    /* FAQ */
+    /* FAQ accordion */
     .faq-section { padding: 64px 0; border-top: 1px solid #e7e5e4; }
     .faq-list { max-width: 640px; margin: 0 auto; }
-    .faq-item { padding: 20px 0; border-bottom: 1px solid #e7e5e4; }
+    .faq-item { border-bottom: 1px solid #e7e5e4; }
     .faq-item:first-child { border-top: 1px solid #e7e5e4; }
-    .faq-q { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
-    .faq-a { font-size: 15px; color: #57534e; line-height: 1.7; }
+    .faq-q { font-size: 16px; font-weight: 600; padding: 20px 32px 20px 0; cursor: pointer; position: relative; list-style: none; }
+    .faq-q::-webkit-details-marker { display: none; }
+    .faq-q::after { content: "+"; position: absolute; right: 0; top: 20px; font-size: 20px; font-weight: 400; color: #a8a29e; transition: transform 0.2s; }
+    details[open] .faq-q::after { content: "−"; }
+    .faq-a { font-size: 15px; color: #57534e; line-height: 1.7; padding: 0 0 20px; }
 
     /* Problem section */
     .problem-section { padding: 0 0 48px; }
     .problem-box { max-width: 640px; margin: 0 auto; text-align: center; font-size: 17px; color: #57534e; line-height: 1.7; }
 
-    /* What we do */
-    .what-we-do-section { padding: 64px 0; border-top: 1px solid #e7e5e4; }
-    .value-list { max-width: 640px; margin: 32px auto 0; list-style: none; padding: 0; }
-    .value-list li { font-size: 16px; padding: 10px 0 10px 28px; position: relative; color: #44403c; line-height: 1.6; }
+    /* What We Do + Local-First side-by-side */
+    .value-privacy-section { padding: 64px 0; border-top: 1px solid #e7e5e4; }
+    .value-privacy-section .container { max-width: 960px; }
+    .value-privacy-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: stretch; }
+    .value-privacy-card { background: #fff; border: 1px solid #e7e5e4; border-radius: 12px; padding: 32px 28px; }
+    .vp-title { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 16px; }
+    .value-list { list-style: none; padding: 0; margin: 0; }
+    .value-list li { font-size: 15px; padding: 8px 0 8px 24px; position: relative; color: #44403c; line-height: 1.6; }
     .value-list li::before { content: "✓"; position: absolute; left: 0; color: #059669; font-weight: 600; }
-
-    /* Local-first callout */
-    .local-first-section { padding: 48px 0; }
-    .local-first-box { max-width: 640px; margin: 0 auto; text-align: center; background: #f5f5f4; border: 1px solid #e7e5e4; border-radius: 12px; padding: 40px 32px; }
+    .local-first-box { background: #f5f5f4; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; }
     .local-first-icon { font-size: 32px; margin-bottom: 12px; }
-    .local-first-box h3 { font-size: 20px; font-weight: 600; margin-bottom: 10px; }
-    .local-first-box p { font-size: 15px; color: #57534e; line-height: 1.7; max-width: 480px; margin: 0 auto; }
+    .local-first-box p { font-size: 15px; color: #57534e; line-height: 1.7; }
 
     /* Bottom CTA */
     .bottom-cta { text-align: center; padding: 64px 0 48px; }
@@ -147,6 +150,7 @@
       .step:nth-child(even) .step-visual { order: 2; }
       .mock-metrics { grid-template-columns: repeat(3, 1fr); }
       .section-title { font-size: 24px; }
+      .value-privacy-grid { grid-template-columns: 1fr; }
       .pricing-grid { grid-template-columns: 1fr; max-width: 400px; margin-left: auto; margin-right: auto; }
       .bottom-cta h2 { font-size: 26px; }
       .btn { padding: 12px 22px; font-size: 15px; }
@@ -189,7 +193,6 @@
   <section id="how-it-works">
     <div class="container">
       <h2 class="section-title">How It Works</h2>
-      <p class="section-subtitle">Three steps. A few minutes. A clear answer on every card in your wallet.</p>
 
       <div class="steps">
 
@@ -317,17 +320,26 @@
     </div>
   </section>
 
-  <!-- What We Do -->
-  <section class="what-we-do-section">
+  <!-- What We Do + Why Local-First -->
+  <section class="value-privacy-section">
     <div class="container">
-      <h2 class="section-title">What We Do</h2>
-      <ul class="value-list">
-        <li>Analyze past transaction data to show how much value you got from each card</li>
-        <li>Calculate actual rewards earned based on your real spending patterns</li>
-        <li>Factor in statement credits you used and annual fees you paid</li>
-        <li>Show net value per card with full transaction-level explanations</li>
-        <li>Work entirely in your browser. Your data never leaves your device.</li>
-      </ul>
+      <div class="value-privacy-grid">
+        <div class="value-privacy-card">
+          <h2 class="vp-title">What We Do</h2>
+          <ul class="value-list">
+            <li>Analyze past transaction data to show how much value you got from each card</li>
+            <li>Calculate actual rewards earned based on your real spending patterns</li>
+            <li>Factor in statement credits you used and annual fees you paid</li>
+            <li>Show net value per card with full transaction-level explanations</li>
+            <li>Work entirely in your browser. Your data never leaves your device.</li>
+          </ul>
+        </div>
+        <div class="value-privacy-card local-first-box">
+          <div class="local-first-icon">🔒</div>
+          <h2 class="vp-title">Your transactions never leave your device.</h2>
+          <p>No account signup. No cloud storage. No Plaid connection. Just drop in a CSV, get your answer, and you're done. Use it once a year at renewal time, or track consistently with Pro. Your choice.</p>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -350,17 +362,6 @@
         <span class="card-chip">Bilt Palladium</span>
         <span class="card-chip">Amazon Prime Rewards Visa</span>
         <span class="card-chip">U.S. Bank Cash+</span>
-      </div>
-    </div>
-  </section>
-
-  <!-- Why Local-First Matters -->
-  <section class="local-first-section">
-    <div class="container">
-      <div class="local-first-box">
-        <div class="local-first-icon">🔒</div>
-        <h3>Your transactions never leave your device.</h3>
-        <p>No account signup. No cloud storage. No Plaid connection. Just drop in a CSV, get your answer, and you're done. Use it once a year at renewal time, or track consistently with Pro. Your choice.</p>
       </div>
     </div>
   </section>
@@ -431,54 +432,54 @@
     <div class="container">
       <h2 class="section-title">Frequently Asked Questions</h2>
       <div class="faq-list">
-        <div class="faq-item">
-          <div class="faq-q">Where can I suggest new features or cards?</div>
+        <details class="faq-item">
+          <summary class="faq-q">Where can I suggest new features or cards?</summary>
           <div class="faq-a">Send your ideas to <span id="faqFeatureEmail" style="color:#2563eb;cursor:pointer;text-decoration:underline;"></span>. Whether it's a card you want supported, a feature you'd find useful, or anything else, your feedback shapes what gets built next.</div>
-        </div>
-        <div class="faq-item">
-          <div class="faq-q">Is my data safe?</div>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Is my data safe?</summary>
           <div class="faq-a">Your data never leaves your browser - no servers or uploads. Everything runs locally.</div>
-        </div>
-        <div class="faq-item">
-          <div class="faq-q">What banks work with this?</div>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">What banks work with this?</summary>
           <div class="faq-a">Any bank or budgeting app that lets you export a CSV. The tracker auto-detects the format.</div>
-        </div>
-        <div class="faq-item">
-          <div class="faq-q">Do you have a privacy policy?</div>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Do you have a privacy policy?</summary>
           <div class="faq-a">We don't collect your transaction data, period. Everything runs locally in your browser. Future Pro users will need to verify a license key online, and Cloudflare handles basic site hosting and analytics. That's it.</div>
-        </div>
-        <div class="faq-item">
-          <div class="faq-q">How accurate is the categorization?</div>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">How accurate is the categorization?</summary>
           <div class="faq-a">The tracker uses a rule-based engine with hundreds of known merchants. When it doesn't recognize a merchant, it looks at other details embedded in the transaction to classify it. If it's still unsure, it defaults safely and flags it for your review. Pro users will be able to add their own merchant rules to improve accuracy over time.</div>
-        </div>
-        <div class="faq-item">
-          <div class="faq-q">Can I map more than one card number to a single card?</div>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Can I map more than one card number to a single card?</summary>
           <div class="faq-a">Yes. This is useful if your card was lost, stolen, or reissued with a new number. You can map multiple card numbers to the same rewards card so all transactions count toward that card's totals.</div>
-        </div>
-        <div class="faq-item">
-          <div class="faq-q">Can I use this on my phone?</div>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Can I use this on my phone?</summary>
           <div class="faq-a">Yes. It runs in any modern browser, including mobile.</div>
-        </div>
-        <div class="faq-item">
-          <div class="faq-q">What happens if I clear my browser?</div>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">What happens if I clear my browser?</summary>
           <div class="faq-a">Because the tracker stores everything in your browser's local storage, your data will be cleared too. Export a JSON backup before clearing your browser and upload it instead of a CSV next time you boot up the tracker. The backup file will restore all your data and preferences.</div>
-        </div>
-        <div class="faq-item">
-          <div class="faq-q">How is this different from real-time card optimization tools?</div>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">How is this different from real-time card optimization tools?</summary>
           <div class="faq-a">Those tools help you maximize future purchases by suggesting which card to use at checkout or auto-applying offers. We do something different: we analyze past transaction data to tell you how much value you got from each card and whether the annual fee was worth it.</div>
-        </div>
-        <div class="faq-item">
-          <div class="faq-q">Do I need to use this regularly?</div>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Do I need to use this regularly?</summary>
           <div class="faq-a">No. Many people use it just once or twice a year at renewal time. You're also welcome to review your card performance more frequently. You can easily see which credits you haven't used yet.</div>
-        </div>
-        <div class="faq-item">
-          <div class="faq-q">Can I use this for cards you don't support yet?</div>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Can I use this for cards you don't support yet?</summary>
           <div class="faq-a">Not yet, but new cards are added regularly. Reach out to <span id="faqCardEmail" style="color:#2563eb;cursor:pointer;text-decoration:underline;"></span> and let us know which card you'd like to see next.</div>
-        </div>
-        <div class="faq-item">
-          <div class="faq-q">Who built this?</div>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Who built this?</summary>
           <div class="faq-a">A lawyer who got tired of spreadsheets.</div>
-        </div>
+        </details>
       </div>
     </div>
   </section>

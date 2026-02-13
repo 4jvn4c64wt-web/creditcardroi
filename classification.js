@@ -22,6 +22,7 @@ window.CardTracker.classification.CATEGORY_HIERARCHY = {
   'farmers-market': 'grocery',
   'butcher': 'grocery',
   'organic-store': 'grocery',
+  'online-grocery': 'grocery', // Falls back to grocery for cards without online-grocery bonus
 
   // Gas/Auto children
   'car-wash': 'gas',
@@ -212,6 +213,36 @@ window.CardTracker.classification.KEYWORD_EXCLUSIONS = {
   'bar': ['barber', 'chocolate bar', 'candy bar', 'granola bar', 'protein bar', 'snack bar', 'handlebar', 'sidebar', 'crossbar', 'toolbar'],
   'insurance': ['aetna cvs', 'cvs aetna']
 };
+
+// =============================================================================
+// ONLINE GROCERY DETECTION (for CSP 3x online grocery bonus)
+// =============================================================================
+// Patterns in transaction descriptions that indicate an online/app grocery order
+// vs an in-store purchase. Online orders typically show ".COM", "ONLINE", "APP",
+// "DELIVERY", "PICKUP", "CURBSIDE", etc. instead of a store number + local city.
+//
+// Two pattern sets: normalized patterns work on normalize()'d text (dots/hyphens stripped),
+// raw patterns work on lowercased-but-otherwise-unmodified text (preserves ".com" etc.)
+window.CardTracker.classification.ONLINE_GROCERY_PATTERNS = [
+  // These work on normalized text (special chars stripped)
+  'online', 'dotcom',
+  ' app ', 'ecom',   // ' app ' (with spaces) to avoid matching "apple valley" etc.
+  'delivery', 'dlvry',
+  'pickup', 'pick up', 'curbside',
+  'shipped', ' digital', ' web'
+];
+
+// Raw patterns checked against lowercase (non-normalized) text to preserve special chars
+window.CardTracker.classification.ONLINE_GROCERY_RAW_PATTERNS = [
+  '.com', '-online', '-app'
+];
+
+// Merchants excluded from online grocery upgrade even if online indicators present.
+// Target, Walmart, and wholesale clubs do NOT qualify for CSP online grocery 3x.
+window.CardTracker.classification.ONLINE_GROCERY_EXCLUSIONS = [
+  'target', 'walmart', 'wal-mart', 'wal mart', 'wmt',
+  'costco', 'sams club', "sam's club", 'sam s club', 'bjs', "bj's", 'bj s'
+];
 
 // =============================================================================
 // CLASSIFICATION ENGINE
@@ -461,6 +492,45 @@ window.CardTracker.classification.checkAddressPatterns = function(normalizedMerc
 };
 
 /**
+ * Check if a grocery transaction description has online purchase indicators.
+ * Looks for patterns like ".com", "ONLINE", "APP", "DELIVERY", "PICKUP", etc.
+ * Excludes Target, Walmart, and wholesale clubs which don't qualify for CSP 3x.
+ * @param {string} normalizedText - normalize()'d text (dots/hyphens stripped)
+ * @param {string} rawLowerText - lowercased raw text (preserves .com, hyphens)
+ */
+window.CardTracker.classification.isOnlineGrocery = function(normalizedText, rawLowerText) {
+  const EXCLUSIONS = window.CardTracker.classification.ONLINE_GROCERY_EXCLUSIONS;
+  const PATTERNS = window.CardTracker.classification.ONLINE_GROCERY_PATTERNS;
+  const RAW_PATTERNS = window.CardTracker.classification.ONLINE_GROCERY_RAW_PATTERNS;
+
+  // Excluded merchants never qualify for online grocery
+  const checkText = rawLowerText || normalizedText;
+  for (const excl of EXCLUSIONS) {
+    if (checkText.includes(excl)) {
+      return false;
+    }
+  }
+
+  // Check normalized text patterns (online, delivery, pickup, etc.)
+  for (const pattern of PATTERNS) {
+    if (normalizedText.includes(pattern)) {
+      return true;
+    }
+  }
+
+  // Check raw text patterns (.com, -online, -app)
+  if (rawLowerText) {
+    for (const pattern of RAW_PATTERNS) {
+      if (rawLowerText.includes(pattern)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+};
+
+/**
  * Special handling for travel classification
  */
 window.CardTracker.classification.classifyTravel = function(normalizedText, cardId) {
@@ -565,6 +635,8 @@ window.CardTracker.classification.classifyMerchant = function(merchant, csvCateg
   const norm = normalize(merchant);
   const normOriginal = normalize(originalStatement || '');
   const combinedNorm = norm + ' ' + normOriginal;
+  // Raw lowercase text preserves .com, hyphens, etc. for online grocery detection
+  const combinedRaw = ((merchant || '') + ' ' + (originalStatement || '')).toLowerCase();
   const cacheKey = norm.substring(0, 50);
   const normCSV = (csvCategory || '').toLowerCase().trim();
 
@@ -602,12 +674,19 @@ window.CardTracker.classification.classifyMerchant = function(merchant, csvCateg
       if (exclusions && exclusions.some(excl => combinedNorm.includes(excl))) {
         continue;
       }
-      state.merchantCache[cacheKey] = cat;
+      // Upgrade grocery → online-grocery if online purchase indicators are present
+      let effectiveCat = cat;
+      if ((cat === 'grocery' || cls.CATEGORY_HIERARCHY[cat] === 'grocery') && cls.isOnlineGrocery(combinedNorm, combinedRaw)) {
+        effectiveCat = 'online-grocery';
+      }
+      state.merchantCache[cacheKey] = effectiveCat;
       return {
-        subcategory: cat,
+        subcategory: effectiveCat,
         confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE,
         source: 'known-merchant',
-        reason: `Known: "${key}"`
+        reason: effectiveCat === 'online-grocery'
+          ? `Known: "${key}" (online)`
+          : `Known: "${key}"`
       };
     }
   }
@@ -717,6 +796,12 @@ window.CardTracker.classification.classifyMerchant = function(merchant, csvCateg
     if (heuristicsAgreeing >= 2) {
       confidence += CONFIDENCE_ADJUSTMENTS.MULTIPLE_HEURISTICS_BONUS;
       reasons.push(`Multiple signals bonus (+${CONFIDENCE_ADJUSTMENTS.MULTIPLE_HEURISTICS_BONUS})`);
+    }
+
+    // Upgrade grocery → online-grocery if online purchase indicators are present
+    if ((subcategory === 'grocery' || cls.CATEGORY_HIERARCHY[subcategory] === 'grocery') && cls.isOnlineGrocery(combinedNorm, combinedRaw)) {
+      subcategory = 'online-grocery';
+      reasons.push('Online grocery (description heuristic)');
     }
 
     state.merchantCache[cacheKey] = subcategory;

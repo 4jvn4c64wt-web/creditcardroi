@@ -14,6 +14,24 @@ window.CardTracker.cards['chase-sapphire-preferred'] = {
     { name: 'DashPass Membership', amount: 120, keywords: [], manual: true }, // $9.99/month value
   ],
   categories: ['chase-travel', 'dining', 'streaming', 'online-grocery', 'travel', 'lyft', 'other'],
+  // CSP 3x streaming only applies to these specific services (per Chase terms)
+  streamingKeywords: [
+    'apple music', 'apple tv',
+    'disney+', 'disney plus',
+    'fubo',
+    'hbo', 'hbo max', 'max ', 'helpmaxcom',
+    'hulu',
+    'netflix',
+    'pandora',
+    'paramount', 'paramount+', 'paramount plus',
+    'peacock',
+    'showtime', 'sho ',
+    'sirius', 'siriusxm',
+    'sling',
+    'spotify',
+    'vudu',
+    'youtube premium', 'youtube tv'
+  ],
   // Lyft partnership started Jan 12, 2020
   lyftPartnershipStart: '2020-01-12'
 };

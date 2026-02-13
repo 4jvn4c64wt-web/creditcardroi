@@ -1246,6 +1246,16 @@ function getMultiplier(cardId, category, txnDate = null, merchantDesc = '') {
     return { rate: 1, reason: '1x Amex Travel (car rental or other)' };
   }
 
+  // Streaming keyword validation: if card defines streamingKeywords, only give
+  // the streaming bonus when the merchant matches an approved service
+  if (category === 'streaming' && card.streamingKeywords && merchantDesc) {
+    const normDesc = merchantDesc.toLowerCase().replace(/[^a-z0-9\s.+]/g, '');
+    const matched = card.streamingKeywords.some(kw => normDesc.includes(kw));
+    if (!matched) {
+      return { rate: card.baseRate, reason: `${card.baseRate}x base rate (streaming service not in ${card.shortName || card.name} bonus list)` };
+    }
+  }
+
   // Use hierarchy to find the best matching category for this card
   const effectiveCat = getEffectiveCategory(category, cardId);
 

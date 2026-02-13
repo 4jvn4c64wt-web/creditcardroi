@@ -201,7 +201,8 @@ window.CardTracker.merchants = {
   // Additional streaming services
   'max ': 'streaming', 'audible': 'streaming', 'kindle unlimited': 'streaming',
   'espn+': 'streaming', 'discovery+': 'streaming', 'sirius': 'streaming',
-  'crunchyroll': 'streaming', 'fubo': 'streaming', 'sling tv': 'streaming', 'youtube tv': 'streaming',
+  'crunchyroll': 'streaming', 'fubo': 'streaming', 'sling tv': 'streaming', 'sling': 'streaming', 'youtube tv': 'streaming',
+  'showtime': 'streaming', 'sho ': 'streaming', 'vudu': 'streaming',
   'xfinity stream': 'streaming', 'spectrum': 'streaming', 'optimum': 'streaming',
   'headspace': 'streaming', 'calm': 'streaming', 'duolingo': 'streaming', 'masterclass': 'streaming',
   'skillshare': 'streaming', 'brilliant': 'streaming', 'nytimes': 'streaming', 'wsj': 'streaming',

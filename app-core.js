@@ -4648,20 +4648,10 @@ function renderView(view) {
     const currentNetValue = currentTotalPointsValue + currentTotalCredits - currentTotalFees;
 
     // ---- Step 3: Hypothetical wallet calculation ----
-    // Build spending profile by subcategory across all eligible transactions
-    const spendBySubcat = {};
-    eligibleTxns.forEach(t => {
-      const sub = t.subcategory || 'other';
-      if (!spendBySubcat[sub]) spendBySubcat[sub] = [];
-      spendBySubcat[sub].push({
-        amount: Math.abs(t.amount),
-        cardId: t.cardId,
-        date: t.date,
-        merchant: (t.merchant || '') + ' ' + (t.original || ''),
-        multiplier: t.multiplier,
-        subcategory: sub
-      });
-    });
+    // Process each transaction individually for accuracy (time-sensitive rates,
+    // merchant-specific bonuses). Use mapToCardCategory → getMultiplier to match
+    // the same function chain as processTransactions, ensuring 0% optimization
+    // with no card changes produces identical results to the current wallet.
 
     // Hypothetical card data accumulators
     const hypoCards = {};
@@ -4669,20 +4659,45 @@ function renderView(view) {
       hypoCards[cid] = { spend: 0, points: 0, pointsValue: 0, pointsByCategory: {} };
     });
 
-    // For each subcategory, find best card and distribute spend
-    for (const [sub, txns] of Object.entries(spendBySubcat)) {
-      const totalCatSpend = txns.reduce((s, t) => s + t.amount, 0);
+    // Helper to add spend/points to a hypothetical card accumulator
+    function addToHypoCard(targetCardId, sub, spendAmt, txnDate, merchantDesc) {
+      if (!hypoCards[targetCardId] || spendAmt <= 0) return;
+      const cardCat = mapToCardCategory(sub, targetCardId, txnDate);
+      const mult = getMultiplier(targetCardId, cardCat, txnDate, merchantDesc);
+      const annAmt = spendAmt * annualizeMultiplier;
+      const pts = annAmt * mult.rate;
+      const pv = pts * getPointValue(targetCardId);
+      hypoCards[targetCardId].spend += annAmt;
+      hypoCards[targetCardId].points += pts;
+      hypoCards[targetCardId].pointsValue += pv;
+      if (!hypoCards[targetCardId].pointsByCategory[cardCat]) {
+        hypoCards[targetCardId].pointsByCategory[cardCat] = { spend: 0, points: 0, pointsValue: 0 };
+      }
+      hypoCards[targetCardId].pointsByCategory[cardCat].spend += annAmt;
+      hypoCards[targetCardId].pointsByCategory[cardCat].points += pts;
+      hypoCards[targetCardId].pointsByCategory[cardCat].pointsValue += pv;
+    }
 
-      // Find best card for this subcategory in hypothetical wallet
+    // Pre-compute best card per subcategory for the hypothetical wallet.
+    // Uses mapToCardCategory → getMultiplier to match processTransactions flow.
+    // For time-sensitive rates, we use the first transaction in each subcategory
+    // as a representative — the per-transaction processing below handles the
+    // actual points calculation with each transaction's real date/merchant.
+    const bestCardBySubcat = {};
+    const subcatTxnGroups = {};
+    eligibleTxns.forEach(t => {
+      const sub = t.subcategory || 'other';
+      if (!subcatTxnGroups[sub]) subcatTxnGroups[sub] = [];
+      subcatTxnGroups[sub].push(t);
+    });
+
+    for (const [sub, txns] of Object.entries(subcatTxnGroups)) {
       let bestCardId = null;
       let bestRate = 0;
       let bestPV = 0;
       for (const cid of hypoCardIds) {
-        const effCat = getEffectiveCategory(sub, cid);
-        // Use a representative date from the txns
-        const repDate = txns[0]?.date || null;
-        const repMerchant = txns[0]?.merchant || '';
-        const result = getMultiplier(cid, effCat, repDate, repMerchant);
+        const cardCat = mapToCardCategory(sub, cid);
+        const result = getMultiplier(cid, cardCat, txns[0]?.date, (txns[0]?.merchant || '') + ' ' + (txns[0]?.original || ''));
         const pv = getPointValue(cid);
         if (result.rate > bestRate || (result.rate === bestRate && pv > bestPV)) {
           bestRate = result.rate;
@@ -4691,66 +4706,28 @@ function renderView(view) {
         }
       }
       if (!bestCardId && hypoCardIds.length > 0) bestCardId = hypoCardIds[0];
-      if (!bestCardId) continue;
-
-      // Spend that goes to best card (optimized portion)
-      const optimizedSpend = totalCatSpend * optRate;
-      // Remaining spend stays distributed
-      const remainingSpend = totalCatSpend - optimizedSpend;
-
-      // Allocate optimized portion to best card
-      if (optimizedSpend > 0 && hypoCards[bestCardId]) {
-        const effCat = getEffectiveCategory(sub, bestCardId);
-        const cardCat = mapToCardCategory(sub, bestCardId);
-        const mult = getMultiplier(bestCardId, effCat, txns[0]?.date, txns[0]?.merchant || '');
-        const pts = optimizedSpend * annualizeMultiplier * mult.rate;
-        const pv = pts * getPointValue(bestCardId);
-        hypoCards[bestCardId].spend += optimizedSpend * annualizeMultiplier;
-        hypoCards[bestCardId].points += pts;
-        hypoCards[bestCardId].pointsValue += pv;
-        if (!hypoCards[bestCardId].pointsByCategory[cardCat]) {
-          hypoCards[bestCardId].pointsByCategory[cardCat] = { spend: 0, points: 0, pointsValue: 0 };
-        }
-        hypoCards[bestCardId].pointsByCategory[cardCat].spend += optimizedSpend * annualizeMultiplier;
-        hypoCards[bestCardId].pointsByCategory[cardCat].points += pts;
-        hypoCards[bestCardId].pointsByCategory[cardCat].pointsValue += pv;
-      }
-
-      // Distribute remaining spend proportionally to actual cards
-      if (remainingSpend > 0) {
-        // Build share map from actual txn distribution
-        const shareByCard = {};
-        txns.forEach(t => {
-          if (!shareByCard[t.cardId]) shareByCard[t.cardId] = 0;
-          shareByCard[t.cardId] += t.amount;
-        });
-
-        for (const [origCardId, origAmount] of Object.entries(shareByCard)) {
-          const share = origAmount / totalCatSpend;
-          const staySpend = remainingSpend * share;
-
-          // If card still in hypo wallet, keep on same card; otherwise redirect to best
-          const targetCardId = hypoCardIds.includes(origCardId) ? origCardId : bestCardId;
-          if (!hypoCards[targetCardId]) continue;
-
-          const effCat = getEffectiveCategory(sub, targetCardId);
-          const cardCat = mapToCardCategory(sub, targetCardId);
-          const mult = getMultiplier(targetCardId, effCat, txns[0]?.date, txns[0]?.merchant || '');
-          const pts = staySpend * annualizeMultiplier * mult.rate;
-          const pv = pts * getPointValue(targetCardId);
-
-          hypoCards[targetCardId].spend += staySpend * annualizeMultiplier;
-          hypoCards[targetCardId].points += pts;
-          hypoCards[targetCardId].pointsValue += pv;
-          if (!hypoCards[targetCardId].pointsByCategory[cardCat]) {
-            hypoCards[targetCardId].pointsByCategory[cardCat] = { spend: 0, points: 0, pointsValue: 0 };
-          }
-          hypoCards[targetCardId].pointsByCategory[cardCat].spend += staySpend * annualizeMultiplier;
-          hypoCards[targetCardId].pointsByCategory[cardCat].points += pts;
-          hypoCards[targetCardId].pointsByCategory[cardCat].pointsValue += pv;
-        }
-      }
+      bestCardBySubcat[sub] = bestCardId;
     }
+
+    // Process each transaction individually
+    eligibleTxns.forEach(t => {
+      const sub = t.subcategory || 'other';
+      const amt = Math.abs(t.amount);
+      const merchantDesc = (t.merchant || '') + ' ' + (t.original || '');
+      const bestCardId = bestCardBySubcat[sub];
+      if (!bestCardId) return;
+
+      // Optimized portion goes to best card
+      const optimizedAmt = amt * optRate;
+      // Stays portion on original card (or redirected if removed)
+      const staysAmt = amt - optimizedAmt;
+
+      addToHypoCard(bestCardId, sub, optimizedAmt, t.date, merchantDesc);
+
+      // Stays: keep on original card if still in wallet, otherwise redirect to best
+      const staysTarget = hypoCardIds.includes(t.cardId) ? t.cardId : bestCardId;
+      addToHypoCard(staysTarget, sub, staysAmt, t.date, merchantDesc);
+    });
 
     // Build hypothetical summaries with credits and fees
     let hypoTotalPointsValue = 0;

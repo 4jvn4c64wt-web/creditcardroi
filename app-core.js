@@ -4485,12 +4485,13 @@ function renderView(view) {
         creditAmounts: {},      // { "cardId:creditName": number }
         selectedYear: state.selectedYear,
         // Guided workflow state
-        step: 1,          // Current active step (1-4)
+        step: 1,          // Current active step (1-4, 3.5 for wallet choice)
         scenario: null,   // 'add' | 'remove' | 'swap'
         addCard: null,     // cardId to add
         removeCard: null,  // cardId to remove
         detailsOpen: false,
-        editingFrom: null  // step user was on when they clicked "Change"
+        editingFrom: null, // step user was on when they clicked "Change"
+        walletMode: null   // null = not chosen, 'base' = year-only cards, 'full' = all current cards
       };
     }
     const wi = state.whatif;
@@ -4537,17 +4538,22 @@ function renderView(view) {
 
     // All mapped cards (needed for dropdowns — shows all cards user has ever mapped)
     const allMappedCardIds = [...new Set(Object.values(state.cardMappings))].filter(id => id && id !== 'skip' && CARDS[id]);
-    // Current wallet for selected year — only cards with transactions in that year
+    // Cards with actual transactions in the selected year
     const yearCardIds = new Set();
     yearTxns.forEach(t => { if (t.cardId && t.cardId !== 'skip') yearCardIds.add(t.cardId); });
-    const currentCardIds = allMappedCardIds.filter(id => yearCardIds.has(id));
+    const baseYearCardIds = allMappedCardIds.filter(id => yearCardIds.has(id));
+    // Cards mapped now but with no transactions in the selected year
+    const mismatchedCardIds = allMappedCardIds.filter(id => !yearCardIds.has(id));
 
-    // Hypothetical wallet — includes ALL currently-mapped cards (not just base year)
-    // because the user has these cards NOW, even if they didn't during the base year.
-    // This prevents cards like CFU from absorbing spend that newer cards would handle.
-    const hypoCardIds = allMappedCardIds
+    // Determine which cards are in the "current" and "hypothetical" wallets
+    // based on the user's wallet mode choice (Step 3b).
+    // Option 1 ('base'): only cards with real data — pure comparison
+    // Option 2 ('full'): all mapped cards on both sides — more realistic but estimated
+    const includeFullWallet = wi.walletMode === 'full' && mismatchedCardIds.length > 0;
+    const currentCardIds = includeFullWallet ? allMappedCardIds : baseYearCardIds;
+    const hypoCardIds = currentCardIds
       .filter(id => !wi.removedCards.includes(id))
-      .concat(wi.addedCards.filter(id => !allMappedCardIds.includes(id)));
+      .concat(wi.addedCards.filter(id => !currentCardIds.includes(id)));
 
     // ---- Step 4: Calculate current optimization rate ----
     let optimalSpend = 0;
@@ -4608,6 +4614,7 @@ function renderView(view) {
     currentCardIds.forEach(cid => {
       const card = CARDS[cid];
       if (!card) return;
+      const isMismatchedCard = mismatchedCardIds.includes(cid); // No base-year data
       const data = currentCards[cid] || { spend: 0, points: 0, pointsValue: 0, pointsByCategory: {} };
       const annSpend = data.spend * annualizeMultiplier;
       const annPoints = data.points * annualizeMultiplier;
@@ -4621,45 +4628,57 @@ function renderView(view) {
         };
       }
 
-      // Credits (not annualized)
-      // Check wi.creditToggles for local overrides (Fix 2: current panel toggles)
+      // Credits
       let credits = 0;
       const creditDetails = [];
       const availableCredits = card.credits || [];
       const disabledList = state.disabledCredits[cid] || [];
-      availableCredits.forEach(cr => {
-        const toggleKey = `current:${cid}:${cr.name}`;
-        // Local WI toggle overrides card config disabled state
-        let disabled;
-        if (wi.creditToggles[toggleKey] !== undefined) {
-          disabled = !wi.creditToggles[toggleKey];
-        } else {
-          disabled = disabledList.includes(cr.name);
-        }
-        // Sum detected credits from transactions
-        let detected = 0;
-        yearTxns.filter(t => t.cardId === cid && t.isCredit && t.creditMatch === cr.name).forEach(t => {
-          detected += Math.abs(t.amount);
-        });
-        // For manual credits, check state.monthlyCredits
-        if (cr.manual) {
-          const monthlyForCard = state.monthlyCredits[cid] || {};
-          const yearData = monthlyForCard[cr.name];
-          let claimedMonths = [];
-          if (Array.isArray(yearData)) {
-            if (!wi.selectedYear || wi.selectedYear === new Date().getFullYear()) claimedMonths = yearData;
-          } else if (typeof yearData === 'object' && yearData) {
-            claimedMonths = yearData[wi.selectedYear] || [];
-          }
-          detected += claimedMonths.length * (cr.amount / 12);
-        }
-        if (!disabled) {
-          credits += detected;
-        }
-        creditDetails.push({ name: cr.name, amount: detected, disabled, maxAmount: cr.amount });
-      });
 
-      const annualFee = getEffectiveAnnualFee(cid, yearTxns.filter(t => t.cardId === cid));
+      if (isMismatchedCard) {
+        // Mismatched card (no base-year data): default credits ON at full value
+        availableCredits.forEach(cr => {
+          const toggleKey = `current:${cid}:${cr.name}`;
+          let disabled;
+          if (wi.creditToggles[toggleKey] !== undefined) {
+            disabled = !wi.creditToggles[toggleKey];
+          } else {
+            disabled = false; // Default ON for mismatched cards
+          }
+          const amount = cr.amount;
+          if (!disabled) credits += amount;
+          creditDetails.push({ name: cr.name, amount, disabled, isNew: true, maxAmount: cr.amount });
+        });
+      } else {
+        // Card with real base-year data
+        availableCredits.forEach(cr => {
+          const toggleKey = `current:${cid}:${cr.name}`;
+          let disabled;
+          if (wi.creditToggles[toggleKey] !== undefined) {
+            disabled = !wi.creditToggles[toggleKey];
+          } else {
+            disabled = disabledList.includes(cr.name);
+          }
+          let detected = 0;
+          yearTxns.filter(t => t.cardId === cid && t.isCredit && t.creditMatch === cr.name).forEach(t => {
+            detected += Math.abs(t.amount);
+          });
+          if (cr.manual) {
+            const monthlyForCard = state.monthlyCredits[cid] || {};
+            const yearData = monthlyForCard[cr.name];
+            let claimedMonths = [];
+            if (Array.isArray(yearData)) {
+              if (!wi.selectedYear || wi.selectedYear === new Date().getFullYear()) claimedMonths = yearData;
+            } else if (typeof yearData === 'object' && yearData) {
+              claimedMonths = yearData[wi.selectedYear] || [];
+            }
+            detected += claimedMonths.length * (cr.amount / 12);
+          }
+          if (!disabled) credits += detected;
+          creditDetails.push({ name: cr.name, amount: detected, disabled, maxAmount: cr.amount });
+        });
+      }
+
+      const annualFee = isMismatchedCard ? (card.annualFee || 0) : getEffectiveAnnualFee(cid, yearTxns.filter(t => t.cardId === cid));
       const netValue = annPtsValue + credits - annualFee;
 
       currentTotalPointsValue += annPtsValue;
@@ -4673,7 +4692,8 @@ function renderView(view) {
         spend: annSpend, points: annPoints, pointsValue: annPtsValue,
         pointsByCategory: annPBC, credits, creditDetails, annualFee, netValue,
         isRemoved: isBeingRemoved && !isBeingSwapped,
-        isSwapped: isBeingSwapped
+        isSwapped: isBeingSwapped,
+        isEstimated: isMismatchedCard
       });
     });
 
@@ -4808,11 +4828,13 @@ function renderView(view) {
 
       const isSwapped = wi.scenario === 'swap' && cid === wi.addCard;
       const isProposedAdd = wi.addedCards.includes(cid); // Only the explicitly proposed card
+      const isMismatchedCard = mismatchedCardIds.includes(cid);
       hypoCardSummaries.push({
         cardId: cid, cardName: card.shortName || card.name,
         spend: data.spend, points: data.points, pointsValue: data.pointsValue,
         pointsByCategory: data.pointsByCategory, credits, creditDetails,
-        annualFee, netValue, isNew: isProposedAdd && !isSwapped, isSwapped
+        annualFee, netValue, isNew: isProposedAdd && !isSwapped, isSwapped,
+        isEstimated: isMismatchedCard
       });
     });
 
@@ -4859,7 +4881,7 @@ function renderView(view) {
         return `
           <div class="wi-card-row">
             <div class="wi-card-summary" data-wi-row="${rowId}">
-              <span style="font-weight:500;">${escapeHtml(cs.cardName)}${cs.isNew ? ' <span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:3px;">NEW</span>' : ''}${cs.isSwapped ? ' <span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:3px;">SWAP</span>' : ''}${cs.isRemoved ? ' <span style="font-size:10px;background:#fee2e2;color:#991b1b;padding:1px 6px;border-radius:3px;">REMOVED</span>' : ''}</span>
+              <span style="font-weight:500;">${escapeHtml(cs.cardName)}${cs.isNew ? ' <span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:3px;">NEW</span>' : ''}${cs.isSwapped ? ' <span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:3px;">SWAP</span>' : ''}${cs.isRemoved ? ' <span style="font-size:10px;background:#fee2e2;color:#991b1b;padding:1px 6px;border-radius:3px;">REMOVED</span>' : ''}${cs.isEstimated ? ' <span style="font-size:10px;background:#f3e8ff;color:#6b21a8;padding:1px 6px;border-radius:3px;">ESTIMATED</span>' : ''}</span>
               <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:${netColor};">${prefix}${formatCurrencyPrecise(cs.netValue)}</span>
             </div>
             <div class="wi-card-detail" id="${rowId}">
@@ -5031,6 +5053,44 @@ function renderView(view) {
       }
     }
 
+    // Step 3b HTML (wallet choice — only shown when mismatched cards exist)
+    let step3bHtml = '';
+    if (mismatchedCardIds.length > 0 && wi.step >= 3.5) {
+      if (wi.step === 3.5) {
+        const mismatchedNames = mismatchedCardIds.map(id => CARDS[id]?.shortName || CARDS[id]?.name || id);
+        step3bHtml = `
+          <div class="wi-step">
+            <div class="wi-step-active">
+              <h3>Your current wallet includes cards that weren't active in ${wi.selectedYear}:</h3>
+              <div style="margin-bottom:16px;">
+                ${mismatchedNames.map(n => `<span style="display:inline-block;background:#f3e8ff;color:#6b21a8;font-size:12px;font-weight:500;padding:3px 10px;border-radius:6px;margin:3px 4px 3px 0;">${escapeHtml(n)}</span>`).join('')}
+              </div>
+              <div class="wi-wallet-options">
+                <div class="wi-wallet-option ${wi.walletMode === 'base' ? 'selected' : ''}" data-wallet-mode="base">
+                  <div style="font-weight:600;font-size:14px;margin-bottom:4px;">Use only my ${wi.selectedYear} wallet</div>
+                  <div style="font-size:12px;color:#57534e;line-height:1.4;">Compare using only the cards you actually used in ${wi.selectedYear}. Every number is based on real transactions.</div>
+                </div>
+                <div class="wi-wallet-option ${wi.walletMode === 'full' ? 'selected' : ''}" data-wallet-mode="full">
+                  <div style="font-weight:600;font-size:14px;margin-bottom:4px;">Include my full current wallet</div>
+                  <div style="font-size:12px;color:#57534e;line-height:1.4;">Add these cards to both sides of the comparison. Because there's no ${wi.selectedYear} transaction data for these cards, the tool will estimate how your spending would distribute to them based on your optimization rate and current credit use. These are modeled assumptions, not calculations from your actual spending.</div>
+                </div>
+              </div>
+              <button class="wi-btn-next" id="wiNext3b" ${wi.walletMode ? '' : 'disabled'}>See Results</button>
+            </div>
+          </div>`;
+      } else {
+        // Completed step 3b
+        const walletLabel = wi.walletMode === 'full' ? `Full wallet (${mismatchedCardIds.length} estimated)` : `${wi.selectedYear} wallet only`;
+        step3bHtml = `
+          <div class="wi-step">
+            <div class="wi-step-done" data-goto-step="3.5">
+              <div><span class="wi-step-label">Wallet</span> <span class="wi-step-val">${escapeHtml(walletLabel)}</span></div>
+              <span class="wi-step-edit">Change</span>
+            </div>
+          </div>`;
+      }
+    }
+
     // Step 4 HTML (Result)
     let step4Html = '';
     if (wi.step >= 4) {
@@ -5046,6 +5106,7 @@ function renderView(view) {
             <div class="wi-result-delta ${deltaClass}">${deltaSign}~${formatCurrencyPrecise(absDiff)}</div>
             <div class="wi-result-summary">~${formatCurrencyPrecise(currentNetValue)} current → ~${formatCurrencyPrecise(hypoNetValue)} hypothetical</div>
             ${needsAnnualize ? `<div class="wi-result-context">Based on ${monthCount} months of data, annualized to 12 months.</div>` : ''}
+            ${includeFullWallet ? `<div class="wi-result-context">Includes estimated values for ${mismatchedCardIds.map(id => CARDS[id]?.shortName || CARDS[id]?.name).join(', ')} (no ${wi.selectedYear} data).</div>` : ''}
 
             <div class="wi-result-actions">
               <button class="wi-details-toggle" id="wiToggleDetails">
@@ -5086,7 +5147,7 @@ function renderView(view) {
         </div>`;
     }
 
-    container.innerHTML = `<div class="card" style="padding:20px;">${step1Html}${step2Html}${step3Html}${step4Html}</div>`;
+    container.innerHTML = `<div class="card" style="padding:20px;">${step1Html}${step2Html}${step3Html}${step3bHtml}${step4Html}</div>`;
 
     // ---- Event Listeners ----
 
@@ -5117,7 +5178,7 @@ function renderView(view) {
     document.querySelectorAll('[data-goto-step]').forEach(el => {
       el.addEventListener('click', () => {
         wi.editingFrom = wi.step; // Remember where they came from
-        wi.step = parseInt(el.dataset.gotoStep);
+        wi.step = parseFloat(el.dataset.gotoStep);
         renderView('whatif');
       });
     });
@@ -5168,11 +5229,47 @@ function renderView(view) {
     document.getElementById('wiYearSelect')?.addEventListener('change', e => {
       wi.selectedYear = parseInt(e.target.value);
       wi.optimizationRate = null; // Recalculate for new year
+      wi.walletMode = null; // Reset wallet choice — mismatched cards may change
     });
 
-    // Step 3 Next button — jump to where user was if editing, otherwise step 4
+    // Step 3 Next button — show step 3b if mismatched cards exist, otherwise results
     document.getElementById('wiNext3')?.addEventListener('click', () => {
-      wi.step = (wi.editingFrom && wi.editingFrom > 3) ? wi.editingFrom : 4;
+      if (wi.editingFrom && wi.editingFrom > 3) {
+        wi.step = wi.editingFrom;
+        wi.editingFrom = null;
+      } else {
+        // Recompute mismatched cards for the newly selected year
+        const nextYearTxns = wi.selectedYear
+          ? processed.filter(t => wiGetYear(t.date) === wi.selectedYear)
+          : processed;
+        const nextYearCardIds = new Set();
+        nextYearTxns.forEach(t => { if (t.cardId && t.cardId !== 'skip') nextYearCardIds.add(t.cardId); });
+        const hasMismatch = allMappedCardIds.some(id => !nextYearCardIds.has(id));
+        if (hasMismatch && wi.walletMode === null) {
+          wi.step = 3.5;
+        } else {
+          wi.step = 4;
+        }
+        wi.editingFrom = null;
+      }
+      renderView('whatif');
+    });
+
+    // Step 3b: wallet option selection
+    document.querySelectorAll('.wi-wallet-option').forEach(opt => {
+      opt.addEventListener('click', () => {
+        wi.walletMode = opt.dataset.walletMode;
+        renderView('whatif');
+      });
+    });
+
+    // Step 3b Next button
+    document.getElementById('wiNext3b')?.addEventListener('click', () => {
+      if (wi.editingFrom && wi.editingFrom > 3.5) {
+        wi.step = wi.editingFrom;
+      } else {
+        wi.step = 4;
+      }
       wi.editingFrom = null;
       renderView('whatif');
     });
@@ -5187,6 +5284,7 @@ function renderView(view) {
       wi.creditAmounts = {};
       wi.optimizationRate = null;
       wi.detailsOpen = false;
+      wi.walletMode = null;
       renderView('whatif');
     });
 

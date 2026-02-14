@@ -4489,7 +4489,8 @@ function renderView(view) {
         scenario: null,   // 'add' | 'remove' | 'swap'
         addCard: null,     // cardId to add
         removeCard: null,  // cardId to remove
-        detailsOpen: false
+        detailsOpen: false,
+        editingFrom: null  // step user was on when they clicked "Change"
       };
     }
     const wi = state.whatif;
@@ -4554,15 +4555,17 @@ function renderView(view) {
     eligibleTxns.forEach(t => {
       const amt = Math.abs(t.amount);
       totalEligibleSpend += amt;
-      const currentRate = t.multiplier;
-      // Find best rate among current cards
-      let bestRate = 0;
+      const merchantDesc = (t.merchant || '') + ' ' + (t.original || '');
+      // Compare effective value (rate × pointValue) not raw rate
+      const currentEffective = t.multiplier * getPointValue(t.cardId);
+      let bestEffective = 0;
       for (const cid of currentCardIds) {
-        const effCat = getEffectiveCategory(t.subcategory, cid);
-        const testResult = getMultiplier(cid, effCat, t.date, (t.merchant || '') + ' ' + (t.original || ''));
-        if (testResult.rate > bestRate) bestRate = testResult.rate;
+        const cardCat = mapToCardCategory(t.subcategory, cid, t.date);
+        const testResult = getMultiplier(cid, cardCat, t.date, merchantDesc);
+        const effective = testResult.rate * getPointValue(cid);
+        if (effective > bestEffective) bestEffective = effective;
       }
-      if (currentRate >= bestRate) optimalSpend += amt;
+      if (currentEffective >= bestEffective) optimalSpend += amt;
     });
     const calculatedOptRate = totalEligibleSpend > 0 ? Math.round((optimalSpend / totalEligibleSpend) * 100) : 80;
     if (wi.optimizationRate === null) wi.optimizationRate = calculatedOptRate;
@@ -4662,10 +4665,14 @@ function renderView(view) {
       currentTotalCredits += credits;
       currentTotalFees += annualFee;
 
+      const isBeingRemoved = wi.removedCards.includes(cid);
+      const isBeingSwapped = wi.scenario === 'swap' && isBeingRemoved;
       currentCardSummaries.push({
         cardId: cid, cardName: card.shortName || card.name,
         spend: annSpend, points: annPoints, pointsValue: annPtsValue,
-        pointsByCategory: annPBC, credits, creditDetails, annualFee, netValue
+        pointsByCategory: annPBC, credits, creditDetails, annualFee, netValue,
+        isRemoved: isBeingRemoved && !isBeingSwapped,
+        isSwapped: isBeingSwapped
       });
     });
 
@@ -4702,43 +4709,34 @@ function renderView(view) {
       hypoCards[targetCardId].pointsByCategory[cardCat].pointsValue += pv;
     }
 
-    // Pre-compute best card per subcategory for the hypothetical wallet.
-    // Uses mapToCardCategory → getMultiplier to match processTransactions flow.
-    // For time-sensitive rates, we use the first transaction in each subcategory
-    // as a representative — the per-transaction processing below handles the
-    // actual points calculation with each transaction's real date/merchant.
-    const bestCardBySubcat = {};
-    const subcatTxnGroups = {};
-    eligibleTxns.forEach(t => {
-      const sub = t.subcategory || 'other';
-      if (!subcatTxnGroups[sub]) subcatTxnGroups[sub] = [];
-      subcatTxnGroups[sub].push(t);
-    });
-
-    for (const [sub, txns] of Object.entries(subcatTxnGroups)) {
+    // Helper: find best card for a specific transaction using effective value per dollar
+    // (rate × pointValue) rather than raw rate. This ensures cards with lower
+    // multipliers but higher point values are correctly valued (e.g., Amex MR vs Chase UR).
+    // Computed per-transaction to handle time-sensitive rates (CFF quarterly bonuses, etc.)
+    function findBestCard(sub, txnDate, merchantDesc) {
       let bestCardId = null;
-      let bestRate = 0;
-      let bestPV = 0;
+      let bestEffective = 0; // rate × pointValue = dollars earned per dollar spent
       for (const cid of hypoCardIds) {
-        const cardCat = mapToCardCategory(sub, cid);
-        const result = getMultiplier(cid, cardCat, txns[0]?.date, (txns[0]?.merchant || '') + ' ' + (txns[0]?.original || ''));
+        const cardCat = mapToCardCategory(sub, cid, txnDate);
+        const result = getMultiplier(cid, cardCat, txnDate, merchantDesc);
         const pv = getPointValue(cid);
-        if (result.rate > bestRate || (result.rate === bestRate && pv > bestPV)) {
-          bestRate = result.rate;
+        const effective = result.rate * pv;
+        if (effective > bestEffective) {
+          bestEffective = effective;
           bestCardId = cid;
-          bestPV = pv;
         }
       }
       if (!bestCardId && hypoCardIds.length > 0) bestCardId = hypoCardIds[0];
-      bestCardBySubcat[sub] = bestCardId;
+      return bestCardId;
     }
 
-    // Process each transaction individually
+    // Process each transaction individually — best card determined per-transaction
+    // to correctly handle time-sensitive rates (CFF quarterly bonuses, Lyft partnership dates, etc.)
     eligibleTxns.forEach(t => {
       const sub = t.subcategory || 'other';
       const amt = Math.abs(t.amount);
       const merchantDesc = (t.merchant || '') + ' ' + (t.original || '');
-      const bestCardId = bestCardBySubcat[sub];
+      const bestCardId = findBestCard(sub, t.date, merchantDesc);
       if (!bestCardId) return;
 
       // Optimized portion goes to best card
@@ -4807,11 +4805,12 @@ function renderView(view) {
       hypoTotalCredits += credits;
       hypoTotalFees += annualFee;
 
+      const isSwapped = wi.scenario === 'swap' && cid === wi.addCard;
       hypoCardSummaries.push({
         cardId: cid, cardName: card.shortName || card.name,
         spend: data.spend, points: data.points, pointsValue: data.pointsValue,
         pointsByCategory: data.pointsByCategory, credits, creditDetails,
-        annualFee, netValue, isNew: isNewCard
+        annualFee, netValue, isNew: isNewCard && !isSwapped, isSwapped
       });
     });
 
@@ -4857,7 +4856,7 @@ function renderView(view) {
         return `
           <div class="wi-card-row">
             <div class="wi-card-summary" data-wi-row="${rowId}">
-              <span style="font-weight:500;">${escapeHtml(cs.cardName)}${cs.isNew ? ' <span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:3px;">NEW</span>' : ''}</span>
+              <span style="font-weight:500;">${escapeHtml(cs.cardName)}${cs.isNew ? ' <span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:3px;">NEW</span>' : ''}${cs.isSwapped ? ' <span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:3px;">SWAP</span>' : ''}${cs.isRemoved ? ' <span style="font-size:10px;background:#fee2e2;color:#991b1b;padding:1px 6px;border-radius:3px;">REMOVED</span>' : ''}</span>
               <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:${netColor};">${prefix}${formatCurrencyPrecise(cs.netValue)}</span>
             </div>
             <div class="wi-card-detail" id="${rowId}">
@@ -4906,17 +4905,17 @@ function renderView(view) {
           <div class="wi-step-active">
             <h3>What do you want to explore?</h3>
             <div class="wi-scenario-grid">
-              <div class="wi-scenario-card" data-scenario="add">
+              <div class="wi-scenario-card ${wi.scenario === 'add' ? 'selected' : ''}" data-scenario="add">
                 <span class="wi-scenario-icon">+</span>
                 <span class="wi-scenario-title">Add a card</span>
                 <span class="wi-scenario-desc">See how a new card would change your earnings</span>
               </div>
-              <div class="wi-scenario-card" data-scenario="remove">
+              <div class="wi-scenario-card ${wi.scenario === 'remove' ? 'selected' : ''}" data-scenario="remove">
                 <span class="wi-scenario-icon">&minus;</span>
                 <span class="wi-scenario-title">Remove a card</span>
                 <span class="wi-scenario-desc">See what you'd lose by dropping a card</span>
               </div>
-              <div class="wi-scenario-card" data-scenario="swap">
+              <div class="wi-scenario-card ${wi.scenario === 'swap' ? 'selected' : ''}" data-scenario="swap">
                 <span class="wi-scenario-icon">&hArr;</span>
                 <span class="wi-scenario-title">Swap a card</span>
                 <span class="wi-scenario-desc">Replace one card with another</span>
@@ -5100,9 +5099,13 @@ function renderView(view) {
           wi.creditAmounts = {};
           wi.optimizationRate = null;
           wi.detailsOpen = false;
+          wi.scenario = newScenario;
+          wi.step = 2;
+        } else {
+          // Same scenario — return to where user was before editing
+          wi.step = wi.editingFrom || 2;
         }
-        wi.scenario = newScenario;
-        wi.step = 2;
+        wi.editingFrom = null;
         renderView('whatif');
       });
     });
@@ -5110,6 +5113,7 @@ function renderView(view) {
     // Clicking completed steps to go back — preserve existing selections
     document.querySelectorAll('[data-goto-step]').forEach(el => {
       el.addEventListener('click', () => {
+        wi.editingFrom = wi.step; // Remember where they came from
         wi.step = parseInt(el.dataset.gotoStep);
         renderView('whatif');
       });
@@ -5150,9 +5154,10 @@ function renderView(view) {
       }
     });
 
-    // Step 2 Next button
+    // Step 2 Next button — jump to where user was if editing, otherwise step 3
     document.getElementById('wiNext2')?.addEventListener('click', () => {
-      wi.step = 3;
+      wi.step = (wi.editingFrom && wi.editingFrom > 2) ? wi.editingFrom : 3;
+      wi.editingFrom = null;
       renderView('whatif');
     });
 
@@ -5162,9 +5167,10 @@ function renderView(view) {
       wi.optimizationRate = null; // Recalculate for new year
     });
 
-    // Step 3 Next button
+    // Step 3 Next button — jump to where user was if editing, otherwise step 4
     document.getElementById('wiNext3')?.addEventListener('click', () => {
-      wi.step = 4;
+      wi.step = (wi.editingFrom && wi.editingFrom > 3) ? wi.editingFrom : 4;
+      wi.editingFrom = null;
       renderView('whatif');
     });
 

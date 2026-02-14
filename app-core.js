@@ -4515,9 +4515,6 @@ function renderView(view) {
     const wiYears = [...new Set(processed.map(t => wiGetYear(t.date)))].sort((a, b) => b - a);
     if (!wi.selectedYear && wiYears.length > 0) wi.selectedYear = wiYears[0];
 
-    // Current mapped cards (always needed for dropdowns)
-    const currentCardIds = [...new Set(Object.values(state.cardMappings))].filter(id => id && id !== 'skip' && CARDS[id]);
-
     // Sync workflow scenario to addedCards/removedCards
     wi.addedCards = wi.addCard ? [wi.addCard] : [];
     wi.removedCards = wi.removeCard ? [wi.removeCard] : [];
@@ -4536,6 +4533,13 @@ function renderView(view) {
     const monthCount = monthsWithData.size;
     const needsAnnualize = monthCount > 0 && monthCount < 12;
     const annualizeMultiplier = needsAnnualize ? 12 / monthCount : 1;
+
+    // All mapped cards (needed for dropdowns — shows all cards user has ever mapped)
+    const allMappedCardIds = [...new Set(Object.values(state.cardMappings))].filter(id => id && id !== 'skip' && CARDS[id]);
+    // Current wallet for selected year — only cards with transactions in that year
+    const yearCardIds = new Set();
+    yearTxns.forEach(t => { if (t.cardId && t.cardId !== 'skip') yearCardIds.add(t.cardId); });
+    const currentCardIds = allMappedCardIds.filter(id => yearCardIds.has(id));
 
     // Hypothetical wallet
     const hypoCardIds = currentCardIds
@@ -4614,35 +4618,41 @@ function renderView(view) {
       }
 
       // Credits (not annualized)
+      // Check wi.creditToggles for local overrides (Fix 2: current panel toggles)
       let credits = 0;
       const creditDetails = [];
       const availableCredits = card.credits || [];
       const disabledList = state.disabledCredits[cid] || [];
       availableCredits.forEach(cr => {
-        const disabled = disabledList.includes(cr.name);
-        if (!disabled) {
-          // Sum detected credits from transactions
-          let detected = 0;
-          yearTxns.filter(t => t.cardId === cid && t.isCredit && t.creditMatch === cr.name).forEach(t => {
-            detected += Math.abs(t.amount);
-          });
-          // For manual credits, check state.monthlyCredits
-          if (cr.manual) {
-            const monthlyForCard = state.monthlyCredits[cid] || {};
-            const yearData = monthlyForCard[cr.name];
-            let claimedMonths = [];
-            if (Array.isArray(yearData)) {
-              if (!wi.selectedYear || wi.selectedYear === new Date().getFullYear()) claimedMonths = yearData;
-            } else if (typeof yearData === 'object' && yearData) {
-              claimedMonths = yearData[wi.selectedYear] || [];
-            }
-            detected += claimedMonths.length * (cr.amount / 12);
-          }
-          credits += detected;
-          creditDetails.push({ name: cr.name, amount: detected, disabled: false });
+        const toggleKey = `current:${cid}:${cr.name}`;
+        // Local WI toggle overrides card config disabled state
+        let disabled;
+        if (wi.creditToggles[toggleKey] !== undefined) {
+          disabled = !wi.creditToggles[toggleKey];
         } else {
-          creditDetails.push({ name: cr.name, amount: 0, disabled: true });
+          disabled = disabledList.includes(cr.name);
         }
+        // Sum detected credits from transactions
+        let detected = 0;
+        yearTxns.filter(t => t.cardId === cid && t.isCredit && t.creditMatch === cr.name).forEach(t => {
+          detected += Math.abs(t.amount);
+        });
+        // For manual credits, check state.monthlyCredits
+        if (cr.manual) {
+          const monthlyForCard = state.monthlyCredits[cid] || {};
+          const yearData = monthlyForCard[cr.name];
+          let claimedMonths = [];
+          if (Array.isArray(yearData)) {
+            if (!wi.selectedYear || wi.selectedYear === new Date().getFullYear()) claimedMonths = yearData;
+          } else if (typeof yearData === 'object' && yearData) {
+            claimedMonths = yearData[wi.selectedYear] || [];
+          }
+          detected += claimedMonths.length * (cr.amount / 12);
+        }
+        if (!disabled) {
+          credits += detected;
+        }
+        creditDetails.push({ name: cr.name, amount: detected, disabled, maxAmount: cr.amount });
       });
 
       const annualFee = getEffectiveAnnualFee(cid, yearTxns.filter(t => t.cardId === cid));
@@ -4829,24 +4839,17 @@ function renderView(view) {
           `).join('');
 
         const creditRows = cs.creditDetails.map(cd => {
-          const toggleKey = `${cs.cardId}:${cd.name}`;
-          if (isHypo) {
-            return `
-              <div class="wi-credit-row">
-                <span>
-                  <input type="checkbox" class="wi-credit-toggle" data-toggle-key="${escapeHtml(toggleKey)}" ${cd.disabled ? '' : 'checked'}>
-                  <span style="${cd.disabled ? 'text-decoration:line-through;opacity:0.5;' : ''}">${escapeHtml(cd.name)}</span>
-                </span>
-                <span>
-                  ${cd.isNew ? `<input type="number" class="wi-credit-amount-input" data-amount-key="${escapeHtml(toggleKey)}" value="${cd.amount.toFixed(0)}" min="0" max="${cd.maxAmount}" step="1">` : `$${cd.amount.toFixed(0)}`}
-                </span>
-              </div>
-            `;
-          }
+          // Current panel uses "current:" prefix to avoid collisions with hypo toggles
+          const toggleKey = isHypo ? `${cs.cardId}:${cd.name}` : `current:${cs.cardId}:${cd.name}`;
           return `
             <div class="wi-credit-row">
-              <span style="${cd.disabled ? 'text-decoration:line-through;opacity:0.5;' : ''}">${escapeHtml(cd.name)}</span>
-              <span>$${cd.amount.toFixed(0)}</span>
+              <span>
+                <input type="checkbox" class="wi-credit-toggle" data-toggle-key="${escapeHtml(toggleKey)}" ${cd.disabled ? '' : 'checked'}>
+                <span style="${cd.disabled ? 'text-decoration:line-through;opacity:0.5;' : ''}">${escapeHtml(cd.name)}</span>
+              </span>
+              <span>
+                ${(isHypo && cd.isNew) ? `<input type="number" class="wi-credit-amount-input" data-amount-key="${escapeHtml(toggleKey)}" value="${cd.amount.toFixed(0)}" min="0" max="${cd.maxAmount}" step="1">` : `$${cd.amount.toFixed(0)}`}
+              </span>
             </div>
           `;
         }).join('');
@@ -5040,7 +5043,6 @@ function renderView(view) {
             <div class="wi-result-headline">${headlineText}</div>
             <div class="wi-result-delta ${deltaClass}">${deltaSign}~${formatCurrencyPrecise(absDiff)}</div>
             <div class="wi-result-summary">~${formatCurrencyPrecise(currentNetValue)} current → ~${formatCurrencyPrecise(hypoNetValue)} hypothetical</div>
-            <div class="wi-result-context">Your current optimization rate: ${calculatedOptRate}% — this estimate assumes you'd use the best card for each purchase category.</div>
             ${needsAnnualize ? `<div class="wi-result-context">Based on ${monthCount} months of data, annualized to 12 months.</div>` : ''}
 
             <div class="wi-result-actions">
@@ -5052,15 +5054,12 @@ function renderView(view) {
 
             <div class="wi-details-body ${wi.detailsOpen ? 'open' : ''}" id="wiDetailsBody">
               <div class="wi-slider-section">
-                <label>Optimization Rate <span class="help-icon" id="wiSliderHelp" style="cursor:pointer;">?</span></label>
+                <label>Optimization Rate</label>
                 <div class="wi-slider-wrap">
                   <input type="range" id="wiOptSlider" min="0" max="100" step="5" value="${wi.optimizationRate}">
                   <span class="wi-slider-value" id="wiOptValue">${wi.optimizationRate}%</span>
                 </div>
-                <div class="wi-slider-help" id="wiSliderHelpTrigger">What does this mean?</div>
-                <div class="wi-slider-help-body" id="wiSliderHelpBody">
-                  Your optimization rate reflects how often you use the highest-earning card for each spending category. At 100%, all spending goes to the best card. At your current rate of ${calculatedOptRate}%, the model keeps some spending on the cards you actually used. This defaults to your actual rate based on your transaction history.
-                </div>
+                <div style="font-size:12px;color:#78716c;margin-top:6px;">Default ${calculatedOptRate}% based on how often you used the highest-earning card for each category in ${wi.selectedYear}. At 100%, all spend goes to the best card. At lower rates, some spend stays on the cards you actually used.</div>
               </div>
 
               <div class="wi-panels">
@@ -5092,26 +5091,9 @@ function renderView(view) {
     // Step 1: scenario selection
     document.querySelectorAll('.wi-scenario-card').forEach(card => {
       card.addEventListener('click', () => {
-        wi.scenario = card.dataset.scenario;
-        wi.addCard = null;
-        wi.removeCard = null;
-        wi.creditToggles = {};
-        wi.creditAmounts = {};
-        wi.optimizationRate = null;
-        wi.detailsOpen = false;
-        wi.step = 2;
-        renderView('whatif');
-      });
-    });
-
-    // Clicking completed steps to go back
-    document.querySelectorAll('[data-goto-step]').forEach(el => {
-      el.addEventListener('click', () => {
-        const targetStep = parseInt(el.dataset.gotoStep);
-        wi.step = targetStep;
-        // Clear downstream state when going back
-        if (targetStep <= 1) {
-          wi.scenario = null;
+        const newScenario = card.dataset.scenario;
+        if (newScenario !== wi.scenario) {
+          // Scenario changed — clear card selections and downstream state
           wi.addCard = null;
           wi.removeCard = null;
           wi.creditToggles = {};
@@ -5119,20 +5101,32 @@ function renderView(view) {
           wi.optimizationRate = null;
           wi.detailsOpen = false;
         }
-        if (targetStep <= 2) {
-          wi.creditToggles = {};
-          wi.creditAmounts = {};
-          wi.optimizationRate = null;
-          wi.detailsOpen = false;
-        }
+        wi.scenario = newScenario;
+        wi.step = 2;
         renderView('whatif');
       });
     });
 
-    // Step 2: card selectors
+    // Clicking completed steps to go back — preserve existing selections
+    document.querySelectorAll('[data-goto-step]').forEach(el => {
+      el.addEventListener('click', () => {
+        wi.step = parseInt(el.dataset.gotoStep);
+        renderView('whatif');
+      });
+    });
+
+    // Step 2: card selectors — clear credit state when card changes
     document.getElementById('wiAddSelect')?.addEventListener('change', e => {
-      wi.addCard = e.target.value || null;
-      // Enable/disable Next button
+      const newCard = e.target.value || null;
+      if (newCard !== wi.addCard) {
+        // Clear credit toggles/amounts for old add card
+        if (wi.addCard) {
+          Object.keys(wi.creditToggles).forEach(k => { if (k.startsWith(wi.addCard + ':')) delete wi.creditToggles[k]; });
+          Object.keys(wi.creditAmounts).forEach(k => { if (k.startsWith(wi.addCard + ':')) delete wi.creditAmounts[k]; });
+        }
+        wi.optimizationRate = null;
+      }
+      wi.addCard = newCard;
       const btn = document.getElementById('wiNext2');
       if (btn) {
         const canProceed = (wi.scenario === 'add' && wi.addCard) ||
@@ -5142,7 +5136,11 @@ function renderView(view) {
       }
     });
     document.getElementById('wiRemoveSelect')?.addEventListener('change', e => {
-      wi.removeCard = e.target.value || null;
+      const newCard = e.target.value || null;
+      if (newCard !== wi.removeCard) {
+        wi.optimizationRate = null;
+      }
+      wi.removeCard = newCard;
       const btn = document.getElementById('wiNext2');
       if (btn) {
         const canProceed = (wi.scenario === 'add' && wi.addCard) ||
@@ -5204,15 +5202,6 @@ function renderView(view) {
         renderView('whatif');
       });
     }
-
-    // Slider help toggles
-    document.getElementById('wiSliderHelp')?.addEventListener('click', e => {
-      e.stopPropagation();
-      document.getElementById('wiSliderHelpBody')?.classList.toggle('open');
-    });
-    document.getElementById('wiSliderHelpTrigger')?.addEventListener('click', () => {
-      document.getElementById('wiSliderHelpBody')?.classList.toggle('open');
-    });
 
     // Card row expand/collapse (inside details)
     document.querySelectorAll('.wi-card-summary').forEach(row => {

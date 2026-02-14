@@ -4542,10 +4542,12 @@ function renderView(view) {
     yearTxns.forEach(t => { if (t.cardId && t.cardId !== 'skip') yearCardIds.add(t.cardId); });
     const currentCardIds = allMappedCardIds.filter(id => yearCardIds.has(id));
 
-    // Hypothetical wallet
-    const hypoCardIds = currentCardIds
+    // Hypothetical wallet — includes ALL currently-mapped cards (not just base year)
+    // because the user has these cards NOW, even if they didn't during the base year.
+    // This prevents cards like CFU from absorbing spend that newer cards would handle.
+    const hypoCardIds = allMappedCardIds
       .filter(id => !wi.removedCards.includes(id))
-      .concat(wi.addedCards.filter(id => !currentCardIds.includes(id)));
+      .concat(wi.addedCards.filter(id => !allMappedCardIds.includes(id)));
 
     // ---- Step 4: Calculate current optimization rate ----
     let optimalSpend = 0;
@@ -4556,16 +4558,15 @@ function renderView(view) {
       const amt = Math.abs(t.amount);
       totalEligibleSpend += amt;
       const merchantDesc = (t.merchant || '') + ' ' + (t.original || '');
-      // Compare effective value (rate × pointValue) not raw rate
-      const currentEffective = t.multiplier * getPointValue(t.cardId);
-      let bestEffective = 0;
+      const currentRate = t.multiplier;
+      // Find best rate among current cards using mapToCardCategory → getMultiplier
+      let bestRate = 0;
       for (const cid of currentCardIds) {
         const cardCat = mapToCardCategory(t.subcategory, cid, t.date);
         const testResult = getMultiplier(cid, cardCat, t.date, merchantDesc);
-        const effective = testResult.rate * getPointValue(cid);
-        if (effective > bestEffective) bestEffective = effective;
+        if (testResult.rate > bestRate) bestRate = testResult.rate;
       }
-      if (currentEffective >= bestEffective) optimalSpend += amt;
+      if (currentRate >= bestRate) optimalSpend += amt;
     });
     const calculatedOptRate = totalEligibleSpend > 0 ? Math.round((optimalSpend / totalEligibleSpend) * 100) : 80;
     if (wi.optimizationRate === null) wi.optimizationRate = calculatedOptRate;
@@ -4709,21 +4710,21 @@ function renderView(view) {
       hypoCards[targetCardId].pointsByCategory[cardCat].pointsValue += pv;
     }
 
-    // Helper: find best card for a specific transaction using effective value per dollar
-    // (rate × pointValue) rather than raw rate. This ensures cards with lower
-    // multipliers but higher point values are correctly valued (e.g., Amex MR vs Chase UR).
-    // Computed per-transaction to handle time-sensitive rates (CFF quarterly bonuses, etc.)
+    // Helper: find best card for a specific transaction.
+    // Computed per-transaction to handle time-sensitive rates (CFF quarterly bonuses,
+    // Lyft partnership dates, CSR legacy cutoff, etc.)
     function findBestCard(sub, txnDate, merchantDesc) {
       let bestCardId = null;
-      let bestEffective = 0; // rate × pointValue = dollars earned per dollar spent
+      let bestRate = 0;
+      let bestPV = 0;
       for (const cid of hypoCardIds) {
         const cardCat = mapToCardCategory(sub, cid, txnDate);
         const result = getMultiplier(cid, cardCat, txnDate, merchantDesc);
         const pv = getPointValue(cid);
-        const effective = result.rate * pv;
-        if (effective > bestEffective) {
-          bestEffective = effective;
+        if (result.rate > bestRate || (result.rate === bestRate && pv > bestPV)) {
+          bestRate = result.rate;
           bestCardId = cid;
+          bestPV = pv;
         }
       }
       if (!bestCardId && hypoCardIds.length > 0) bestCardId = hypoCardIds[0];
@@ -4806,11 +4807,12 @@ function renderView(view) {
       hypoTotalFees += annualFee;
 
       const isSwapped = wi.scenario === 'swap' && cid === wi.addCard;
+      const isProposedAdd = wi.addedCards.includes(cid); // Only the explicitly proposed card
       hypoCardSummaries.push({
         cardId: cid, cardName: card.shortName || card.name,
         spend: data.spend, points: data.points, pointsValue: data.pointsValue,
         pointsByCategory: data.pointsByCategory, credits, creditDetails,
-        annualFee, netValue, isNew: isNewCard && !isSwapped, isSwapped
+        annualFee, netValue, isNew: isProposedAdd && !isSwapped, isSwapped
       });
     });
 
@@ -4818,8 +4820,9 @@ function renderView(view) {
     const netDifference = hypoNetValue - currentNetValue;
 
     // Cards available to add (not in current wallet)
+    // Cards available to add — exclude all cards the user currently has mapped
     const availableToAdd = Object.keys(CARDS)
-      .filter(id => id !== 'skip' && !currentCardIds.includes(id))
+      .filter(id => id !== 'skip' && !allMappedCardIds.includes(id))
       .sort((a, b) => (CARDS[a].name || a).localeCompare(CARDS[b].name || b));
 
     // ---- Render card panel (shared by detail section) ----
@@ -4953,7 +4956,7 @@ function renderView(view) {
               <label>Which card are you thinking of dropping?</label>
               <select id="wiRemoveSelect" class="form-select" style="width:100%;max-width:400px;">
                 <option value="">Choose a card...</option>
-                ${currentCardIds.map(id => `<option value="${escapeHtml(id)}" ${wi.removeCard === id ? 'selected' : ''}>${escapeHtml(CARDS[id]?.shortName || CARDS[id]?.name || id)}</option>`).join('')}
+                ${allMappedCardIds.map(id => `<option value="${escapeHtml(id)}" ${wi.removeCard === id ? 'selected' : ''}>${escapeHtml(CARDS[id]?.shortName || CARDS[id]?.name || id)}</option>`).join('')}
               </select>
             </div>`;
         } else if (wi.scenario === 'swap') {
@@ -4962,7 +4965,7 @@ function renderView(view) {
               <label>Which card would you drop?</label>
               <select id="wiRemoveSelect" class="form-select" style="width:100%;max-width:400px;">
                 <option value="">Choose a card...</option>
-                ${currentCardIds.map(id => `<option value="${escapeHtml(id)}" ${wi.removeCard === id ? 'selected' : ''}>${escapeHtml(CARDS[id]?.shortName || CARDS[id]?.name || id)}</option>`).join('')}
+                ${allMappedCardIds.map(id => `<option value="${escapeHtml(id)}" ${wi.removeCard === id ? 'selected' : ''}>${escapeHtml(CARDS[id]?.shortName || CARDS[id]?.name || id)}</option>`).join('')}
               </select>
             </div>
             <div class="wi-select-group">

@@ -3358,7 +3358,11 @@ function showResults(results, isNewUpload = false) {
 function renderView(view) {
   state.activeView = view;
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
-  
+
+  // Hide main stats dashboard when What If is active
+  const topMetrics = document.getElementById('topMetrics');
+  if (topMetrics) topMetrics.style.display = view === 'whatif' ? 'none' : '';
+
   const container = document.getElementById('viewContainer');
   const r = state.results;
   
@@ -4477,9 +4481,15 @@ function renderView(view) {
         addedCards: [],
         removedCards: [],
         optimizationRate: null, // null = use calculated default
-        creditToggles: {},      // { cardId: { creditName: boolean } }
-        creditAmounts: {},      // { cardId: { creditName: number } }
-        selectedYear: state.selectedYear
+        creditToggles: {},      // { "cardId:creditName": boolean }
+        creditAmounts: {},      // { "cardId:creditName": number }
+        selectedYear: state.selectedYear,
+        // Guided workflow state
+        step: 1,          // Current active step (1-4)
+        scenario: null,   // 'add' | 'remove' | 'swap'
+        addCard: null,     // cardId to add
+        removeCard: null,  // cardId to remove
+        detailsOpen: false
       };
     }
     const wi = state.whatif;
@@ -4505,6 +4515,13 @@ function renderView(view) {
     const wiYears = [...new Set(processed.map(t => wiGetYear(t.date)))].sort((a, b) => b - a);
     if (!wi.selectedYear && wiYears.length > 0) wi.selectedYear = wiYears[0];
 
+    // Current mapped cards (always needed for dropdowns)
+    const currentCardIds = [...new Set(Object.values(state.cardMappings))].filter(id => id && id !== 'skip' && CARDS[id]);
+
+    // Sync workflow scenario to addedCards/removedCards
+    wi.addedCards = wi.addCard ? [wi.addCard] : [];
+    wi.removedCards = wi.removeCard ? [wi.removeCard] : [];
+
     // Filter to selected year
     const yearTxns = wi.selectedYear
       ? processed.filter(t => wiGetYear(t.date) === wi.selectedYear)
@@ -4519,9 +4536,6 @@ function renderView(view) {
     const monthCount = monthsWithData.size;
     const needsAnnualize = monthCount > 0 && monthCount < 12;
     const annualizeMultiplier = needsAnnualize ? 12 / monthCount : 1;
-
-    // Current mapped cards
-    const currentCardIds = [...new Set(Object.values(state.cardMappings))].filter(id => id && id !== 'skip' && CARDS[id]);
 
     // Hypothetical wallet
     const hypoCardIds = currentCardIds
@@ -4794,12 +4808,12 @@ function renderView(view) {
     const hypoNetValue = hypoTotalPointsValue + hypoTotalCredits - hypoTotalFees;
     const netDifference = hypoNetValue - currentNetValue;
 
-    // Cards available to add (not in current wallet, not already added)
+    // Cards available to add (not in current wallet)
     const availableToAdd = Object.keys(CARDS)
-      .filter(id => id !== 'skip' && !currentCardIds.includes(id) && !wi.addedCards.includes(id))
+      .filter(id => id !== 'skip' && !currentCardIds.includes(id))
       .sort((a, b) => (CARDS[a].name || a).localeCompare(CARDS[b].name || b));
 
-    // ---- Render the view ----
+    // ---- Render card panel (shared by detail section) ----
     function renderCardPanel(summaries, panelId, isHypo) {
       const prefix = isHypo ? '~' : '';
       return summaries.map(cs => {
@@ -4808,7 +4822,7 @@ function renderView(view) {
         const catRows = Object.entries(cs.pointsByCategory || {})
           .sort((a, b) => b[1].pointsValue - a[1].pointsValue)
           .map(([cat, d]) => `
-            <div class="whatif-cat-row">
+            <div class="wi-cat-row">
               <span>${escapeHtml(cat)} (${formatCurrencyPrecise(d.spend)})</span>
               <span>${formatNumber(Math.round(d.points))} pts / ${prefix}${formatCurrencyPrecise(d.pointsValue)}</span>
             </div>
@@ -4818,19 +4832,19 @@ function renderView(view) {
           const toggleKey = `${cs.cardId}:${cd.name}`;
           if (isHypo) {
             return `
-              <div class="whatif-credit-row">
+              <div class="wi-credit-row">
                 <span>
-                  <input type="checkbox" class="whatif-credit-toggle" data-toggle-key="${escapeHtml(toggleKey)}" ${cd.disabled ? '' : 'checked'}>
+                  <input type="checkbox" class="wi-credit-toggle" data-toggle-key="${escapeHtml(toggleKey)}" ${cd.disabled ? '' : 'checked'}>
                   <span style="${cd.disabled ? 'text-decoration:line-through;opacity:0.5;' : ''}">${escapeHtml(cd.name)}</span>
                 </span>
                 <span>
-                  ${cd.isNew ? `<input type="number" class="whatif-credit-amount-input" data-amount-key="${escapeHtml(toggleKey)}" value="${cd.amount.toFixed(0)}" min="0" max="${cd.maxAmount}" step="1">` : `$${cd.amount.toFixed(0)}`}
+                  ${cd.isNew ? `<input type="number" class="wi-credit-amount-input" data-amount-key="${escapeHtml(toggleKey)}" value="${cd.amount.toFixed(0)}" min="0" max="${cd.maxAmount}" step="1">` : `$${cd.amount.toFixed(0)}`}
                 </span>
               </div>
             `;
           }
           return `
-            <div class="whatif-credit-row">
+            <div class="wi-credit-row">
               <span style="${cd.disabled ? 'text-decoration:line-through;opacity:0.5;' : ''}">${escapeHtml(cd.name)}</span>
               <span>$${cd.amount.toFixed(0)}</span>
             </div>
@@ -4838,18 +4852,18 @@ function renderView(view) {
         }).join('');
 
         return `
-          <div class="whatif-card-row">
-            <div class="whatif-card-summary" data-whatif-row="${rowId}">
+          <div class="wi-card-row">
+            <div class="wi-card-summary" data-wi-row="${rowId}">
               <span style="font-weight:500;">${escapeHtml(cs.cardName)}${cs.isNew ? ' <span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:3px;">NEW</span>' : ''}</span>
               <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:${netColor};">${prefix}${formatCurrencyPrecise(cs.netValue)}</span>
             </div>
-            <div class="whatif-card-detail" id="${rowId}">
-              ${catRows ? `<div class="whatif-section-label">Points by Category</div>${catRows}` : ''}
-              ${creditRows ? `<div class="whatif-section-label">Credits</div>${creditRows}` : ''}
-              <div class="whatif-section-label">Annual Fee</div>
-              <div class="whatif-cat-row"><span>Annual fee</span><span style="color:#dc2626;">-$${cs.annualFee}</span></div>
+            <div class="wi-card-detail" id="${rowId}">
+              ${catRows ? `<div class="wi-section-label">Points by Category</div>${catRows}` : ''}
+              ${creditRows ? `<div class="wi-section-label">Credits</div>${creditRows}` : ''}
+              <div class="wi-section-label">Annual Fee</div>
+              <div class="wi-cat-row"><span>Annual fee</span><span style="color:#dc2626;">-$${cs.annualFee}</span></div>
               <div style="margin-top:8px;padding-top:6px;border-top:1px solid #e7e5e4;">
-                <div class="whatif-cat-row" style="font-weight:600;">
+                <div class="wi-cat-row" style="font-weight:600;">
                   <span>Est. Net Value</span>
                   <span style="color:${netColor};">${prefix}${formatCurrencyPrecise(cs.netValue)}</span>
                 </div>
@@ -4860,154 +4874,330 @@ function renderView(view) {
       }).join('');
     }
 
-    // Added cards chips
-    const addedChipsHtml = wi.addedCards.map(cid => {
-      const card = CARDS[cid];
-      return `<span class="whatif-chip">${escapeHtml(card?.shortName || cid)} <button class="whatif-chip-remove" data-remove-added="${escapeHtml(cid)}">&times;</button></span>`;
-    }).join('');
+    // ---- Build guided workflow HTML ----
+    const scenarioLabels = { add: 'Add a card', remove: 'Remove a card', swap: 'Swap a card' };
+    const addCardName = wi.addCard ? (CARDS[wi.addCard]?.shortName || CARDS[wi.addCard]?.name || wi.addCard) : '';
+    const removeCardName = wi.removeCard ? (CARDS[wi.removeCard]?.shortName || CARDS[wi.removeCard]?.name || wi.removeCard) : '';
 
-    // Removable cards list
-    const removableHtml = currentCardIds.map(cid => {
-      const card = CARDS[cid];
-      const isRemoved = wi.removedCards.includes(cid);
-      return `<label class="whatif-remove-cb"><input type="checkbox" data-remove-card="${escapeHtml(cid)}" ${isRemoved ? 'checked' : ''}> ${escapeHtml(card?.shortName || cid)}</label>`;
-    }).join('');
+    // Build headline for result
+    let headlineText = '';
+    let headlineVerb = '';
+    if (wi.step >= 4) {
+      const absDiff = Math.abs(netDifference);
+      const isPositive = netDifference >= 0;
+      headlineVerb = isPositive ? 'increase' : 'decrease';
+      if (wi.scenario === 'add') {
+        headlineText = `Adding <strong>${escapeHtml(addCardName)}</strong> could ${headlineVerb} your estimated annual value by`;
+      } else if (wi.scenario === 'remove') {
+        headlineText = `Dropping <strong>${escapeHtml(removeCardName)}</strong> could ${headlineVerb} your estimated annual value by`;
+      } else if (wi.scenario === 'swap') {
+        headlineText = `Swapping <strong>${escapeHtml(removeCardName)}</strong> for <strong>${escapeHtml(addCardName)}</strong> could ${headlineVerb} your estimated annual value by`;
+      }
+    }
 
-    const diffColor = netDifference >= 0 ? 'ws-diff-positive' : 'ws-diff-negative';
-    const diffSign = netDifference >= 0 ? '+' : '-';
-
-    container.innerHTML = `
-      <div class="card">
-        <div class="whatif-disclaimer">
-          Estimates based on your actual spending patterns. A full year of transaction data provides the most accurate comparison. When less than 12 months are available, values are annualized from the data present.
-        </div>
-
-        <div class="whatif-summary-bar">
-          <div class="ws-item">
-            <span class="ws-label">Current Wallet</span>
-            <span class="ws-value">~${formatCurrencyPrecise(currentNetValue)}</span>
-          </div>
-          <div class="ws-item">
-            <span class="ws-label">Hypothetical Wallet</span>
-            <span class="ws-value">~${formatCurrencyPrecise(hypoNetValue)}</span>
-          </div>
-          <div class="ws-item">
-            <span class="ws-label">Difference</span>
-            <span class="ws-value ${diffColor}">${diffSign}${formatCurrencyPrecise(Math.abs(netDifference))}</span>
-          </div>
-          <div class="ws-item">
-            <span class="ws-label">Current Optimization</span>
-            <span class="ws-value">${calculatedOptRate}%</span>
-          </div>
-          ${needsAnnualize ? `<div class="ws-item"><span class="ws-label" style="color:#b45309;">Annualized from ${monthCount} months</span></div>` : ''}
-        </div>
-
-        <div class="whatif-controls">
-          <div class="whatif-control-group">
-            <label>Year</label>
-            <select id="whatifYearSelect" class="form-select" style="width:100%;">
-              ${wiYears.map(y => `<option value="${y}" ${wi.selectedYear === y ? 'selected' : ''}>${y}</option>`).join('')}
-            </select>
-          </div>
-
-          <div class="whatif-control-group">
-            <label>Add Cards</label>
-            <select id="whatifAddCard" class="form-select" style="width:100%;">
-              <option value="">Add a card...</option>
-              ${availableToAdd.map(id => `<option value="${escapeHtml(id)}">${escapeHtml(CARDS[id].name)}</option>`).join('')}
-            </select>
-            <div style="margin-top:4px;">${addedChipsHtml}</div>
-          </div>
-
-          <div class="whatif-control-group">
-            <label>Remove Cards</label>
-            <div class="whatif-remove-list">${removableHtml}</div>
-          </div>
-
-          <div class="whatif-control-group">
-            <label>Optimization Rate <span class="help-icon whatif-help-trigger" style="cursor:pointer;">?</span></label>
-            <div class="whatif-slider-wrap">
-              <input type="range" id="whatifOptSlider" min="0" max="100" step="5" value="${wi.optimizationRate}">
-              <span class="whatif-slider-value" id="whatifOptValue">${wi.optimizationRate}%</span>
-            </div>
-            <div class="whatif-help-expandable whatif-help-trigger">What does this mean?</div>
-            <div class="whatif-help-content" id="whatifOptHelp">
-              Your optimization rate reflects how often you use the highest-earning card for each spending category. At 100%, all spending goes to the best card. At your current rate of ${calculatedOptRate}%, the model keeps some spending on the cards you actually used. This defaults to your actual rate based on your transaction history.
+    // Step 1 HTML
+    let step1Html;
+    if (wi.step === 1) {
+      step1Html = `
+        <div class="wi-step">
+          <div class="wi-step-active">
+            <h3>What do you want to explore?</h3>
+            <div class="wi-scenario-grid">
+              <div class="wi-scenario-card" data-scenario="add">
+                <span class="wi-scenario-icon">+</span>
+                <span class="wi-scenario-title">Add a card</span>
+                <span class="wi-scenario-desc">See how a new card would change your earnings</span>
+              </div>
+              <div class="wi-scenario-card" data-scenario="remove">
+                <span class="wi-scenario-icon">&minus;</span>
+                <span class="wi-scenario-title">Remove a card</span>
+                <span class="wi-scenario-desc">See what you'd lose by dropping a card</span>
+              </div>
+              <div class="wi-scenario-card" data-scenario="swap">
+                <span class="wi-scenario-icon">&hArr;</span>
+                <span class="wi-scenario-title">Swap a card</span>
+                <span class="wi-scenario-desc">Replace one card with another</span>
+              </div>
             </div>
           </div>
-        </div>
+        </div>`;
+    } else {
+      step1Html = `
+        <div class="wi-step">
+          <div class="wi-step-done" data-goto-step="1">
+            <div><span class="wi-step-label">Scenario</span> <span class="wi-step-val">${escapeHtml(scenarioLabels[wi.scenario] || '')}</span></div>
+            <span class="wi-step-edit">Change</span>
+          </div>
+        </div>`;
+    }
 
-        <div class="whatif-panels">
-          <div class="whatif-panel">
-            <div class="whatif-panel-header">
-              <span>Current Wallet</span>
-              <span class="wp-total" style="color:${currentNetValue >= 0 ? '#059669' : '#dc2626'};">~${formatCurrencyPrecise(currentNetValue)}</span>
+    // Step 2 HTML
+    let step2Html = '';
+    if (wi.step >= 2) {
+      if (wi.step === 2) {
+        let selectsHtml = '';
+        if (wi.scenario === 'add') {
+          selectsHtml = `
+            <div class="wi-select-group">
+              <label>Which card are you considering?</label>
+              <select id="wiAddSelect" class="form-select" style="width:100%;max-width:400px;">
+                <option value="">Choose a card...</option>
+                ${availableToAdd.map(id => `<option value="${escapeHtml(id)}" ${wi.addCard === id ? 'selected' : ''}>${escapeHtml(CARDS[id].name)}</option>`).join('')}
+              </select>
+            </div>`;
+        } else if (wi.scenario === 'remove') {
+          selectsHtml = `
+            <div class="wi-select-group">
+              <label>Which card are you thinking of dropping?</label>
+              <select id="wiRemoveSelect" class="form-select" style="width:100%;max-width:400px;">
+                <option value="">Choose a card...</option>
+                ${currentCardIds.map(id => `<option value="${escapeHtml(id)}" ${wi.removeCard === id ? 'selected' : ''}>${escapeHtml(CARDS[id]?.shortName || CARDS[id]?.name || id)}</option>`).join('')}
+              </select>
+            </div>`;
+        } else if (wi.scenario === 'swap') {
+          selectsHtml = `
+            <div class="wi-select-group">
+              <label>Which card would you drop?</label>
+              <select id="wiRemoveSelect" class="form-select" style="width:100%;max-width:400px;">
+                <option value="">Choose a card...</option>
+                ${currentCardIds.map(id => `<option value="${escapeHtml(id)}" ${wi.removeCard === id ? 'selected' : ''}>${escapeHtml(CARDS[id]?.shortName || CARDS[id]?.name || id)}</option>`).join('')}
+              </select>
             </div>
-            <div class="whatif-panel-body">
-              ${renderCardPanel(currentCardSummaries, 'current', false)}
+            <div class="wi-select-group">
+              <label>Which card would you add?</label>
+              <select id="wiAddSelect" class="form-select" style="width:100%;max-width:400px;">
+                <option value="">Choose a card...</option>
+                ${availableToAdd.map(id => `<option value="${escapeHtml(id)}" ${wi.addCard === id ? 'selected' : ''}>${escapeHtml(CARDS[id].name)}</option>`).join('')}
+              </select>
+            </div>`;
+        }
+        const canProceed2 = (wi.scenario === 'add' && wi.addCard) ||
+                            (wi.scenario === 'remove' && wi.removeCard) ||
+                            (wi.scenario === 'swap' && wi.addCard && wi.removeCard);
+        step2Html = `
+          <div class="wi-step">
+            <div class="wi-step-active">
+              <h3>Select ${wi.scenario === 'swap' ? 'cards' : 'a card'}</h3>
+              ${selectsHtml}
+              <button class="wi-btn-next" id="wiNext2" ${canProceed2 ? '' : 'disabled'}>Next</button>
+            </div>
+          </div>`;
+      } else {
+        // Completed step 2
+        let step2Label = '';
+        if (wi.scenario === 'add') step2Label = escapeHtml(addCardName);
+        else if (wi.scenario === 'remove') step2Label = escapeHtml(removeCardName);
+        else step2Label = `${escapeHtml(removeCardName)} → ${escapeHtml(addCardName)}`;
+        step2Html = `
+          <div class="wi-step">
+            <div class="wi-step-done" data-goto-step="2">
+              <div><span class="wi-step-label">Card</span> <span class="wi-step-val">${step2Label}</span></div>
+              <span class="wi-step-edit">Change</span>
+            </div>
+          </div>`;
+      }
+    }
+
+    // Step 3 HTML
+    let step3Html = '';
+    if (wi.step >= 3) {
+      if (wi.step === 3) {
+        step3Html = `
+          <div class="wi-step">
+            <div class="wi-step-active">
+              <h3>Which year of spending should we base this on?</h3>
+              <div class="wi-select-group">
+                <select id="wiYearSelect" class="form-select" style="width:100%;max-width:400px;">
+                  ${wiYears.map(y => `<option value="${y}" ${wi.selectedYear === y ? 'selected' : ''}>${y}</option>`).join('')}
+                </select>
+                <p style="font-size:12px;color:#78716c;margin-top:6px;">A full year of data gives the most accurate estimate. Partial years are annualized.</p>
+              </div>
+              <button class="wi-btn-next" id="wiNext3">See Results</button>
+            </div>
+          </div>`;
+      } else {
+        step3Html = `
+          <div class="wi-step">
+            <div class="wi-step-done" data-goto-step="3">
+              <div><span class="wi-step-label">Year</span> <span class="wi-step-val">${wi.selectedYear}</span></div>
+              <span class="wi-step-edit">Change</span>
+            </div>
+          </div>`;
+      }
+    }
+
+    // Step 4 HTML (Result)
+    let step4Html = '';
+    if (wi.step >= 4) {
+      const absDiff = Math.abs(netDifference);
+      const isPositive = netDifference >= 0;
+      const deltaClass = isPositive ? 'positive' : 'negative';
+      const deltaSign = isPositive ? '+' : '-';
+
+      step4Html = `
+        <div class="wi-step">
+          <div class="wi-result-card">
+            <div class="wi-result-headline">${headlineText}</div>
+            <div class="wi-result-delta ${deltaClass}">${deltaSign}~${formatCurrencyPrecise(absDiff)}</div>
+            <div class="wi-result-summary">~${formatCurrencyPrecise(currentNetValue)} current → ~${formatCurrencyPrecise(hypoNetValue)} hypothetical</div>
+            <div class="wi-result-context">Your current optimization rate: ${calculatedOptRate}% — this estimate assumes you'd use the best card for each purchase category.</div>
+            ${needsAnnualize ? `<div class="wi-result-context">Based on ${monthCount} months of data, annualized to 12 months.</div>` : ''}
+
+            <div class="wi-result-actions">
+              <button class="wi-details-toggle" id="wiToggleDetails">
+                <span id="wiDetailsArrow">&#9654;</span> See the details
+              </button>
+              <button class="wi-btn-link" id="wiStartOver">Start over</button>
+            </div>
+
+            <div class="wi-details-body ${wi.detailsOpen ? 'open' : ''}" id="wiDetailsBody">
+              <div class="wi-slider-section">
+                <label>Optimization Rate <span class="help-icon" id="wiSliderHelp" style="cursor:pointer;">?</span></label>
+                <div class="wi-slider-wrap">
+                  <input type="range" id="wiOptSlider" min="0" max="100" step="5" value="${wi.optimizationRate}">
+                  <span class="wi-slider-value" id="wiOptValue">${wi.optimizationRate}%</span>
+                </div>
+                <div class="wi-slider-help" id="wiSliderHelpTrigger">What does this mean?</div>
+                <div class="wi-slider-help-body" id="wiSliderHelpBody">
+                  Your optimization rate reflects how often you use the highest-earning card for each spending category. At 100%, all spending goes to the best card. At your current rate of ${calculatedOptRate}%, the model keeps some spending on the cards you actually used. This defaults to your actual rate based on your transaction history.
+                </div>
+              </div>
+
+              <div class="wi-panels">
+                <div class="wi-panel">
+                  <div class="wi-panel-header">
+                    <span>Current Wallet</span>
+                    <span class="wi-panel-total" style="color:${currentNetValue >= 0 ? '#059669' : '#dc2626'};">~${formatCurrencyPrecise(currentNetValue)}</span>
+                  </div>
+                  <div>${renderCardPanel(currentCardSummaries, 'current', false)}</div>
+                </div>
+                <div class="wi-panel">
+                  <div class="wi-panel-header">
+                    <span>Hypothetical Wallet</span>
+                    <span class="wi-panel-total" style="color:${hypoNetValue >= 0 ? '#059669' : '#dc2626'};">~${formatCurrencyPrecise(hypoNetValue)}</span>
+                  </div>
+                  <div>${renderCardPanel(hypoCardSummaries, 'hypo', true)}</div>
+                </div>
+              </div>
+              <div class="wi-disclaimer">Estimates based on your actual spending patterns. A full year of transaction data provides the most accurate comparison. When less than 12 months are available, values are annualized from the data present.</div>
             </div>
           </div>
+        </div>`;
+    }
 
-          <div class="whatif-panel">
-            <div class="whatif-panel-header">
-              <span>Hypothetical Wallet</span>
-              <span class="wp-total" style="color:${hypoNetValue >= 0 ? '#059669' : '#dc2626'};">~${formatCurrencyPrecise(hypoNetValue)}</span>
-            </div>
-            <div class="whatif-panel-body">
-              ${renderCardPanel(hypoCardSummaries, 'hypo', true)}
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
+    container.innerHTML = `<div class="card" style="padding:20px;">${step1Html}${step2Html}${step3Html}${step4Html}</div>`;
 
     // ---- Event Listeners ----
-    // Year selector
-    document.getElementById('whatifYearSelect')?.addEventListener('change', e => {
-      wi.selectedYear = parseInt(e.target.value);
-      wi.optimizationRate = null; // Recalculate default for new year
-      renderView('whatif');
-    });
 
-    // Add card
-    document.getElementById('whatifAddCard')?.addEventListener('change', e => {
-      if (e.target.value) {
-        wi.addedCards.push(e.target.value);
-        renderView('whatif');
-      }
-    });
-
-    // Remove added card chips
-    document.querySelectorAll('.whatif-chip-remove[data-remove-added]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const cid = btn.dataset.removeAdded;
-        wi.addedCards = wi.addedCards.filter(id => id !== cid);
-        // Clean up credit toggles/amounts for removed card
-        Object.keys(wi.creditToggles).forEach(k => { if (k.startsWith(cid + ':')) delete wi.creditToggles[k]; });
-        Object.keys(wi.creditAmounts).forEach(k => { if (k.startsWith(cid + ':')) delete wi.creditAmounts[k]; });
+    // Step 1: scenario selection
+    document.querySelectorAll('.wi-scenario-card').forEach(card => {
+      card.addEventListener('click', () => {
+        wi.scenario = card.dataset.scenario;
+        wi.addCard = null;
+        wi.removeCard = null;
+        wi.creditToggles = {};
+        wi.creditAmounts = {};
+        wi.optimizationRate = null;
+        wi.detailsOpen = false;
+        wi.step = 2;
         renderView('whatif');
       });
     });
 
-    // Remove current cards checkboxes
-    document.querySelectorAll('[data-remove-card]').forEach(cb => {
-      cb.addEventListener('change', () => {
-        const cid = cb.dataset.removeCard;
-        if (cb.checked) {
-          if (!wi.removedCards.includes(cid)) wi.removedCards.push(cid);
-        } else {
-          wi.removedCards = wi.removedCards.filter(id => id !== cid);
+    // Clicking completed steps to go back
+    document.querySelectorAll('[data-goto-step]').forEach(el => {
+      el.addEventListener('click', () => {
+        const targetStep = parseInt(el.dataset.gotoStep);
+        wi.step = targetStep;
+        // Clear downstream state when going back
+        if (targetStep <= 1) {
+          wi.scenario = null;
+          wi.addCard = null;
+          wi.removeCard = null;
+          wi.creditToggles = {};
+          wi.creditAmounts = {};
+          wi.optimizationRate = null;
+          wi.detailsOpen = false;
+        }
+        if (targetStep <= 2) {
+          wi.creditToggles = {};
+          wi.creditAmounts = {};
+          wi.optimizationRate = null;
+          wi.detailsOpen = false;
         }
         renderView('whatif');
       });
     });
 
-    // Optimization slider
-    const optSlider = document.getElementById('whatifOptSlider');
-    const optValue = document.getElementById('whatifOptValue');
+    // Step 2: card selectors
+    document.getElementById('wiAddSelect')?.addEventListener('change', e => {
+      wi.addCard = e.target.value || null;
+      // Enable/disable Next button
+      const btn = document.getElementById('wiNext2');
+      if (btn) {
+        const canProceed = (wi.scenario === 'add' && wi.addCard) ||
+                           (wi.scenario === 'remove' && wi.removeCard) ||
+                           (wi.scenario === 'swap' && wi.addCard && wi.removeCard);
+        btn.disabled = !canProceed;
+      }
+    });
+    document.getElementById('wiRemoveSelect')?.addEventListener('change', e => {
+      wi.removeCard = e.target.value || null;
+      const btn = document.getElementById('wiNext2');
+      if (btn) {
+        const canProceed = (wi.scenario === 'add' && wi.addCard) ||
+                           (wi.scenario === 'remove' && wi.removeCard) ||
+                           (wi.scenario === 'swap' && wi.addCard && wi.removeCard);
+        btn.disabled = !canProceed;
+      }
+    });
+
+    // Step 2 Next button
+    document.getElementById('wiNext2')?.addEventListener('click', () => {
+      wi.step = 3;
+      renderView('whatif');
+    });
+
+    // Step 3: year selector
+    document.getElementById('wiYearSelect')?.addEventListener('change', e => {
+      wi.selectedYear = parseInt(e.target.value);
+      wi.optimizationRate = null; // Recalculate for new year
+    });
+
+    // Step 3 Next button
+    document.getElementById('wiNext3')?.addEventListener('click', () => {
+      wi.step = 4;
+      renderView('whatif');
+    });
+
+    // Step 4: Start over
+    document.getElementById('wiStartOver')?.addEventListener('click', () => {
+      wi.step = 1;
+      wi.scenario = null;
+      wi.addCard = null;
+      wi.removeCard = null;
+      wi.creditToggles = {};
+      wi.creditAmounts = {};
+      wi.optimizationRate = null;
+      wi.detailsOpen = false;
+      renderView('whatif');
+    });
+
+    // Step 4: Toggle details
+    document.getElementById('wiToggleDetails')?.addEventListener('click', () => {
+      wi.detailsOpen = !wi.detailsOpen;
+      const body = document.getElementById('wiDetailsBody');
+      const arrow = document.getElementById('wiDetailsArrow');
+      if (body) body.classList.toggle('open', wi.detailsOpen);
+      if (arrow) arrow.innerHTML = wi.detailsOpen ? '&#9660;' : '&#9654;';
+    });
+
+    // Optimization slider (inside details)
+    const optSlider = document.getElementById('wiOptSlider');
+    const optValueEl = document.getElementById('wiOptValue');
     if (optSlider) {
       optSlider.addEventListener('input', () => {
-        optValue.textContent = optSlider.value + '%';
+        optValueEl.textContent = optSlider.value + '%';
       });
       optSlider.addEventListener('change', () => {
         wi.optimizationRate = parseInt(optSlider.value);
@@ -5015,17 +5205,26 @@ function renderView(view) {
       });
     }
 
-    // Card row expand/collapse
-    document.querySelectorAll('.whatif-card-summary').forEach(row => {
+    // Slider help toggles
+    document.getElementById('wiSliderHelp')?.addEventListener('click', e => {
+      e.stopPropagation();
+      document.getElementById('wiSliderHelpBody')?.classList.toggle('open');
+    });
+    document.getElementById('wiSliderHelpTrigger')?.addEventListener('click', () => {
+      document.getElementById('wiSliderHelpBody')?.classList.toggle('open');
+    });
+
+    // Card row expand/collapse (inside details)
+    document.querySelectorAll('.wi-card-summary').forEach(row => {
       row.addEventListener('click', () => {
-        const id = row.dataset.whatifRow;
+        const id = row.dataset.wiRow;
         const detail = document.getElementById(id);
         if (detail) detail.classList.toggle('open');
       });
     });
 
-    // Credit toggles (hypothetical panel)
-    document.querySelectorAll('.whatif-credit-toggle').forEach(cb => {
+    // Credit toggles (hypothetical panel inside details)
+    document.querySelectorAll('.wi-credit-toggle').forEach(cb => {
       cb.addEventListener('click', e => e.stopPropagation());
       cb.addEventListener('change', () => {
         wi.creditToggles[cb.dataset.toggleKey] = cb.checked;
@@ -5034,22 +5233,12 @@ function renderView(view) {
     });
 
     // Credit amount inputs (hypothetical panel, new cards)
-    document.querySelectorAll('.whatif-credit-amount-input').forEach(inp => {
+    document.querySelectorAll('.wi-credit-amount-input').forEach(inp => {
       inp.addEventListener('change', () => {
         wi.creditAmounts[inp.dataset.amountKey] = Math.max(0, parseFloat(inp.value) || 0);
         renderView('whatif');
       });
-      // Stop click from collapsing card row
       inp.addEventListener('click', e => e.stopPropagation());
-    });
-
-    // Help expandable
-    document.querySelectorAll('.whatif-help-trigger').forEach(trigger => {
-      trigger.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const helpContent = document.getElementById('whatifOptHelp');
-        if (helpContent) helpContent.classList.toggle('open');
-      });
     });
   }
 }

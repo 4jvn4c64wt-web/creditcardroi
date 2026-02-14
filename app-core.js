@@ -4490,6 +4490,7 @@ function renderView(view) {
         addCard: null,     // cardId to add
         removeCard: null,  // cardId to remove
         detailsOpen: false,
+        expandedCards: {}, // { rowId: true } — tracks which card detail panels are open
         editingFrom: null, // step user was on when they clicked "Change"
         walletMode: null   // null = not chosen, 'base' = year-only cards, 'full' = all current cards
       };
@@ -4580,23 +4581,81 @@ function renderView(view) {
 
     // ---- Step 2: Current wallet panel data ----
     const currentCards = {};
-    eligibleTxns.forEach(t => {
-      const cid = t.cardId;
-      if (!currentCards[cid]) {
+    if (includeFullWallet) {
+      // Full wallet mode: route spend to ALL current cards (including mismatched)
+      // using the same optimization logic as the hypothetical side, so both panels
+      // show comparable predicted spend distributions.
+      currentCardIds.forEach(cid => {
         currentCards[cid] = { spend: 0, points: 0, pointsValue: 0, pointsByCategory: {} };
+      });
+
+      function addToCurrentCard(targetCardId, sub, spendAmt, txnDate, merchantDesc) {
+        if (!currentCards[targetCardId] || spendAmt <= 0) return;
+        const cardCat = mapToCardCategory(sub, targetCardId, txnDate);
+        const mult = getMultiplier(targetCardId, cardCat, txnDate, merchantDesc);
+        const pts = spendAmt * mult.rate;
+        const pv = pts * getPointValue(targetCardId);
+        currentCards[targetCardId].spend += spendAmt;
+        currentCards[targetCardId].points += pts;
+        currentCards[targetCardId].pointsValue += pv;
+        if (!currentCards[targetCardId].pointsByCategory[cardCat]) {
+          currentCards[targetCardId].pointsByCategory[cardCat] = { spend: 0, points: 0, pointsValue: 0 };
+        }
+        currentCards[targetCardId].pointsByCategory[cardCat].spend += spendAmt;
+        currentCards[targetCardId].pointsByCategory[cardCat].points += pts;
+        currentCards[targetCardId].pointsByCategory[cardCat].pointsValue += pv;
       }
-      const amt = Math.abs(t.amount);
-      currentCards[cid].spend += amt;
-      currentCards[cid].points += t.points || 0;
-      currentCards[cid].pointsValue += t.pointsValue || 0;
-      const cat = t.category || 'other';
-      if (!currentCards[cid].pointsByCategory[cat]) {
-        currentCards[cid].pointsByCategory[cat] = { spend: 0, points: 0, pointsValue: 0 };
+
+      function findBestCurrentCard(sub, txnDate, merchantDesc) {
+        let bestCardId = null;
+        let bestRate = 0;
+        let bestPV = 0;
+        for (const cid of currentCardIds) {
+          const cardCat = mapToCardCategory(sub, cid, txnDate);
+          const result = getMultiplier(cid, cardCat, txnDate, merchantDesc);
+          const pv = getPointValue(cid);
+          if (result.rate > bestRate || (result.rate === bestRate && pv > bestPV)) {
+            bestRate = result.rate;
+            bestCardId = cid;
+            bestPV = pv;
+          }
+        }
+        if (!bestCardId && currentCardIds.length > 0) bestCardId = currentCardIds[0];
+        return bestCardId;
       }
-      currentCards[cid].pointsByCategory[cat].spend += amt;
-      currentCards[cid].pointsByCategory[cat].points += t.points || 0;
-      currentCards[cid].pointsByCategory[cat].pointsValue += t.pointsValue || 0;
-    });
+
+      eligibleTxns.forEach(t => {
+        const sub = t.subcategory || 'other';
+        const amt = Math.abs(t.amount);
+        const merchantDesc = (t.merchant || '') + ' ' + (t.original || '');
+        const bestCardId = findBestCurrentCard(sub, t.date, merchantDesc);
+        if (!bestCardId) return;
+        const optimizedAmt = amt * optRate;
+        const staysAmt = amt - optimizedAmt;
+        addToCurrentCard(bestCardId, sub, optimizedAmt, t.date, merchantDesc);
+        const staysTarget = currentCardIds.includes(t.cardId) ? t.cardId : bestCardId;
+        addToCurrentCard(staysTarget, sub, staysAmt, t.date, merchantDesc);
+      });
+    } else {
+      // Base mode: use actual transaction data directly
+      eligibleTxns.forEach(t => {
+        const cid = t.cardId;
+        if (!currentCards[cid]) {
+          currentCards[cid] = { spend: 0, points: 0, pointsValue: 0, pointsByCategory: {} };
+        }
+        const amt = Math.abs(t.amount);
+        currentCards[cid].spend += amt;
+        currentCards[cid].points += t.points || 0;
+        currentCards[cid].pointsValue += t.pointsValue || 0;
+        const cat = t.category || 'other';
+        if (!currentCards[cid].pointsByCategory[cat]) {
+          currentCards[cid].pointsByCategory[cat] = { spend: 0, points: 0, pointsValue: 0 };
+        }
+        currentCards[cid].pointsByCategory[cat].spend += amt;
+        currentCards[cid].pointsByCategory[cat].points += t.points || 0;
+        currentCards[cid].pointsByCategory[cat].pointsValue += t.pointsValue || 0;
+      });
+    }
 
     // Credits for current cards (from actual data)
     yearTxns.filter(t => t.isCredit && t.creditMatch && !t.isRefund).forEach(t => {
@@ -4635,14 +4694,14 @@ function renderView(view) {
       const disabledList = state.disabledCredits[cid] || [];
 
       if (isMismatchedCard) {
-        // Mismatched card (no base-year data): default credits ON at full value
+        // Mismatched card (no base-year data): default credits match card config page
         availableCredits.forEach(cr => {
           const toggleKey = `current:${cid}:${cr.name}`;
           let disabled;
           if (wi.creditToggles[toggleKey] !== undefined) {
             disabled = !wi.creditToggles[toggleKey];
           } else {
-            disabled = false; // Default ON for mismatched cards
+            disabled = disabledList.includes(cr.name); // Match card config page defaults
           }
           const amount = cr.amount;
           if (!disabled) credits += amount;
@@ -4712,10 +4771,12 @@ function renderView(view) {
     });
 
     // Helper to add spend/points to a hypothetical card accumulator
+    // Uses null date so multipliers reflect CURRENT card versions (e.g., Bilt 2.0),
+    // not the historical version from the transaction date.
     function addToHypoCard(targetCardId, sub, spendAmt, txnDate, merchantDesc) {
       if (!hypoCards[targetCardId] || spendAmt <= 0) return;
-      const cardCat = mapToCardCategory(sub, targetCardId, txnDate);
-      const mult = getMultiplier(targetCardId, cardCat, txnDate, merchantDesc);
+      const cardCat = mapToCardCategory(sub, targetCardId, null);
+      const mult = getMultiplier(targetCardId, cardCat, null, merchantDesc);
       const annAmt = spendAmt * annualizeMultiplier;
       const pts = annAmt * mult.rate;
       const pv = pts * getPointValue(targetCardId);
@@ -4730,16 +4791,15 @@ function renderView(view) {
       hypoCards[targetCardId].pointsByCategory[cardCat].pointsValue += pv;
     }
 
-    // Helper: find best card for a specific transaction.
-    // Computed per-transaction to handle time-sensitive rates (CFF quarterly bonuses,
-    // Lyft partnership dates, CSR legacy cutoff, etc.)
+    // Helper: find best card for a specific transaction in the hypothetical wallet.
+    // Uses null date so rates reflect CURRENT card versions, not historical.
     function findBestCard(sub, txnDate, merchantDesc) {
       let bestCardId = null;
       let bestRate = 0;
       let bestPV = 0;
       for (const cid of hypoCardIds) {
-        const cardCat = mapToCardCategory(sub, cid, txnDate);
-        const result = getMultiplier(cid, cardCat, txnDate, merchantDesc);
+        const cardCat = mapToCardCategory(sub, cid, null);
+        const result = getMultiplier(cid, cardCat, null, merchantDesc);
         const pv = getPointValue(cid);
         if (result.rate > bestRate || (result.rate === bestRate && pv > bestPV)) {
           bestRate = result.rate;
@@ -4884,7 +4944,7 @@ function renderView(view) {
               <span style="font-weight:500;">${escapeHtml(cs.cardName)}${cs.isNew ? ' <span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:3px;">NEW</span>' : ''}${cs.isSwapped ? ' <span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:3px;">SWAP</span>' : ''}${cs.isRemoved ? ' <span style="font-size:10px;background:#fee2e2;color:#991b1b;padding:1px 6px;border-radius:3px;">REMOVED</span>' : ''}${cs.isEstimated ? ' <span style="font-size:10px;background:#f3e8ff;color:#6b21a8;padding:1px 6px;border-radius:3px;">ESTIMATED</span>' : ''}</span>
               <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:${netColor};">${prefix}${formatCurrencyPrecise(cs.netValue)}</span>
             </div>
-            <div class="wi-card-detail" id="${rowId}">
+            <div class="wi-card-detail ${wi.expandedCards[rowId] ? 'open' : ''}" id="${rowId}">
               ${catRows ? `<div class="wi-section-label">Points by Category</div>${catRows}` : ''}
               ${creditRows ? `<div class="wi-section-label">Credits</div>${creditRows}` : ''}
               <div class="wi-section-label">Annual Fee</div>
@@ -5310,12 +5370,13 @@ function renderView(view) {
       });
     }
 
-    // Card row expand/collapse (inside details)
+    // Card row expand/collapse (inside details) — persists across re-renders via state
     document.querySelectorAll('.wi-card-summary').forEach(row => {
       row.addEventListener('click', () => {
         const id = row.dataset.wiRow;
+        wi.expandedCards[id] = !wi.expandedCards[id];
         const detail = document.getElementById(id);
-        if (detail) detail.classList.toggle('open');
+        if (detail) detail.classList.toggle('open', wi.expandedCards[id]);
       });
     });
 

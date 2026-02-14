@@ -4461,6 +4461,620 @@ function renderView(view) {
       });
     });
   }
+
+  // =========================================================================
+  // WHAT IF CALCULATOR VIEW (Pro only)
+  // =========================================================================
+  if (view === 'whatif') {
+    if (window.TIER_CONFIG !== 'pro') {
+      container.innerHTML = '<div class="card"><p>This feature requires Pro.</p></div>';
+      return;
+    }
+
+    // Initialize whatif state if needed
+    if (!state.whatif) {
+      state.whatif = {
+        addedCards: [],
+        removedCards: [],
+        optimizationRate: null, // null = use calculated default
+        creditToggles: {},      // { cardId: { creditName: boolean } }
+        creditAmounts: {},      // { cardId: { creditName: number } }
+        selectedYear: state.selectedYear
+      };
+    }
+    const wi = state.whatif;
+    // Sync year with main year selector if not set
+    if (wi.selectedYear === null || wi.selectedYear === undefined) {
+      wi.selectedYear = state.selectedYear || state.availableYears[0] || null;
+    }
+
+    const processed = r.processed;
+
+    // ---- Helper: get year from date string ----
+    function wiGetYear(dateStr) {
+      if (dateStr.includes('-')) return parseInt(dateStr.split('-')[0]);
+      if (dateStr.includes('/')) {
+        const parts = dateStr.split('/');
+        const yp = parts[2];
+        return parseInt(yp.length === 2 ? '20' + yp : yp);
+      }
+      return new Date().getFullYear();
+    }
+
+    // Available years from data
+    const wiYears = [...new Set(processed.map(t => wiGetYear(t.date)))].sort((a, b) => b - a);
+    if (!wi.selectedYear && wiYears.length > 0) wi.selectedYear = wiYears[0];
+
+    // Filter to selected year
+    const yearTxns = wi.selectedYear
+      ? processed.filter(t => wiGetYear(t.date) === wi.selectedYear)
+      : processed;
+
+    // Count months with data for annualization
+    const monthsWithData = new Set();
+    yearTxns.forEach(t => {
+      const parsed = parseDateString(t.date);
+      if (parsed) monthsWithData.add(parsed.month);
+    });
+    const monthCount = monthsWithData.size;
+    const needsAnnualize = monthCount > 0 && monthCount < 12;
+    const annualizeMultiplier = needsAnnualize ? 12 / monthCount : 1;
+
+    // Current mapped cards
+    const currentCardIds = [...new Set(Object.values(state.cardMappings))].filter(id => id && id !== 'skip' && CARDS[id]);
+
+    // Hypothetical wallet
+    const hypoCardIds = currentCardIds
+      .filter(id => !wi.removedCards.includes(id))
+      .concat(wi.addedCards.filter(id => !currentCardIds.includes(id)));
+
+    // ---- Step 4: Calculate current optimization rate ----
+    let optimalSpend = 0;
+    let totalEligibleSpend = 0;
+    const eligibleTxns = yearTxns.filter(t => !t.isPayment && !t.isCredit && !t.isRefund && t.cardId && t.cardId !== 'skip');
+
+    eligibleTxns.forEach(t => {
+      const amt = Math.abs(t.amount);
+      totalEligibleSpend += amt;
+      const currentRate = t.multiplier;
+      // Find best rate among current cards
+      let bestRate = 0;
+      for (const cid of currentCardIds) {
+        const effCat = getEffectiveCategory(t.subcategory, cid);
+        const testResult = getMultiplier(cid, effCat, t.date, (t.merchant || '') + ' ' + (t.original || ''));
+        if (testResult.rate > bestRate) bestRate = testResult.rate;
+      }
+      if (currentRate >= bestRate) optimalSpend += amt;
+    });
+    const calculatedOptRate = totalEligibleSpend > 0 ? Math.round((optimalSpend / totalEligibleSpend) * 100) : 80;
+    if (wi.optimizationRate === null) wi.optimizationRate = calculatedOptRate;
+    const optRate = wi.optimizationRate / 100;
+
+    // ---- Step 2: Current wallet panel data ----
+    const currentCards = {};
+    eligibleTxns.forEach(t => {
+      const cid = t.cardId;
+      if (!currentCards[cid]) {
+        currentCards[cid] = { spend: 0, points: 0, pointsValue: 0, pointsByCategory: {} };
+      }
+      const amt = Math.abs(t.amount);
+      currentCards[cid].spend += amt;
+      currentCards[cid].points += t.points || 0;
+      currentCards[cid].pointsValue += t.pointsValue || 0;
+      const cat = t.category || 'other';
+      if (!currentCards[cid].pointsByCategory[cat]) {
+        currentCards[cid].pointsByCategory[cat] = { spend: 0, points: 0, pointsValue: 0 };
+      }
+      currentCards[cid].pointsByCategory[cat].spend += amt;
+      currentCards[cid].pointsByCategory[cat].points += t.points || 0;
+      currentCards[cid].pointsByCategory[cat].pointsValue += t.pointsValue || 0;
+    });
+
+    // Credits for current cards (from actual data)
+    yearTxns.filter(t => t.isCredit && t.creditMatch && !t.isRefund).forEach(t => {
+      if (!currentCards[t.cardId]) {
+        currentCards[t.cardId] = { spend: 0, points: 0, pointsValue: 0, pointsByCategory: {} };
+      }
+    });
+
+    // Build current wallet totals
+    let currentTotalPointsValue = 0;
+    let currentTotalCredits = 0;
+    let currentTotalFees = 0;
+    const currentCardSummaries = [];
+
+    currentCardIds.forEach(cid => {
+      const card = CARDS[cid];
+      if (!card) return;
+      const data = currentCards[cid] || { spend: 0, points: 0, pointsValue: 0, pointsByCategory: {} };
+      const annSpend = data.spend * annualizeMultiplier;
+      const annPoints = data.points * annualizeMultiplier;
+      const annPtsValue = data.pointsValue * annualizeMultiplier;
+      const annPBC = {};
+      for (const [cat, d] of Object.entries(data.pointsByCategory)) {
+        annPBC[cat] = {
+          spend: d.spend * annualizeMultiplier,
+          points: d.points * annualizeMultiplier,
+          pointsValue: d.pointsValue * annualizeMultiplier
+        };
+      }
+
+      // Credits (not annualized)
+      let credits = 0;
+      const creditDetails = [];
+      const availableCredits = card.credits || [];
+      const disabledList = state.disabledCredits[cid] || [];
+      availableCredits.forEach(cr => {
+        const disabled = disabledList.includes(cr.name);
+        if (!disabled) {
+          // Sum detected credits from transactions
+          let detected = 0;
+          yearTxns.filter(t => t.cardId === cid && t.isCredit && t.creditMatch === cr.name).forEach(t => {
+            detected += Math.abs(t.amount);
+          });
+          // For manual credits, check state.monthlyCredits
+          if (cr.manual) {
+            const monthlyForCard = state.monthlyCredits[cid] || {};
+            const yearData = monthlyForCard[cr.name];
+            let claimedMonths = [];
+            if (Array.isArray(yearData)) {
+              if (!wi.selectedYear || wi.selectedYear === new Date().getFullYear()) claimedMonths = yearData;
+            } else if (typeof yearData === 'object' && yearData) {
+              claimedMonths = yearData[wi.selectedYear] || [];
+            }
+            detected += claimedMonths.length * (cr.amount / 12);
+          }
+          credits += detected;
+          creditDetails.push({ name: cr.name, amount: detected, disabled: false });
+        } else {
+          creditDetails.push({ name: cr.name, amount: 0, disabled: true });
+        }
+      });
+
+      const annualFee = getEffectiveAnnualFee(cid, yearTxns.filter(t => t.cardId === cid));
+      const netValue = annPtsValue + credits - annualFee;
+
+      currentTotalPointsValue += annPtsValue;
+      currentTotalCredits += credits;
+      currentTotalFees += annualFee;
+
+      currentCardSummaries.push({
+        cardId: cid, cardName: card.shortName || card.name,
+        spend: annSpend, points: annPoints, pointsValue: annPtsValue,
+        pointsByCategory: annPBC, credits, creditDetails, annualFee, netValue
+      });
+    });
+
+    const currentNetValue = currentTotalPointsValue + currentTotalCredits - currentTotalFees;
+
+    // ---- Step 3: Hypothetical wallet calculation ----
+    // Build spending profile by subcategory across all eligible transactions
+    const spendBySubcat = {};
+    eligibleTxns.forEach(t => {
+      const sub = t.subcategory || 'other';
+      if (!spendBySubcat[sub]) spendBySubcat[sub] = [];
+      spendBySubcat[sub].push({
+        amount: Math.abs(t.amount),
+        cardId: t.cardId,
+        date: t.date,
+        merchant: (t.merchant || '') + ' ' + (t.original || ''),
+        multiplier: t.multiplier,
+        subcategory: sub
+      });
+    });
+
+    // Hypothetical card data accumulators
+    const hypoCards = {};
+    hypoCardIds.forEach(cid => {
+      hypoCards[cid] = { spend: 0, points: 0, pointsValue: 0, pointsByCategory: {} };
+    });
+
+    // For each subcategory, find best card and distribute spend
+    for (const [sub, txns] of Object.entries(spendBySubcat)) {
+      const totalCatSpend = txns.reduce((s, t) => s + t.amount, 0);
+
+      // Find best card for this subcategory in hypothetical wallet
+      let bestCardId = null;
+      let bestRate = 0;
+      let bestPV = 0;
+      for (const cid of hypoCardIds) {
+        const effCat = getEffectiveCategory(sub, cid);
+        // Use a representative date from the txns
+        const repDate = txns[0]?.date || null;
+        const repMerchant = txns[0]?.merchant || '';
+        const result = getMultiplier(cid, effCat, repDate, repMerchant);
+        const pv = getPointValue(cid);
+        if (result.rate > bestRate || (result.rate === bestRate && pv > bestPV)) {
+          bestRate = result.rate;
+          bestCardId = cid;
+          bestPV = pv;
+        }
+      }
+      if (!bestCardId && hypoCardIds.length > 0) bestCardId = hypoCardIds[0];
+      if (!bestCardId) continue;
+
+      // Spend that goes to best card (optimized portion)
+      const optimizedSpend = totalCatSpend * optRate;
+      // Remaining spend stays distributed
+      const remainingSpend = totalCatSpend - optimizedSpend;
+
+      // Allocate optimized portion to best card
+      if (optimizedSpend > 0 && hypoCards[bestCardId]) {
+        const effCat = getEffectiveCategory(sub, bestCardId);
+        const cardCat = mapToCardCategory(sub, bestCardId);
+        const mult = getMultiplier(bestCardId, effCat, txns[0]?.date, txns[0]?.merchant || '');
+        const pts = optimizedSpend * annualizeMultiplier * mult.rate;
+        const pv = pts * getPointValue(bestCardId);
+        hypoCards[bestCardId].spend += optimizedSpend * annualizeMultiplier;
+        hypoCards[bestCardId].points += pts;
+        hypoCards[bestCardId].pointsValue += pv;
+        if (!hypoCards[bestCardId].pointsByCategory[cardCat]) {
+          hypoCards[bestCardId].pointsByCategory[cardCat] = { spend: 0, points: 0, pointsValue: 0 };
+        }
+        hypoCards[bestCardId].pointsByCategory[cardCat].spend += optimizedSpend * annualizeMultiplier;
+        hypoCards[bestCardId].pointsByCategory[cardCat].points += pts;
+        hypoCards[bestCardId].pointsByCategory[cardCat].pointsValue += pv;
+      }
+
+      // Distribute remaining spend proportionally to actual cards
+      if (remainingSpend > 0) {
+        // Build share map from actual txn distribution
+        const shareByCard = {};
+        txns.forEach(t => {
+          if (!shareByCard[t.cardId]) shareByCard[t.cardId] = 0;
+          shareByCard[t.cardId] += t.amount;
+        });
+
+        for (const [origCardId, origAmount] of Object.entries(shareByCard)) {
+          const share = origAmount / totalCatSpend;
+          const staySpend = remainingSpend * share;
+
+          // If card still in hypo wallet, keep on same card; otherwise redirect to best
+          const targetCardId = hypoCardIds.includes(origCardId) ? origCardId : bestCardId;
+          if (!hypoCards[targetCardId]) continue;
+
+          const effCat = getEffectiveCategory(sub, targetCardId);
+          const cardCat = mapToCardCategory(sub, targetCardId);
+          const mult = getMultiplier(targetCardId, effCat, txns[0]?.date, txns[0]?.merchant || '');
+          const pts = staySpend * annualizeMultiplier * mult.rate;
+          const pv = pts * getPointValue(targetCardId);
+
+          hypoCards[targetCardId].spend += staySpend * annualizeMultiplier;
+          hypoCards[targetCardId].points += pts;
+          hypoCards[targetCardId].pointsValue += pv;
+          if (!hypoCards[targetCardId].pointsByCategory[cardCat]) {
+            hypoCards[targetCardId].pointsByCategory[cardCat] = { spend: 0, points: 0, pointsValue: 0 };
+          }
+          hypoCards[targetCardId].pointsByCategory[cardCat].spend += staySpend * annualizeMultiplier;
+          hypoCards[targetCardId].pointsByCategory[cardCat].points += pts;
+          hypoCards[targetCardId].pointsByCategory[cardCat].pointsValue += pv;
+        }
+      }
+    }
+
+    // Build hypothetical summaries with credits and fees
+    let hypoTotalPointsValue = 0;
+    let hypoTotalCredits = 0;
+    let hypoTotalFees = 0;
+    const hypoCardSummaries = [];
+
+    hypoCardIds.forEach(cid => {
+      const card = CARDS[cid];
+      if (!card) return;
+      const data = hypoCards[cid] || { spend: 0, points: 0, pointsValue: 0, pointsByCategory: {} };
+
+      // Credits: for retained cards, use current state; for new cards, default all ON
+      let credits = 0;
+      const creditDetails = [];
+      const availableCredits = card.credits || [];
+      const isNewCard = !currentCardIds.includes(cid);
+
+      availableCredits.forEach(cr => {
+        // Check toggle state
+        const toggleKey = `${cid}:${cr.name}`;
+        let isOn;
+        if (wi.creditToggles[toggleKey] !== undefined) {
+          isOn = wi.creditToggles[toggleKey];
+        } else if (isNewCard) {
+          isOn = true; // New cards default ON
+        } else {
+          // Retained cards: match current disabled state
+          isOn = !(state.disabledCredits[cid] || []).includes(cr.name);
+        }
+
+        let amount;
+        if (wi.creditAmounts[toggleKey] !== undefined) {
+          amount = wi.creditAmounts[toggleKey];
+        } else if (isNewCard) {
+          amount = cr.amount; // Full value for new cards
+        } else {
+          // Retained: use detected amount from current
+          const currentSummary = currentCardSummaries.find(cs => cs.cardId === cid);
+          const currentCredit = currentSummary?.creditDetails?.find(cd => cd.name === cr.name);
+          amount = currentCredit ? currentCredit.amount : 0;
+        }
+
+        if (isOn) credits += amount;
+        creditDetails.push({ name: cr.name, amount, disabled: !isOn, isNew: isNewCard, maxAmount: cr.amount });
+      });
+
+      // Annual fee
+      const annualFee = isNewCard ? (card.annualFee || 0) : getEffectiveAnnualFee(cid, yearTxns.filter(t => t.cardId === cid));
+      const netValue = data.pointsValue + credits - annualFee;
+
+      hypoTotalPointsValue += data.pointsValue;
+      hypoTotalCredits += credits;
+      hypoTotalFees += annualFee;
+
+      hypoCardSummaries.push({
+        cardId: cid, cardName: card.shortName || card.name,
+        spend: data.spend, points: data.points, pointsValue: data.pointsValue,
+        pointsByCategory: data.pointsByCategory, credits, creditDetails,
+        annualFee, netValue, isNew: isNewCard
+      });
+    });
+
+    const hypoNetValue = hypoTotalPointsValue + hypoTotalCredits - hypoTotalFees;
+    const netDifference = hypoNetValue - currentNetValue;
+
+    // Cards available to add (not in current wallet, not already added)
+    const availableToAdd = Object.keys(CARDS)
+      .filter(id => id !== 'skip' && !currentCardIds.includes(id) && !wi.addedCards.includes(id))
+      .sort((a, b) => (CARDS[a].name || a).localeCompare(CARDS[b].name || b));
+
+    // ---- Render the view ----
+    function renderCardPanel(summaries, panelId, isHypo) {
+      const prefix = isHypo ? '~' : '';
+      return summaries.map(cs => {
+        const rowId = `${panelId}-${cs.cardId.replace(/[^a-z0-9]/gi, '-')}`;
+        const netColor = cs.netValue >= 0 ? '#059669' : '#dc2626';
+        const catRows = Object.entries(cs.pointsByCategory || {})
+          .sort((a, b) => b[1].pointsValue - a[1].pointsValue)
+          .map(([cat, d]) => `
+            <div class="whatif-cat-row">
+              <span>${escapeHtml(cat)} (${formatCurrencyPrecise(d.spend)})</span>
+              <span>${formatNumber(Math.round(d.points))} pts / ${prefix}${formatCurrencyPrecise(d.pointsValue)}</span>
+            </div>
+          `).join('');
+
+        const creditRows = cs.creditDetails.map(cd => {
+          const toggleKey = `${cs.cardId}:${cd.name}`;
+          if (isHypo) {
+            return `
+              <div class="whatif-credit-row">
+                <span>
+                  <input type="checkbox" class="whatif-credit-toggle" data-toggle-key="${escapeHtml(toggleKey)}" ${cd.disabled ? '' : 'checked'}>
+                  <span style="${cd.disabled ? 'text-decoration:line-through;opacity:0.5;' : ''}">${escapeHtml(cd.name)}</span>
+                </span>
+                <span>
+                  ${cd.isNew ? `<input type="number" class="whatif-credit-amount-input" data-amount-key="${escapeHtml(toggleKey)}" value="${cd.amount.toFixed(0)}" min="0" max="${cd.maxAmount}" step="1">` : `$${cd.amount.toFixed(0)}`}
+                </span>
+              </div>
+            `;
+          }
+          return `
+            <div class="whatif-credit-row">
+              <span style="${cd.disabled ? 'text-decoration:line-through;opacity:0.5;' : ''}">${escapeHtml(cd.name)}</span>
+              <span>$${cd.amount.toFixed(0)}</span>
+            </div>
+          `;
+        }).join('');
+
+        return `
+          <div class="whatif-card-row">
+            <div class="whatif-card-summary" data-whatif-row="${rowId}">
+              <span style="font-weight:500;">${escapeHtml(cs.cardName)}${cs.isNew ? ' <span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:3px;">NEW</span>' : ''}</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:${netColor};">${prefix}${formatCurrencyPrecise(cs.netValue)}</span>
+            </div>
+            <div class="whatif-card-detail" id="${rowId}">
+              ${catRows ? `<div class="whatif-section-label">Points by Category</div>${catRows}` : ''}
+              ${creditRows ? `<div class="whatif-section-label">Credits</div>${creditRows}` : ''}
+              <div class="whatif-section-label">Annual Fee</div>
+              <div class="whatif-cat-row"><span>Annual fee</span><span style="color:#dc2626;">-$${cs.annualFee}</span></div>
+              <div style="margin-top:8px;padding-top:6px;border-top:1px solid #e7e5e4;">
+                <div class="whatif-cat-row" style="font-weight:600;">
+                  <span>Est. Net Value</span>
+                  <span style="color:${netColor};">${prefix}${formatCurrencyPrecise(cs.netValue)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Added cards chips
+    const addedChipsHtml = wi.addedCards.map(cid => {
+      const card = CARDS[cid];
+      return `<span class="whatif-chip">${escapeHtml(card?.shortName || cid)} <button class="whatif-chip-remove" data-remove-added="${escapeHtml(cid)}">&times;</button></span>`;
+    }).join('');
+
+    // Removable cards list
+    const removableHtml = currentCardIds.map(cid => {
+      const card = CARDS[cid];
+      const isRemoved = wi.removedCards.includes(cid);
+      return `<label class="whatif-remove-cb"><input type="checkbox" data-remove-card="${escapeHtml(cid)}" ${isRemoved ? 'checked' : ''}> ${escapeHtml(card?.shortName || cid)}</label>`;
+    }).join('');
+
+    const diffColor = netDifference >= 0 ? 'ws-diff-positive' : 'ws-diff-negative';
+    const diffSign = netDifference >= 0 ? '+' : '-';
+
+    container.innerHTML = `
+      <div class="card">
+        <div class="whatif-disclaimer">
+          Estimates based on your actual spending patterns. A full year of transaction data provides the most accurate comparison. When less than 12 months are available, values are annualized from the data present.
+        </div>
+
+        <div class="whatif-summary-bar">
+          <div class="ws-item">
+            <span class="ws-label">Current Wallet</span>
+            <span class="ws-value">~${formatCurrencyPrecise(currentNetValue)}</span>
+          </div>
+          <div class="ws-item">
+            <span class="ws-label">Hypothetical Wallet</span>
+            <span class="ws-value">~${formatCurrencyPrecise(hypoNetValue)}</span>
+          </div>
+          <div class="ws-item">
+            <span class="ws-label">Difference</span>
+            <span class="ws-value ${diffColor}">${diffSign}${formatCurrencyPrecise(Math.abs(netDifference))}</span>
+          </div>
+          <div class="ws-item">
+            <span class="ws-label">Current Optimization</span>
+            <span class="ws-value">${calculatedOptRate}%</span>
+          </div>
+          ${needsAnnualize ? `<div class="ws-item"><span class="ws-label" style="color:#b45309;">Annualized from ${monthCount} months</span></div>` : ''}
+        </div>
+
+        <div class="whatif-controls">
+          <div class="whatif-control-group">
+            <label>Year</label>
+            <select id="whatifYearSelect" class="form-select" style="width:100%;">
+              ${wiYears.map(y => `<option value="${y}" ${wi.selectedYear === y ? 'selected' : ''}>${y}</option>`).join('')}
+            </select>
+          </div>
+
+          <div class="whatif-control-group">
+            <label>Add Cards</label>
+            <select id="whatifAddCard" class="form-select" style="width:100%;">
+              <option value="">Add a card...</option>
+              ${availableToAdd.map(id => `<option value="${escapeHtml(id)}">${escapeHtml(CARDS[id].name)}</option>`).join('')}
+            </select>
+            <div style="margin-top:4px;">${addedChipsHtml}</div>
+          </div>
+
+          <div class="whatif-control-group">
+            <label>Remove Cards</label>
+            <div class="whatif-remove-list">${removableHtml}</div>
+          </div>
+
+          <div class="whatif-control-group">
+            <label>Optimization Rate <span class="help-icon whatif-help-trigger" style="cursor:pointer;">?</span></label>
+            <div class="whatif-slider-wrap">
+              <input type="range" id="whatifOptSlider" min="0" max="100" step="5" value="${wi.optimizationRate}">
+              <span class="whatif-slider-value" id="whatifOptValue">${wi.optimizationRate}%</span>
+            </div>
+            <div class="whatif-help-expandable whatif-help-trigger">What does this mean?</div>
+            <div class="whatif-help-content" id="whatifOptHelp">
+              Your optimization rate reflects how often you use the highest-earning card for each spending category. At 100%, all spending goes to the best card. At your current rate of ${calculatedOptRate}%, the model keeps some spending on the cards you actually used. This defaults to your actual rate based on your transaction history.
+            </div>
+          </div>
+        </div>
+
+        <div class="whatif-panels">
+          <div class="whatif-panel">
+            <div class="whatif-panel-header">
+              <span>Current Wallet</span>
+              <span class="wp-total" style="color:${currentNetValue >= 0 ? '#059669' : '#dc2626'};">~${formatCurrencyPrecise(currentNetValue)}</span>
+            </div>
+            <div class="whatif-panel-body">
+              ${renderCardPanel(currentCardSummaries, 'current', false)}
+            </div>
+          </div>
+
+          <div class="whatif-panel">
+            <div class="whatif-panel-header">
+              <span>Hypothetical Wallet</span>
+              <span class="wp-total" style="color:${hypoNetValue >= 0 ? '#059669' : '#dc2626'};">~${formatCurrencyPrecise(hypoNetValue)}</span>
+            </div>
+            <div class="whatif-panel-body">
+              ${renderCardPanel(hypoCardSummaries, 'hypo', true)}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // ---- Event Listeners ----
+    // Year selector
+    document.getElementById('whatifYearSelect')?.addEventListener('change', e => {
+      wi.selectedYear = parseInt(e.target.value);
+      wi.optimizationRate = null; // Recalculate default for new year
+      renderView('whatif');
+    });
+
+    // Add card
+    document.getElementById('whatifAddCard')?.addEventListener('change', e => {
+      if (e.target.value) {
+        wi.addedCards.push(e.target.value);
+        renderView('whatif');
+      }
+    });
+
+    // Remove added card chips
+    document.querySelectorAll('.whatif-chip-remove[data-remove-added]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const cid = btn.dataset.removeAdded;
+        wi.addedCards = wi.addedCards.filter(id => id !== cid);
+        // Clean up credit toggles/amounts for removed card
+        Object.keys(wi.creditToggles).forEach(k => { if (k.startsWith(cid + ':')) delete wi.creditToggles[k]; });
+        Object.keys(wi.creditAmounts).forEach(k => { if (k.startsWith(cid + ':')) delete wi.creditAmounts[k]; });
+        renderView('whatif');
+      });
+    });
+
+    // Remove current cards checkboxes
+    document.querySelectorAll('[data-remove-card]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const cid = cb.dataset.removeCard;
+        if (cb.checked) {
+          if (!wi.removedCards.includes(cid)) wi.removedCards.push(cid);
+        } else {
+          wi.removedCards = wi.removedCards.filter(id => id !== cid);
+        }
+        renderView('whatif');
+      });
+    });
+
+    // Optimization slider
+    const optSlider = document.getElementById('whatifOptSlider');
+    const optValue = document.getElementById('whatifOptValue');
+    if (optSlider) {
+      optSlider.addEventListener('input', () => {
+        optValue.textContent = optSlider.value + '%';
+      });
+      optSlider.addEventListener('change', () => {
+        wi.optimizationRate = parseInt(optSlider.value);
+        renderView('whatif');
+      });
+    }
+
+    // Card row expand/collapse
+    document.querySelectorAll('.whatif-card-summary').forEach(row => {
+      row.addEventListener('click', () => {
+        const id = row.dataset.whatifRow;
+        const detail = document.getElementById(id);
+        if (detail) detail.classList.toggle('open');
+      });
+    });
+
+    // Credit toggles (hypothetical panel)
+    document.querySelectorAll('.whatif-credit-toggle').forEach(cb => {
+      cb.addEventListener('click', e => e.stopPropagation());
+      cb.addEventListener('change', () => {
+        wi.creditToggles[cb.dataset.toggleKey] = cb.checked;
+        renderView('whatif');
+      });
+    });
+
+    // Credit amount inputs (hypothetical panel, new cards)
+    document.querySelectorAll('.whatif-credit-amount-input').forEach(inp => {
+      inp.addEventListener('change', () => {
+        wi.creditAmounts[inp.dataset.amountKey] = Math.max(0, parseFloat(inp.value) || 0);
+        renderView('whatif');
+      });
+      // Stop click from collapsing card row
+      inp.addEventListener('click', e => e.stopPropagation());
+    });
+
+    // Help expandable
+    document.querySelectorAll('.whatif-help-trigger').forEach(trigger => {
+      trigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const helpContent = document.getElementById('whatifOptHelp');
+        if (helpContent) helpContent.classList.toggle('open');
+      });
+    });
+  }
 }
 
 function showCreditModal(txnId, cardId) {

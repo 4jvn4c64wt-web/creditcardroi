@@ -3518,6 +3518,9 @@ function calculateAddCardValue(newCardId, year) {
   for (const t of txns) {
     const sub = t.subcategory || t.category || 'other';
 
+    // Rent is non-transferable — requires Bilt rent payment system setup
+    if (sub === 'rent') continue;
+
     // Find the best existing card in the full wallet for this subcategory
     let bestExistingCardId = t.cardId;
     let bestExistingRate = 0;
@@ -3647,6 +3650,30 @@ function calculateRemoveCardValue(removeCardId, year) {
     const sub = t.subcategory || t.category || 'other';
     const amt = Math.abs(t.amount);
 
+    // Rent is non-transferable — no other card earns on rent payments.
+    // Use actual processed transaction values instead of recalculating.
+    if (sub === 'rent') {
+      if (!buckets['rent']) {
+        buckets['rent'] = {
+          subcategory: 'rent',
+          sourceRate: 0,
+          sourcePointValue: removePV,
+          bestCardId: null,
+          bestCardName: 'None — rent requires Bilt',
+          bestRate: 0,
+          bestPointValue: 0,
+          spend: 0,
+          valueChange: 0,
+          _totalPoints: 0,
+          isCategory: true
+        };
+      }
+      buckets['rent'].spend += amt;
+      buckets['rent'].valueChange -= (t.pointsValue || 0);
+      buckets['rent']._totalPoints += (t.points || 0);
+      continue;
+    }
+
     // Value on the removed card
     const removeCat = mapToCardCategory(sub, removeCardId, todayStr);
     const removeMult = getCardScenariosMultiplier(removeCardId, removeCat);
@@ -3698,6 +3725,11 @@ function calculateRemoveCardValue(removeCardId, year) {
     }
     buckets[key].spend += amt;
     buckets[key].valueChange += amt * (bestValue - removeValue);
+  }
+
+  // Compute effective source rate for rent from actual processed points
+  if (buckets['rent'] && buckets['rent'].spend > 0) {
+    buckets['rent'].sourceRate = buckets['rent']._totalPoints / buckets['rent'].spend;
   }
 
   const rows = Object.values(buckets);
@@ -3766,6 +3798,25 @@ function calculateSwapValue(removeCardId, addCardId, year) {
     const sub = t.subcategory || t.category || 'other';
     const amt = Math.abs(t.amount);
 
+    // Rent is non-transferable — use actual processed values
+    if (sub === 'rent') {
+      if (!removeBuckets['rent']) {
+        removeBuckets['rent'] = {
+          subcategory: 'rent',
+          sourceRate: 0,
+          sourcePointValue: removePV,
+          bestCardId: null, bestCardName: 'None — rent requires Bilt', bestRate: 0, bestPointValue: 0,
+          spend: 0, valueChange: 0,
+          _totalPoints: 0,
+          isCategory: true
+        };
+      }
+      removeBuckets['rent'].spend += amt;
+      removeBuckets['rent'].valueChange -= (t.pointsValue || 0);
+      removeBuckets['rent']._totalPoints += (t.points || 0);
+      continue;
+    }
+
     const removeCat = mapToCardCategory(sub, removeCardId, todayStr);
     const removeMult = getCardScenariosMultiplier(removeCardId, removeCat);
     const removeValue = removeMult.rate * removePV;
@@ -3810,6 +3861,11 @@ function calculateSwapValue(removeCardId, addCardId, year) {
     removeBuckets[key].valueChange += amt * (bestValue - removeValue);
   }
 
+  // Compute effective source rate for rent from actual processed points
+  if (removeBuckets['rent'] && removeBuckets['rent'].spend > 0) {
+    removeBuckets['rent'].sourceRate = removeBuckets['rent']._totalPoints / removeBuckets['rent'].spend;
+  }
+
   const removeRows = Object.values(removeBuckets);
   if (annualizationFactor > 1) {
     for (const r of removeRows) { r.spend *= annualizationFactor; r.valueChange *= annualizationFactor; }
@@ -3833,6 +3889,9 @@ function calculateSwapValue(removeCardId, addCardId, year) {
   const addBuckets = {};
   for (const t of addTxns) {
     const sub = t.subcategory || t.category || 'other';
+
+    // Rent is non-transferable — requires Bilt rent payment system setup
+    if (sub === 'rent') continue;
 
     // Find the best existing card in the wallet for this subcategory
     let bestExistingCardId = t.cardId;
@@ -3990,6 +4049,9 @@ function getAddCardShiftRows(newCardId, year) {
     for (const [sub, data] of Object.entries(subcategories)) {
       if (data.spend <= 0) continue;
 
+      // Rent is non-transferable — requires Bilt rent payment system setup
+      if (sub === 'rent') continue;
+
       // Best existing card in the full wallet for this subcategory
       const best = getBestExisting(sub);
 
@@ -4046,6 +4108,23 @@ function getRemoveCardShiftRows(removeCardId, year, extraCardIds) {
 
   for (const [sub, data] of Object.entries(subcategories)) {
     if (data.spend <= 0) continue;
+
+    // Rent is non-transferable — use actual processed points for source rate
+    if (sub === 'rent') {
+      const effectiveRate = data.spend > 0 ? data.points / data.spend : 0;
+      rows.push({
+        sourceCategory: sub,
+        sourceRate: effectiveRate,
+        sourcePointValue: removePV,
+        actualSpend: data.spend,
+        bestCardId: null,
+        bestCardName: 'None — rent requires Bilt',
+        bestCategory: 'rent',
+        bestRate: 0,
+        bestPointValue: 0
+      });
+      continue;
+    }
 
     // Value on the removed card
     const removeCat = mapToCardCategory(sub, removeCardId, sampleDate);
@@ -4161,6 +4240,11 @@ function calculateCardScenariosNetImpact() {
       const unshifted = row.actualSpend - shiftedAmount;
       // All spending on removed card loses its current value
       const lostValue = row.actualSpend * row.sourceRate * row.sourcePointValue;
+      // Rent is non-transferable — no value from any destination
+      if (row.sourceCategory === 'rent') {
+        spendingImpact -= lostValue;
+        continue;
+      }
       // Shifted portion earns best-destination value
       const shiftedGain = shiftedAmount * row.bestRate * row.bestPointValue;
       // Unshifted portion falls to catch-all base rate

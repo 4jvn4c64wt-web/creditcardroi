@@ -6154,7 +6154,8 @@ function updateCardScenariosSummary() {
 function renderView(view) {
   state.activeView = view;
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
-  
+  document.getElementById('topMetrics').style.display = (view === 'cardscenarios') ? 'none' : '';
+
   const container = document.getElementById('viewContainer');
   const r = state.results;
   

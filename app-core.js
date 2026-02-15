@@ -4599,17 +4599,19 @@ function renderRemovedCardSpendSections(rows, categoryTotal, nonCategoryTotal, i
   }
   html += `</div></div>`;
 
-  // --- Non-Category Spend Rewards (collapsed by default, with toggle) ---
+  // --- Non-Category Spend Rewards (collapsed by default, with include toggle) ---
   const nonCatPositive = nonCategoryTotal >= 0;
+  const nonCatColor = includeNonCat ? (nonCatPositive ? '#059669' : '#dc2626') : '#a8a29e';
+  const nonCatLabelColor = includeNonCat ? '#57534e' : '#a8a29e';
   html += `<div>
     <div style="display:flex;justify-content:space-between;align-items:center;">
-      <div style="display:flex;align-items:center;gap:8px;cursor:pointer;" id="${idPrefix}NonCatRewardsToggle">
-        <span style="font-size:12px;font-weight:600;color:#57534e;">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <div class="whatif-credit-toggle ${includeNonCat ? 'on' : ''}" id="${idPrefix}NonCatToggle" style="flex-shrink:0;" title="Include in net impact"></div>
+        <span style="font-size:12px;font-weight:600;color:${nonCatLabelColor};cursor:pointer;" id="${idPrefix}NonCatRewardsToggle">
           <span class="toggle-arrow" style="font-size:10px;margin-right:4px;">▼</span>Non-Category Spend Rewards
         </span>
-        <span class="mono" style="font-weight:600;color:${nonCatPositive ? '#059669' : '#dc2626'};font-size:13px;" id="${idPrefix}NonCatRewardsValue">${nonCatPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(nonCategoryTotal))}</span>
       </div>
-      <div class="whatif-credit-toggle ${includeNonCat ? 'on' : ''}" id="${idPrefix}NonCatToggle" style="flex-shrink:0;" title="Include in net impact"></div>
+      <span class="mono" style="font-weight:600;color:${nonCatColor};font-size:13px;" id="${idPrefix}NonCatRewardsValue">${nonCatPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(nonCategoryTotal))}</span>
     </div>
     <div class="hidden" id="${idPrefix}NonCatRewardsDetail" style="margin-top:8px;">`;
 
@@ -4820,11 +4822,8 @@ function renderStep4Swap() {
   // === Ledger section ===
   html += `<div style="max-width:540px;margin:0 auto;">`;
 
-  // Lost credits (removed card)
-  html += renderCreditAssumptions(wi.removeCardId, wi.removeCreditToggles, wi.removeCreditAmounts, 'remove');
-
-  // Gained credits (new card)
-  html += renderCreditAssumptions(wi.addCardId, wi.creditToggles, wi.creditAmounts, 'add');
+  // Credits side-by-side: lost (removed) and gained (new)
+  html += renderSwapCredits(wi, removeCard, addCard, removeCredits, addCredits, netCredits);
 
   // Spend Rewards — collapsible outer, with subsections inside
   html += `<div style="margin-top:16px;border-top:1px solid #e7e5e4;padding-top:12px;">
@@ -4926,6 +4925,63 @@ function renderOptimizationSlider(value, isCustom) {
       <input type="range" class="whatif-slider ${isCustom ? 'inactive' : ''}" id="whatifSlider" min="0" max="100" step="5" value="${value}">
       ${isCustom ? '<span class="whatif-slider-reset" id="whatifSliderReset">Reset to slider</span>' : ''}
     </div>`;
+}
+
+function renderSwapCredits(wi, removeCard, addCard, removeCredits, addCredits, netCredits) {
+  const removeHasCredits = removeCard.credits && removeCard.credits.length > 0;
+  const addHasCredits = addCard.credits && addCard.credits.length > 0;
+  if (!removeHasCredits && !addHasCredits) return '';
+
+  const removeName = escapeHtml(removeCard.shortName || removeCard.name);
+  const addName = escapeHtml(addCard.shortName || addCard.name);
+
+  let html = `<div style="border-top:1px solid #e7e5e4;padding-top:12px;">`;
+
+  // Side-by-side columns
+  html += `<div style="display:flex;gap:24px;flex-wrap:wrap;">`;
+
+  // Left column: Lost credits (removed card)
+  if (removeHasCredits) {
+    html += `<div style="flex:1;min-width:200px;">
+      <div style="font-size:13px;font-weight:600;color:#57534e;margin-bottom:8px;">Lost Credits — ${removeName}</div>`;
+    for (const cr of removeCard.credits) {
+      const enabled = wi.removeCreditToggles[cr.name] !== false;
+      const amount = wi.removeCreditAmounts[cr.name] !== undefined ? wi.removeCreditAmounts[cr.name] : cr.amount;
+      html += `<div class="whatif-credit-row">
+        <div class="whatif-credit-toggle ${enabled ? 'on' : ''}" data-credit="${escapeHtml(cr.name)}" data-prefix="remove-"></div>
+        <span class="whatif-credit-name">${escapeHtml(cr.name)}</span>
+        <input type="number" class="whatif-credit-amount" data-credit="${escapeHtml(cr.name)}" data-prefix="remove-" value="${amount.toFixed(0)}" min="0" max="${cr.amount}" step="1" ${!enabled ? 'disabled' : ''}>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+
+  // Right column: Gained credits (new card)
+  if (addHasCredits) {
+    html += `<div style="flex:1;min-width:200px;">
+      <div style="font-size:13px;font-weight:600;color:#57534e;margin-bottom:8px;">New Credits — ${addName}</div>`;
+    for (const cr of addCard.credits) {
+      const enabled = wi.creditToggles[cr.name] !== false;
+      const amount = wi.creditAmounts[cr.name] !== undefined ? wi.creditAmounts[cr.name] : cr.amount;
+      html += `<div class="whatif-credit-row">
+        <div class="whatif-credit-toggle ${enabled ? 'on' : ''}" data-credit="${escapeHtml(cr.name)}" data-prefix="add-"></div>
+        <span class="whatif-credit-name">${escapeHtml(cr.name)}</span>
+        <input type="number" class="whatif-credit-amount" data-credit="${escapeHtml(cr.name)}" data-prefix="add-" value="${amount.toFixed(0)}" min="0" max="${cr.amount}" step="1" ${!enabled ? 'disabled' : ''}>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+
+  html += `</div>`; // end flex columns
+
+  // Net credits total line
+  html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 0;border-top:1px solid #e7e5e4;margin-top:12px;">
+    <span style="font-size:13px;font-weight:600;color:#57534e;">Net Credits</span>
+    <span class="mono" style="font-weight:600;font-size:14px;color:${netCredits >= 0 ? '#059669' : '#dc2626'};" id="whatifSwapCreditsTotalValue">${netCredits >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netCredits))}</span>
+  </div>`;
+
+  html += `</div>`; // end credits section
+  return html;
 }
 
 function renderCreditAssumptions(cardId, toggles, amounts, mode) {
@@ -5357,7 +5413,7 @@ function attachWhatIfListeners() {
   });
 
   // Credit toggles
-  document.querySelectorAll('.whatif-credit-toggle').forEach(toggle => {
+  document.querySelectorAll('.whatif-credit-toggle[data-credit]').forEach(toggle => {
     toggle.addEventListener('click', () => {
       const creditName = toggle.dataset.credit;
       const prefix = toggle.dataset.prefix;
@@ -5489,15 +5545,15 @@ function attachWhatIfListeners() {
     // Non-category spend inclusion toggle
     const nonCatIncludeToggle = document.getElementById(prefix + 'NonCatToggle');
     if (nonCatIncludeToggle) {
-      nonCatIncludeToggle.addEventListener('click', () => {
+      nonCatIncludeToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
         wi.includeNonCategorySpend = !nonCatIncludeToggle.classList.contains('on');
         nonCatIncludeToggle.classList.toggle('on');
-        // Also sync the other scenario's toggle if present
-        const otherPrefix = prefix === 'whatifRemove' ? 'whatifSwap' : 'whatifRemove';
-        const otherToggle = document.getElementById(otherPrefix + 'NonCatToggle');
-        if (otherToggle) {
-          otherToggle.classList.toggle('on', wi.includeNonCategorySpend);
-        }
+        // Grey out label and value when off
+        const labelEl = document.getElementById(prefix + 'NonCatRewardsToggle');
+        if (labelEl) labelEl.style.color = wi.includeNonCategorySpend ? '#57534e' : '#a8a29e';
+        const valueEl = document.getElementById(prefix + 'NonCatRewardsValue');
+        if (valueEl) valueEl.style.color = wi.includeNonCategorySpend ? '' : '#a8a29e';
         if (wi.scenarioType === 'remove') { updateRemoveCardResult(); }
         else if (wi.scenarioType === 'swap') { updateSwapCardResult(); }
       });
@@ -5634,6 +5690,13 @@ function updateSwapCardResult() {
   if (creditsLineEl) {
     creditsLineEl.textContent = `${netCredits >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netCredits))}`;
     creditsLineEl.style.color = netCredits >= 0 ? '#059669' : '#dc2626';
+  }
+
+  // Update ledger credits total
+  const creditsTotalEl = document.getElementById('whatifSwapCreditsTotalValue');
+  if (creditsTotalEl) {
+    creditsTotalEl.textContent = `${netCredits >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netCredits))}`;
+    creditsTotalEl.style.color = netCredits >= 0 ? '#059669' : '#dc2626';
   }
 
   // Update spend rewards line

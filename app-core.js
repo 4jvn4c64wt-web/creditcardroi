@@ -279,6 +279,27 @@ let state = {
   summarySortState: { column: 'cardName', direction: 'asc' }, // For summary table sorting
   txnSortState: { column: 'date', direction: 'desc' }, // For transaction table sorting
 
+  // Card Scenarios state (session-only)
+  cardScenarios: {
+    step: 1,                // Current wizard step (1-6)
+    scenarioType: null,     // 'add', 'remove', 'swap'
+    addCardId: null,        // Card being added
+    removeCardId: null,     // Card being removed
+    selectedYear: null,     // Year for analysis
+    optimizationRate: null, // Current slider value (0-100), null = auto-detect
+    isCustomMode: false,    // Whether user manually edited amounts (slider inactive)
+    shiftAmounts: {},       // { 'cardId|category': amount } confirmed shift amounts
+    creditToggles: {},      // { creditName: true/false } for new card credits
+    creditAmounts: {},      // { creditName: amount } for new card credit amounts
+    removeCreditToggles: {},  // For removed card's lost credits
+    removeCreditAmounts: {},  // For removed card's lost credit amounts
+
+    walletMismatch: {},     // Step 3b: { cardId: { estimated: true, ... } }
+    resultCalculated: false, // Whether results have been calculated
+    showRentPrompt: false,  // Whether to show rent amount input (step 2b)
+    rentAmount: null         // Monthly rent amount for first Bilt card scenario
+  },
+
   // Tour state
   tourComplete: localStorage.getItem('ccTracker_tourComplete') === 'true',
   tourStep: parseInt(localStorage.getItem('ccTracker_tourStep') || '0', 10),
@@ -3355,10 +3376,2786 @@ function showResults(results, isNewUpload = false) {
   }
 }
 
+// =============================================================================
+// CARD SCENARIOS
+// =============================================================================
+
+/**
+ * Get multiplier for card scenarios. Uses current rates (today's date)
+ * and skips CFF quarterly bonuses since those are unpredictable for future scenarios.
+ * Falls back to CFF's static multipliers (chase-travel 5x, dining 3x, drugstore 3x, 1x base).
+ */
+function getCardScenariosMultiplier(cardId, category) {
+  const _today = new Date();
+  const todayStr = `${_today.getFullYear()}-${String(_today.getMonth()+1).padStart(2,'0')}-${String(_today.getDate()).padStart(2,'0')}`;
+
+  if (cardId === 'chase-freedom-flex') {
+    // Skip quarterly bonus lookup — use only static multipliers
+    const card = CARDS[cardId];
+    if (!card) return { rate: 1, reason: 'Unknown card' };
+    const effectiveCat = getEffectiveCategory(category, cardId);
+    if (card.multipliers[effectiveCat]) {
+      const rate = card.multipliers[effectiveCat];
+      return { rate, reason: `${rate}x ${effectiveCat}` };
+    }
+    return { rate: card.baseRate, reason: `${card.baseRate}x base rate` };
+  }
+
+  return getMultiplier(cardId, category, todayStr);
+}
+
+/**
+ * Reset Card Scenarios state for a new scenario
+ */
+function resetCardScenariosState() {
+  state.cardScenarios = {
+    step: 1,
+    scenarioType: null,
+    addCardId: null,
+    removeCardId: null,
+    selectedYear: null,
+    optimizationRate: null,
+    isCustomMode: false,
+    shiftAmounts: {},
+    creditToggles: {},
+    creditAmounts: {},
+    removeCreditToggles: {},
+    removeCreditAmounts: {},
+    walletMismatch: {},
+    resultCalculated: false,
+    showRentPrompt: false,
+    rentAmount: null
+  };
+}
+
+/**
+ * Check if the user is adding/swapping in their FIRST Bilt card (no Bilt currently in wallet).
+ * Used to trigger the rent amount prompt at step 2b.
+ */
+function isAddingFirstBilt() {
+  const wi = state.cardScenarios;
+  const addId = wi.addCardId;
+  if (!addId || !CARDS[addId]?.isBilt) return false;
+  // If user already has any Bilt card in wallet, they have rent data — no prompt needed
+  return !getActiveCardIds().some(id => CARDS[id]?.isBilt);
+}
+
+/**
+ * Calculate user's current optimization rate from actual spending data.
+ * This measures how often users already use the best card for each category.
+ * Returns a percentage 0-100.
+ */
+function calculateOptimizationRate() {
+  if (!state.results || !state.results.processed) return 85;
+  const year = state.cardScenarios.selectedYear || state.selectedYear;
+  const txns = state.results.processed.filter(t => {
+    if (t.isPayment || t.isCredit) return false;
+    if (year) return getYearFromDateString(t.date) === year;
+    return true;
+  });
+  if (txns.length === 0) return 85;
+
+  // Get all active cards from transactions
+  const activeCards = [...new Set(txns.map(t => t.cardId).filter(c => c && c !== 'skip' && CARDS[c]))];
+  if (activeCards.length < 2) return 100; // Only one card, always optimal
+
+  let optimalSpend = 0;
+  let totalSpend = 0;
+
+  // Group transactions by subcategory
+  const byCat = {};
+  txns.forEach(t => {
+    const sub = t.subcategory || t.category || 'other';
+    if (!byCat[sub]) byCat[sub] = [];
+    byCat[sub].push(t);
+  });
+
+  for (const [sub, catTxns] of Object.entries(byCat)) {
+    // Find the best card for this category
+    let bestValue = 0;
+    for (const cardId of activeCards) {
+      const mapped = mapToCardCategory(sub, cardId, catTxns[0]?.date);
+      const mult = getMultiplier(cardId, mapped, catTxns[0]?.date);
+      const pv = getPointValue(cardId);
+      const value = mult.rate * pv;
+      if (value > bestValue) bestValue = value;
+    }
+
+    for (const t of catTxns) {
+      const amt = Math.abs(t.amount);
+      totalSpend += amt;
+      const mapped = mapToCardCategory(sub, t.cardId, t.date);
+      const mult = getMultiplier(t.cardId, mapped, t.date);
+      const pv = getPointValue(t.cardId);
+      const actualValue = mult.rate * pv;
+      if (bestValue > 0 && actualValue >= bestValue) {
+        optimalSpend += amt;
+      }
+    }
+  }
+
+  return totalSpend > 0 ? Math.round((optimalSpend / totalSpend) * 100) : 85;
+}
+
+/**
+ * Calculate the additional rewards value from adding a card.
+ * For each transaction where the new card earns more, computes the value difference.
+ * Returns { totalGain, rows[], annualizationFactor }
+ * rows: { sourceCardId, sourceCardName, subcategory, sourceRate, sourcePointValue,
+ *         newCategory, newRate, newPointValue, spend, additionalValue }
+ */
+function calculateAddCardValue(newCardId, year) {
+  if (!state.results || !state.results.processed) return { totalGain: 0, rows: [], annualizationFactor: 1 };
+  const newCard = CARDS[newCardId];
+  if (!newCard) return { totalGain: 0, rows: [], annualizationFactor: 1 };
+  const newPV = getPointValue(newCardId);
+
+  const txns = state.results.processed.filter(t =>
+    !t.isPayment && !t.isCredit && !t.isRefund && t.cardId && t.cardId !== 'skip' &&
+    t.cardId !== newCardId && CARDS[t.cardId] &&
+    getYearFromDateString(t.date) === year
+  );
+
+  // Annualization factor
+  const months = new Set();
+  txns.forEach(t => { const p = parseDateString(t.date); if (p) months.add(p.month); });
+  const monthCount = months.size;
+  const annualizationFactor = monthCount > 0 && monthCount < 12 ? 12 / monthCount : 1;
+
+  // Use today's date for all category mapping — Card Scenarios is forward-looking
+  const _today = new Date();
+  const todayStr = `${_today.getFullYear()}-${String(_today.getMonth()+1).padStart(2,'0')}-${String(_today.getDate()).padStart(2,'0')}`;
+
+  // Full wallet (all owned cards) excluding the new card — for best-card comparison
+  const walletCardIds = getActiveCardIds().filter(id => id !== newCardId);
+
+  // Aggregate by [bestExistingCardId + subcategory]
+  const buckets = {};
+  for (const t of txns) {
+    const sub = t.subcategory || t.category || 'other';
+
+    // Rent is non-transferable — requires Bilt rent payment system setup
+    if (sub === 'rent') continue;
+
+    // Find the best existing card in the full wallet for this subcategory
+    let bestExistingCardId = t.cardId;
+    let bestExistingRate = 0;
+    let bestExistingValue = 0;
+    let bestExistingPV = getPointValue(t.cardId);
+
+    for (const cid of walletCardIds) {
+      const pv = getPointValue(cid);
+      const mapped = mapToCardCategory(sub, cid, todayStr);
+      const mult = getCardScenariosMultiplier(cid, mapped);
+      const val = mult.rate * pv;
+      if (val > bestExistingValue) {
+        bestExistingValue = val;
+        bestExistingCardId = cid;
+        bestExistingRate = mult.rate;
+        bestExistingPV = pv;
+      }
+    }
+
+    const newCat = mapToCardCategory(sub, newCardId, todayStr);
+    const newMult = getCardScenariosMultiplier(newCardId, newCat);
+    const newValue = newMult.rate * newPV;
+
+    // Only count if the new card beats the BEST existing card in the full wallet
+    if (newMult.rate > bestExistingRate && newValue > bestExistingValue) {
+      const key = `${bestExistingCardId}|${sub}`;
+      if (!buckets[key]) {
+        buckets[key] = {
+          sourceCardId: bestExistingCardId,
+          sourceCardName: CARDS[bestExistingCardId]?.shortName || CARDS[bestExistingCardId]?.name || bestExistingCardId,
+          subcategory: sub,
+          sourceRate: bestExistingRate,
+          sourcePointValue: bestExistingPV,
+          newCategory: newCat,
+          newRate: newMult.rate,
+          newPointValue: newPV,
+          spend: 0,
+          additionalValue: 0
+        };
+      }
+      const amt = Math.abs(t.amount);
+      buckets[key].spend += amt;
+      buckets[key].additionalValue += amt * (newValue - bestExistingValue);
+    }
+  }
+
+  const rows = Object.values(buckets);
+  // Apply annualization
+  if (annualizationFactor > 1) {
+    for (const r of rows) {
+      r.spend *= annualizationFactor;
+      r.additionalValue *= annualizationFactor;
+    }
+  }
+
+  // Add synthetic rent row when adding first Bilt card with rent amount specified
+  if (state.cardScenarios.rentAmount > 0 && CARDS[newCardId]?.isBilt) {
+    const walletHasBilt = getActiveCardIds().some(id => CARDS[id]?.isBilt);
+    if (!walletHasBilt) {
+      const annualRent = state.cardScenarios.rentAmount * 12;
+      // Use 1x conservative rate — user hasn't configured Bilt 2.0 settings yet,
+      // so getCardScenariosMultiplier would return 0x (no biltConfig exists)
+      const syntheticRentRate = 1;
+      const rentValue = annualRent * syntheticRentRate * newPV;
+      rows.push({
+        sourceCardId: '_rent',
+        sourceCardName: 'New (rent)',
+        subcategory: 'rent',
+        sourceRate: 0,
+        sourcePointValue: 0,
+        newCategory: 'rent',
+        newRate: syntheticRentRate,
+        newPointValue: newPV,
+        spend: annualRent,
+        additionalValue: rentValue
+      });
+    }
+  }
+
+  // Sort by additional value descending
+  rows.sort((a, b) => b.additionalValue - a.additionalValue);
+
+  const totalGain = rows.reduce((sum, r) => sum + r.additionalValue, 0);
+  return { totalGain, rows, annualizationFactor };
+}
+
+/**
+ * Get total credits value for add card based on user toggles/amounts.
+ */
+function getAddCardCreditsTotal() {
+  const wi = state.cardScenarios;
+  const card = CARDS[wi.addCardId];
+  if (!card || !card.credits) return 0;
+  let total = 0;
+  for (const cr of card.credits) {
+    if (wi.creditToggles[cr.name] !== false) {
+      total += (wi.creditAmounts[cr.name] !== undefined ? wi.creditAmounts[cr.name] : cr.amount);
+    }
+  }
+  return total;
+}
+
+function getRemoveCardCreditsTotal() {
+  const wi = state.cardScenarios;
+  const card = CARDS[wi.removeCardId];
+  if (!card || !card.credits) return 0;
+  let total = 0;
+  for (const cr of card.credits) {
+    if (wi.removeCreditToggles[cr.name] !== false) {
+      total += (wi.removeCreditAmounts[cr.name] !== undefined ? wi.removeCreditAmounts[cr.name] : cr.amount);
+    }
+  }
+  return total;
+}
+
+/**
+ * Calculate the spending value change from removing a card.
+ * For each transaction on the removed card, find the best destination card in the
+ * remaining wallet. Every dollar must be accounted for.
+ * Returns { totalChange, rows[], annualizationFactor }
+ * rows: { subcategory, sourceRate, sourcePointValue, bestCardId, bestCardName,
+ *         bestRate, bestPointValue, spend, valueChange }
+ */
+function calculateRemoveCardValue(removeCardId, year) {
+  if (!state.results || !state.results.processed) return { totalChange: 0, rows: [], annualizationFactor: 1 };
+  const removeCard = CARDS[removeCardId];
+  if (!removeCard) return { totalChange: 0, rows: [], annualizationFactor: 1 };
+  const removePV = getPointValue(removeCardId);
+  const removeBaseRate = removeCard.baseRate || 1;
+
+  // Remaining wallet cards — use full wallet (all cards user owns), not just base-year cards
+  const walletCardIds = getActiveCardIds().filter(id => id !== removeCardId);
+
+  const txns = state.results.processed.filter(t =>
+    !t.isPayment && !t.isCredit && !t.isRefund && t.cardId === removeCardId &&
+    getYearFromDateString(t.date) === year
+  );
+
+  // Annualization factor
+  const months = new Set();
+  txns.forEach(t => { const p = parseDateString(t.date); if (p) months.add(p.month); });
+  const monthCount = months.size;
+  const annualizationFactor = monthCount > 0 && monthCount < 12 ? 12 / monthCount : 1;
+
+  // Use today's date for all category mapping — Card Scenarios is forward-looking
+  const _today = new Date();
+  const todayStr = `${_today.getFullYear()}-${String(_today.getMonth()+1).padStart(2,'0')}-${String(_today.getDate()).padStart(2,'0')}`;
+
+  // Aggregate by subcategory
+  const buckets = {};
+  for (const t of txns) {
+    const sub = t.subcategory || t.category || 'other';
+    const amt = Math.abs(t.amount);
+
+    // Rent is only transferable to other Bilt cards — no non-Bilt card earns on rent.
+    // Use actual processed transaction values for the source rate.
+    if (sub === 'rent') {
+      if (!buckets['rent']) {
+        // Find best Bilt destination in remaining wallet
+        let destCardId = null, destValue = 0, destRate = 0, destPV = 0;
+        let destName = 'None — rent requires Bilt';
+        for (const cid of walletCardIds) {
+          const c = CARDS[cid];
+          if (!c || !c.isBilt) continue;
+          const pv = getPointValue(cid);
+          const mapped = mapToCardCategory('rent', cid, todayStr);
+          const mult = getCardScenariosMultiplier(cid, mapped);
+          const val = mult.rate * pv;
+          if (val > destValue) {
+            destValue = val; destCardId = cid; destRate = mult.rate; destPV = pv;
+            destName = c.shortName || c.name || cid;
+          }
+        }
+        buckets['rent'] = {
+          subcategory: 'rent',
+          sourceRate: 0,
+          sourcePointValue: removePV,
+          bestCardId: destCardId,
+          bestCardName: destName,
+          bestRate: destRate,
+          bestPointValue: destPV,
+          spend: 0,
+          valueChange: 0,
+          _totalPoints: 0,
+          _destValuePerDollar: destValue,
+          isCategory: true
+        };
+      }
+      buckets['rent'].spend += amt;
+      buckets['rent'].valueChange += (buckets['rent']._destValuePerDollar * amt) - (t.pointsValue || 0);
+      buckets['rent']._totalPoints += (t.points || 0);
+      continue;
+    }
+
+    // Value on the removed card
+    const removeCat = mapToCardCategory(sub, removeCardId, todayStr);
+    const removeMult = getCardScenariosMultiplier(removeCardId, removeCat);
+    const removeValue = removeMult.rate * removePV;
+
+    // Find best destination card
+    let bestCardId = null;
+    let bestValue = 0;
+    let bestRate = 1;
+    let bestPV = 0.01;
+    let bestName = '';
+
+    for (const cardId of walletCardIds) {
+      const cardPV = getPointValue(cardId);
+      const mapped = mapToCardCategory(sub, cardId, todayStr);
+      const mult = getCardScenariosMultiplier(cardId, mapped);
+      const val = mult.rate * cardPV;
+      if (val > bestValue) {
+        bestValue = val;
+        bestCardId = cardId;
+        bestRate = mult.rate;
+        bestPV = cardPV;
+        bestName = CARDS[cardId]?.shortName || CARDS[cardId]?.name || cardId;
+      }
+    }
+
+    // If no other cards, spending has no destination
+    if (!bestCardId) {
+      bestValue = 0;
+      bestRate = 0;
+      bestPV = 0;
+      bestName = 'No card';
+    }
+
+    const key = sub;
+    if (!buckets[key]) {
+      buckets[key] = {
+        subcategory: sub,
+        sourceRate: removeMult.rate,
+        sourcePointValue: removePV,
+        bestCardId: bestCardId,
+        bestCardName: bestName,
+        bestRate: bestRate,
+        bestPointValue: bestPV,
+        spend: 0,
+        valueChange: 0,
+        isCategory: removeMult.rate > removeBaseRate
+      };
+    }
+    buckets[key].spend += amt;
+    buckets[key].valueChange += amt * (bestValue - removeValue);
+  }
+
+  // Compute effective source rate for rent from actual processed points
+  if (buckets['rent'] && buckets['rent'].spend > 0) {
+    buckets['rent'].sourceRate = buckets['rent']._totalPoints / buckets['rent'].spend;
+  }
+
+  const rows = Object.values(buckets);
+  // Apply annualization
+  if (annualizationFactor > 1) {
+    for (const r of rows) {
+      r.spend *= annualizationFactor;
+      r.valueChange *= annualizationFactor;
+    }
+  }
+  // Sort by value change ascending (biggest losses first)
+  rows.sort((a, b) => a.valueChange - b.valueChange);
+
+  const totalChange = rows.reduce((sum, r) => sum + r.valueChange, 0);
+  const categoryChange = rows.filter(r => r.isCategory).reduce((sum, r) => sum + r.valueChange, 0);
+  const nonCategoryChange = rows.filter(r => !r.isCategory).reduce((sum, r) => sum + r.valueChange, 0);
+  return { totalChange, categoryChange, nonCategoryChange, rows, annualizationFactor };
+}
+
+/**
+ * Calculate the net spending value change from swapping one card for another.
+ * Two components:
+ * 1. Removed card redistribution — every transaction on removed card finds best
+ *    destination in hypothetical wallet (current - removed + new card)
+ * 2. Additional shifts to new card — transactions on other existing cards where
+ *    the new card earns more (excludes removed card transactions)
+ * Returns { removeChange, removeRows, addGain, addRows, totalSpendChange, annualizationFactor }
+ */
+function calculateSwapValue(removeCardId, addCardId, year) {
+  if (!state.results || !state.results.processed) return { removeChange: 0, removeRows: [], addGain: 0, addRows: [], totalSpendChange: 0, annualizationFactor: 1 };
+  const removeCard = CARDS[removeCardId];
+  const addCard = CARDS[addCardId];
+  if (!removeCard || !addCard) return { removeChange: 0, removeRows: [], addGain: 0, addRows: [], totalSpendChange: 0, annualizationFactor: 1 };
+
+  const removePV = getPointValue(removeCardId);
+  const addPV = getPointValue(addCardId);
+  const removeBaseRate = removeCard.baseRate || 1;
+
+  // Hypothetical wallet: all owned cards minus removed, plus new card
+  const hypotheticalWallet = getActiveCardIds().filter(id => id !== removeCardId);
+  if (!hypotheticalWallet.includes(addCardId) && CARDS[addCardId]) {
+    hypotheticalWallet.push(addCardId);
+  }
+
+  const _today = new Date();
+  const todayStr = `${_today.getFullYear()}-${String(_today.getMonth()+1).padStart(2,'0')}-${String(_today.getDate()).padStart(2,'0')}`;
+
+  // Annualization factor — use all non-payment transactions for the year
+  const allYearTxns = state.results.processed.filter(t =>
+    !t.isPayment && !t.isCredit && !t.isRefund &&
+    getYearFromDateString(t.date) === year
+  );
+  const months = new Set();
+  allYearTxns.forEach(t => { const p = parseDateString(t.date); if (p) months.add(p.month); });
+  const monthCount = months.size;
+  const annualizationFactor = monthCount > 0 && monthCount < 12 ? 12 / monthCount : 1;
+
+  // === Component 1: Removed card spending redistribution ===
+  const removeTxns = state.results.processed.filter(t =>
+    !t.isPayment && !t.isCredit && !t.isRefund && t.cardId === removeCardId &&
+    getYearFromDateString(t.date) === year
+  );
+
+  const removeBuckets = {};
+  for (const t of removeTxns) {
+    const sub = t.subcategory || t.category || 'other';
+    const amt = Math.abs(t.amount);
+
+    // Rent is only transferable to other Bilt cards — use actual processed values for source.
+    if (sub === 'rent') {
+      if (!removeBuckets['rent']) {
+        // Find best Bilt destination in hypothetical wallet
+        let destCardId = null, destValue = 0, destRate = 0, destPV = 0;
+        let destName = 'None — rent requires Bilt';
+        for (const cid of hypotheticalWallet) {
+          const c = CARDS[cid];
+          if (!c || !c.isBilt) continue;
+          const pv = getPointValue(cid);
+          const mapped = mapToCardCategory('rent', cid, todayStr);
+          const mult = getCardScenariosMultiplier(cid, mapped);
+          const val = mult.rate * pv;
+          if (val > destValue) {
+            destValue = val; destCardId = cid; destRate = mult.rate; destPV = pv;
+            destName = c.shortName || c.name || cid;
+          }
+        }
+        removeBuckets['rent'] = {
+          subcategory: 'rent',
+          sourceRate: 0,
+          sourcePointValue: removePV,
+          bestCardId: destCardId, bestCardName: destName, bestRate: destRate, bestPointValue: destPV,
+          spend: 0, valueChange: 0,
+          _totalPoints: 0,
+          _destValuePerDollar: destValue,
+          isCategory: true
+        };
+      }
+      removeBuckets['rent'].spend += amt;
+      removeBuckets['rent'].valueChange += (removeBuckets['rent']._destValuePerDollar * amt) - (t.pointsValue || 0);
+      removeBuckets['rent']._totalPoints += (t.points || 0);
+      continue;
+    }
+
+    const removeCat = mapToCardCategory(sub, removeCardId, todayStr);
+    const removeMult = getCardScenariosMultiplier(removeCardId, removeCat);
+    const removeValue = removeMult.rate * removePV;
+
+    // Find best destination in hypothetical wallet (includes new card)
+    let bestCardId = null;
+    let bestValue = 0;
+    let bestRate = 1;
+    let bestPV = 0.01;
+    let bestName = '';
+
+    for (const cardId of hypotheticalWallet) {
+      const cardPV = getPointValue(cardId);
+      const mapped = mapToCardCategory(sub, cardId, todayStr);
+      const mult = getCardScenariosMultiplier(cardId, mapped);
+      const val = mult.rate * cardPV;
+      if (val > bestValue) {
+        bestValue = val;
+        bestCardId = cardId;
+        bestRate = mult.rate;
+        bestPV = cardPV;
+        bestName = CARDS[cardId]?.shortName || CARDS[cardId]?.name || cardId;
+      }
+    }
+
+    if (!bestCardId) {
+      bestValue = 0; bestRate = 0; bestPV = 0; bestName = 'No card';
+    }
+
+    const key = sub;
+    if (!removeBuckets[key]) {
+      removeBuckets[key] = {
+        subcategory: sub,
+        sourceRate: removeMult.rate,
+        sourcePointValue: removePV,
+        bestCardId, bestCardName: bestName, bestRate, bestPointValue: bestPV,
+        spend: 0, valueChange: 0,
+        isCategory: removeMult.rate > removeBaseRate
+      };
+    }
+    removeBuckets[key].spend += amt;
+    removeBuckets[key].valueChange += amt * (bestValue - removeValue);
+  }
+
+  // Compute effective source rate for rent from actual processed points
+  if (removeBuckets['rent'] && removeBuckets['rent'].spend > 0) {
+    removeBuckets['rent'].sourceRate = removeBuckets['rent']._totalPoints / removeBuckets['rent'].spend;
+  }
+
+  const removeRows = Object.values(removeBuckets);
+  if (annualizationFactor > 1) {
+    for (const r of removeRows) { r.spend *= annualizationFactor; r.valueChange *= annualizationFactor; }
+  }
+  removeRows.sort((a, b) => a.valueChange - b.valueChange);
+  const removeChange = removeRows.reduce((sum, r) => sum + r.valueChange, 0);
+  const removeCategoryChange = removeRows.filter(r => r.isCategory).reduce((sum, r) => sum + r.valueChange, 0);
+  const removeNonCategoryChange = removeRows.filter(r => !r.isCategory).reduce((sum, r) => sum + r.valueChange, 0);
+
+  // === Component 2: Additional shifts to new card from existing cards ===
+  // Excludes removed card transactions (handled in Component 1)
+  const addTxns = state.results.processed.filter(t =>
+    !t.isPayment && !t.isCredit && !t.isRefund && t.cardId && t.cardId !== 'skip' &&
+    t.cardId !== addCardId && t.cardId !== removeCardId && CARDS[t.cardId] &&
+    getYearFromDateString(t.date) === year
+  );
+
+  // Compare new card against best existing card in hypothetical wallet (excl. new card)
+  const existingWallet = hypotheticalWallet.filter(id => id !== addCardId);
+
+  const addBuckets = {};
+  for (const t of addTxns) {
+    const sub = t.subcategory || t.category || 'other';
+
+    // Rent is non-transferable — requires Bilt rent payment system setup
+    if (sub === 'rent') continue;
+
+    // Find the best existing card in the wallet for this subcategory
+    let bestExistingCardId = t.cardId;
+    let bestExistingRate = 0;
+    let bestExistingValue = 0;
+    let bestExistingPV = getPointValue(t.cardId);
+
+    for (const cid of existingWallet) {
+      const pv = getPointValue(cid);
+      const mapped = mapToCardCategory(sub, cid, todayStr);
+      const mult = getCardScenariosMultiplier(cid, mapped);
+      const val = mult.rate * pv;
+      if (val > bestExistingValue) {
+        bestExistingValue = val;
+        bestExistingCardId = cid;
+        bestExistingRate = mult.rate;
+        bestExistingPV = pv;
+      }
+    }
+
+    const newCat = mapToCardCategory(sub, addCardId, todayStr);
+    const newMult = getCardScenariosMultiplier(addCardId, newCat);
+    const newValue = newMult.rate * addPV;
+
+    // Only count if the new card beats the BEST existing card in the wallet
+    if (newMult.rate > bestExistingRate && newValue > bestExistingValue) {
+      const key = `${bestExistingCardId}|${sub}`;
+      if (!addBuckets[key]) {
+        addBuckets[key] = {
+          sourceCardId: bestExistingCardId,
+          sourceCardName: CARDS[bestExistingCardId]?.shortName || CARDS[bestExistingCardId]?.name || bestExistingCardId,
+          subcategory: sub,
+          sourceRate: bestExistingRate,
+          sourcePointValue: bestExistingPV,
+          newRate: newMult.rate,
+          newPointValue: addPV,
+          spend: 0, additionalValue: 0
+        };
+      }
+      const amt = Math.abs(t.amount);
+      addBuckets[key].spend += amt;
+      addBuckets[key].additionalValue += amt * (newValue - bestExistingValue);
+    }
+  }
+
+  const addRows = Object.values(addBuckets);
+  if (annualizationFactor > 1) {
+    for (const r of addRows) { r.spend *= annualizationFactor; r.additionalValue *= annualizationFactor; }
+  }
+
+  // Add synthetic rent row when swapping in first Bilt card with rent amount specified
+  if (state.cardScenarios.rentAmount > 0 && CARDS[addCardId]?.isBilt) {
+    const walletHasBilt = getActiveCardIds().some(id => CARDS[id]?.isBilt);
+    if (!walletHasBilt) {
+      const annualRent = state.cardScenarios.rentAmount * 12;
+      const syntheticRentRate = 1; // Conservative 1x default
+      const rentValue = annualRent * syntheticRentRate * addPV;
+      addRows.push({
+        sourceCardId: '_rent',
+        sourceCardName: 'New (rent)',
+        subcategory: 'rent',
+        sourceRate: 0,
+        sourcePointValue: 0,
+        newRate: syntheticRentRate,
+        newPointValue: addPV,
+        spend: annualRent,
+        additionalValue: rentValue
+      });
+    }
+  }
+
+  addRows.sort((a, b) => b.additionalValue - a.additionalValue);
+  const addGain = addRows.reduce((sum, r) => sum + r.additionalValue, 0);
+
+  return { removeChange, removeCategoryChange, removeNonCategoryChange, removeRows, addGain, addRows, totalSpendChange: removeChange + addGain, annualizationFactor };
+}
+
+/**
+ * Get annualized spending data for a card in a given year, grouped by subcategory.
+ * Returns { factor, categories, subcategories } where subcategories maps
+ * subcategory → { spend, points, rate, category (card-effective) }
+ */
+function getAnnualizedCardSpend(cardId, year) {
+  if (!state.results || !state.results.processed) return { factor: 1, categories: {}, subcategories: {} };
+  const txns = state.results.processed.filter(t =>
+    t.cardId === cardId && !t.isPayment && !t.isCredit &&
+    getYearFromDateString(t.date) === year
+  );
+
+  // Determine annualization factor
+  const months = new Set();
+  txns.forEach(t => {
+    const parsed = parseDateString(t.date);
+    if (parsed) months.add(parsed.month);
+  });
+  const monthCount = months.size;
+  const factor = monthCount > 0 && monthCount < 12 ? 12 / monthCount : 1;
+
+  // Aggregate by card-effective category (kept for backward compat)
+  const categories = {};
+  // Aggregate by subcategory for granular comparison
+  const subcategories = {};
+  txns.forEach(t => {
+    const cat = t.category || 'other';
+    const sub = t.subcategory || cat;
+    const amt = Math.abs(t.amount);
+    const pts = t.points || 0;
+    const mult = t.multiplier || { rate: 1 };
+
+    if (!categories[cat]) categories[cat] = { spend: 0, points: 0 };
+    categories[cat].spend += amt;
+    categories[cat].points += pts;
+
+    if (!subcategories[sub]) subcategories[sub] = { spend: 0, points: 0, rate: mult.rate, category: cat };
+    subcategories[sub].spend += amt;
+    subcategories[sub].points += pts;
+  });
+
+  // Annualize
+  if (factor > 1) {
+    for (const d of [...Object.values(categories), ...Object.values(subcategories)]) {
+      d.spend *= factor;
+      d.points *= factor;
+    }
+  }
+
+  return { factor, categories, subcategories };
+}
+
+/**
+ * Format a subcategory name for display: "flights-direct" → "Flights Direct"
+ */
+function formatSubcategoryName(sub) {
+  return sub.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+/**
+ * Get spending shift rows for "Add a Card" scenario.
+ * Compares at subcategory level. Only shows rows where new card earns more value.
+ */
+function getAddCardShiftRows(newCardId, year) {
+  if (!state.results || !state.results.processed) return [];
+  const newCard = CARDS[newCardId];
+  if (!newCard) return [];
+
+  const activeCardIds = getActiveCardIds(year);
+  const walletCardIds = getActiveCardIds().filter(id => id !== newCardId);
+  const newPV = getPointValue(newCardId);
+  const rows = [];
+  const today = new Date();
+  const sampleDate = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+
+  // Pre-compute best existing card value for each subcategory across full wallet
+  const bestExistingCache = {};
+  function getBestExisting(sub) {
+    if (bestExistingCache[sub]) return bestExistingCache[sub];
+    let best = { cardId: null, rate: 0, value: 0, pv: 0.01, name: '' };
+    for (const cid of walletCardIds) {
+      const pv = getPointValue(cid);
+      const mapped = mapToCardCategory(sub, cid, sampleDate);
+      const mult = getCardScenariosMultiplier(cid, mapped);
+      const val = mult.rate * pv;
+      if (val > best.value) {
+        best = { cardId: cid, rate: mult.rate, value: val, pv, name: CARDS[cid]?.shortName || CARDS[cid]?.name || cid };
+      }
+    }
+    bestExistingCache[sub] = best;
+    return best;
+  }
+
+  for (const cardId of activeCardIds) {
+    if (cardId === newCardId) continue;
+    const card = CARDS[cardId];
+    if (!card) continue;
+    const { subcategories } = getAnnualizedCardSpend(cardId, year);
+
+    for (const [sub, data] of Object.entries(subcategories)) {
+      if (data.spend <= 0) continue;
+
+      // Rent is non-transferable — requires Bilt rent payment system setup
+      if (sub === 'rent') continue;
+
+      // Best existing card in the full wallet for this subcategory
+      const best = getBestExisting(sub);
+
+      // New card's value for this subcategory
+      const newCat = mapToCardCategory(sub, newCardId, sampleDate);
+      const newMult = getCardScenariosMultiplier(newCardId, newCat);
+      const newValue = newMult.rate * newPV;
+
+      // Only count if the new card beats the BEST existing card in full wallet
+      if (newMult.rate > best.rate && newValue > best.value) {
+        rows.push({
+          sourceCardId: best.cardId || cardId,
+          sourceCardName: best.name || (card.shortName || card.name),
+          sourceCategory: sub,
+          sourceRate: best.rate,
+          sourcePointValue: best.pv,
+          newCategory: newCat,
+          newRate: newMult.rate,
+          newPointValue: newPV,
+          actualSpend: data.spend
+        });
+      }
+    }
+  }
+
+  // Add synthetic rent row when adding first Bilt card with rent amount specified
+  if (state.cardScenarios.rentAmount > 0 && CARDS[newCardId]?.isBilt) {
+    const walletHasBilt = getActiveCardIds().some(id => CARDS[id]?.isBilt);
+    if (!walletHasBilt) {
+      const annualRent = state.cardScenarios.rentAmount * 12;
+      const syntheticRentRate = 1; // Conservative 1x default
+      rows.push({
+        sourceCardId: '_rent',
+        sourceCardName: 'New (rent)',
+        sourceCategory: 'rent',
+        sourceRate: 0,
+        sourcePointValue: 0,
+        newCategory: 'rent',
+        newRate: syntheticRentRate,
+        newPointValue: newPV,
+        actualSpend: annualRent
+      });
+    }
+  }
+
+  return rows;
+}
+
+/**
+ * Get spending shift rows for "Remove a Card" scenario.
+ * Compares at subcategory level. Shows ALL subcategories — every dollar must go somewhere.
+ * @param {string} removeCardId - Card being removed
+ * @param {number} year - Year to analyze
+ * @param {string[]} [extraCardIds] - Additional card IDs in the hypothetical wallet (e.g. newly added card in swap)
+ */
+function getRemoveCardShiftRows(removeCardId, year, extraCardIds) {
+  if (!state.results || !state.results.processed) return [];
+  const removeCard = CARDS[removeCardId];
+  if (!removeCard) return [];
+
+  // Build hypothetical wallet card IDs: all owned cards minus removed, plus any extras
+  let walletCardIds = getActiveCardIds().filter(id => id !== removeCardId);
+  if (extraCardIds) {
+    for (const id of extraCardIds) {
+      if (!walletCardIds.includes(id) && CARDS[id]) walletCardIds.push(id);
+    }
+  }
+
+  const removePV = getPointValue(removeCardId);
+  const { subcategories } = getAnnualizedCardSpend(removeCardId, year);
+  const today = new Date();
+  const sampleDate = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  const rows = [];
+
+  for (const [sub, data] of Object.entries(subcategories)) {
+    if (data.spend <= 0) continue;
+
+    // Rent is only transferable to other Bilt cards — use actual processed points for source rate
+    if (sub === 'rent') {
+      const effectiveRate = data.spend > 0 ? data.points / data.spend : 0;
+      // Find best Bilt destination in wallet
+      let destCardId = null, destRate = 0, destPV = 0;
+      let destName = 'None — rent requires Bilt';
+      for (const cid of walletCardIds) {
+        const c = CARDS[cid];
+        if (!c || !c.isBilt) continue;
+        const pv = getPointValue(cid);
+        const mapped = mapToCardCategory('rent', cid, sampleDate);
+        const mult = getCardScenariosMultiplier(cid, mapped);
+        const val = mult.rate * pv;
+        if (val > destRate * destPV) {
+          destCardId = cid; destRate = mult.rate; destPV = pv;
+          destName = c.shortName || c.name || cid;
+        }
+      }
+      rows.push({
+        sourceCategory: sub,
+        sourceRate: effectiveRate,
+        sourcePointValue: removePV,
+        actualSpend: data.spend,
+        bestCardId: destCardId,
+        bestCardName: destName,
+        bestCategory: 'rent',
+        bestRate: destRate,
+        bestPointValue: destPV
+      });
+      continue;
+    }
+
+    // Value on the removed card
+    const removeCat = mapToCardCategory(sub, removeCardId, sampleDate);
+    const removeMult = getCardScenariosMultiplier(removeCardId, removeCat);
+
+    // Find best destination card in hypothetical wallet for this subcategory
+    let bestCardId = null;
+    let bestValue = 0;
+    let bestCat = 'other';
+    let bestRate = 1;
+    let bestPV = 0.01;
+
+    for (const cardId of walletCardIds) {
+      const cardPV = getPointValue(cardId);
+      const mapped = mapToCardCategory(sub, cardId, sampleDate);
+      const mult = getCardScenariosMultiplier(cardId, mapped);
+      const val = mult.rate * cardPV;
+      if (val > bestValue) {
+        bestValue = val;
+        bestCardId = cardId;
+        bestCat = mapped;
+        bestRate = mult.rate;
+        bestPV = cardPV;
+      }
+    }
+
+    // Always show the row — every dollar of removed card spending must be accounted for
+    if (bestCardId) {
+      rows.push({
+        sourceCategory: sub,
+        sourceRate: removeMult.rate,
+        sourcePointValue: removePV,
+        actualSpend: data.spend,
+        bestCardId,
+        bestCardName: (CARDS[bestCardId]?.shortName || CARDS[bestCardId]?.name || bestCardId),
+        bestCategory: bestCat,
+        bestRate,
+        bestPointValue: bestPV
+      });
+    }
+  }
+
+  return rows;
+}
+
+/**
+ * Get list of active card IDs from transactions for a given year
+ */
+function getActiveCardIds(year) {
+  if (!state.results || !state.results.processed) return [];
+  const txns = state.results.processed.filter(t => {
+    if (t.isPayment || !t.cardId || t.cardId === 'skip') return false;
+    if (year) return getYearFromDateString(t.date) === year;
+    return true;
+  });
+  return [...new Set(txns.map(t => t.cardId))].filter(id => CARDS[id]);
+}
+
+/**
+ * Calculate net impact from the confirmed shift amounts and credit settings.
+ * Returns { spendingImpact, creditsImpact, feeImpact, totalImpact,
+ *   addCreditsTotal, removeFee, addFee, removeCreditsTotal }
+ */
+function calculateCardScenariosNetImpact() {
+  const wi = state.cardScenarios;
+  let spendingImpact = 0;
+
+  // Spending shifts
+  for (const [key, amount] of Object.entries(wi.shiftAmounts)) {
+    if (amount <= 0) continue;
+    const parts = key.split('|');
+    // For add scenario: key = 'sourceCardId|sourceCategory'
+    // For remove scenario: key = 'sourceCategory'
+    // The row data is needed to compute values - we re-derive from the rows
+  }
+
+  // Re-derive from rows for accuracy
+  const year = wi.selectedYear;
+  const _today = new Date();
+  const sampleDate = `${_today.getFullYear()}-${String(_today.getMonth()+1).padStart(2,'0')}-${String(_today.getDate()).padStart(2,'0')}`;
+
+  if (wi.scenarioType === 'add' || wi.scenarioType === 'swap') {
+    const addRows = wi.addCardId ? getAddCardShiftRows(wi.addCardId, year) : [];
+    for (const row of addRows) {
+      const key = `${row.sourceCardId}|${row.sourceCategory}`;
+      const amount = wi.shiftAmounts[key] || 0;
+      if (amount <= 0) continue;
+      const oldValue = amount * row.sourceRate * row.sourcePointValue;
+      const newValue = amount * row.newRate * row.newPointValue;
+      spendingImpact += (newValue - oldValue);
+    }
+  }
+
+  if (wi.scenarioType === 'remove' || wi.scenarioType === 'swap') {
+    const swapExtras = wi.scenarioType === 'swap' && wi.addCardId ? [wi.addCardId] : undefined;
+    const removeRows = wi.removeCardId ? getRemoveCardShiftRows(wi.removeCardId, year, swapExtras) : [];
+
+    // Pre-compute best base-rate value among remaining cards for unshifted spending
+    const remainingCards = getActiveCardIds().filter(id => id !== wi.removeCardId);
+    if (swapExtras) swapExtras.forEach(id => { if (!remainingCards.includes(id) && CARDS[id]) remainingCards.push(id); });
+    let bestBaseValue = 0;
+    for (const cid of remainingCards) {
+      const card = CARDS[cid];
+      if (card) {
+        const baseVal = (card.baseRate || 1) * getPointValue(cid);
+        if (baseVal > bestBaseValue) bestBaseValue = baseVal;
+      }
+    }
+
+    for (const row of removeRows) {
+      const key = `remove|${row.sourceCategory}`;
+      const shiftedAmount = wi.shiftAmounts[key] || 0;
+      const unshifted = row.actualSpend - shiftedAmount;
+      // All spending on removed card loses its current value
+      const lostValue = row.actualSpend * row.sourceRate * row.sourcePointValue;
+      // Rent: only Bilt destinations earn on rent, no base-rate fallback for unshifted
+      if (row.sourceCategory === 'rent') {
+        const rentDestGain = row.actualSpend * row.bestRate * row.bestPointValue;
+        spendingImpact += (rentDestGain - lostValue);
+        continue;
+      }
+      // Shifted portion earns best-destination value
+      const shiftedGain = shiftedAmount * row.bestRate * row.bestPointValue;
+      // Unshifted portion falls to catch-all base rate
+      const unshiftedGain = unshifted > 0 ? unshifted * bestBaseValue : 0;
+      spendingImpact += (shiftedGain + unshiftedGain - lostValue);
+    }
+  }
+
+  // Credits for added card
+  let addCreditsTotal = 0;
+  if (wi.addCardId && (wi.scenarioType === 'add' || wi.scenarioType === 'swap')) {
+    const addCard = CARDS[wi.addCardId];
+    if (addCard && addCard.credits) {
+      for (const cr of addCard.credits) {
+        const enabled = wi.creditToggles[cr.name] !== false; // default on
+        if (enabled) {
+          addCreditsTotal += (wi.creditAmounts[cr.name] !== undefined ? wi.creditAmounts[cr.name] : cr.amount);
+        }
+      }
+    }
+  }
+
+  // Credits lost from removed card
+  let removeCreditsTotal = 0;
+  if (wi.removeCardId && (wi.scenarioType === 'remove' || wi.scenarioType === 'swap')) {
+    const removeCard = CARDS[wi.removeCardId];
+    if (removeCard && removeCard.credits) {
+      for (const cr of removeCard.credits) {
+        const enabled = wi.removeCreditToggles[cr.name] !== false;
+        if (enabled) {
+          removeCreditsTotal += (wi.removeCreditAmounts[cr.name] !== undefined ? wi.removeCreditAmounts[cr.name] : cr.amount);
+        }
+      }
+    }
+  }
+
+  // Annual fees
+  let addFee = 0;
+  if (wi.addCardId && (wi.scenarioType === 'add' || wi.scenarioType === 'swap')) {
+    addFee = CARDS[wi.addCardId]?.annualFee || 0;
+  }
+  let removeFee = 0;
+  if (wi.removeCardId && (wi.scenarioType === 'remove' || wi.scenarioType === 'swap')) {
+    removeFee = CARDS[wi.removeCardId]?.annualFee || 0;
+  }
+
+  const creditsImpact = addCreditsTotal - removeCreditsTotal;
+  const feeImpact = removeFee - addFee; // Saved fee is positive, new fee is negative
+  const totalImpact = spendingImpact + creditsImpact + feeImpact;
+
+  return { spendingImpact, creditsImpact, feeImpact, totalImpact, addCreditsTotal, removeFee, addFee, removeCreditsTotal };
+}
+
+/**
+ * Get the current wallet value for the selected year (annualized if needed).
+ */
+function getCurrentWalletValue(year) {
+  if (!state.results || !state.results.processed) return 0;
+  const txns = state.results.processed.filter(t => {
+    if (t.isPayment) return false;
+    if (year) return getYearFromDateString(t.date) === year;
+    return true;
+  });
+
+  let pointsValue = 0;
+  let credits = 0;
+  txns.forEach(t => {
+    if (t.isCredit && !t.isRefund) {
+      credits += Math.abs(t.amount);
+    } else if (!t.isCredit) {
+      pointsValue += t.pointsValue || 0;
+    }
+  });
+
+  // Annual fees for active cards
+  const activeCards = getActiveCardIds(year);
+  let totalFees = 0;
+  for (const cardId of activeCards) {
+    totalFees += CARDS[cardId]?.annualFee || 0;
+  }
+
+  // Annualize if partial year
+  const months = new Set();
+  txns.forEach(t => {
+    const parsed = parseDateString(t.date);
+    if (parsed) months.add(parsed.month);
+  });
+  const monthCount = months.size;
+  const factor = monthCount > 0 && monthCount < 12 ? 12 / monthCount : 1;
+
+  return (pointsValue + credits) * factor - totalFees;
+}
+
+/**
+ * Pre-fill shift amounts based on optimization rate.
+ */
+function prefillShiftAmounts() {
+  const wi = state.cardScenarios;
+  const rate = (wi.optimizationRate !== null ? wi.optimizationRate : calculateOptimizationRate()) / 100;
+
+  if (wi.scenarioType === 'add' || wi.scenarioType === 'swap') {
+    const addRows = wi.addCardId ? getAddCardShiftRows(wi.addCardId, wi.selectedYear) : [];
+    for (const row of addRows) {
+      const key = `${row.sourceCardId}|${row.sourceCategory}`;
+      wi.shiftAmounts[key] = Math.round(row.actualSpend * rate * 100) / 100;
+    }
+  }
+
+  if (wi.scenarioType === 'remove' || wi.scenarioType === 'swap') {
+    const swapExtras = wi.scenarioType === 'swap' && wi.addCardId ? [wi.addCardId] : undefined;
+    const removeRows = wi.removeCardId ? getRemoveCardShiftRows(wi.removeCardId, wi.selectedYear, swapExtras) : [];
+    for (const row of removeRows) {
+      const key = `remove|${row.sourceCategory}`;
+      wi.shiftAmounts[key] = Math.round(row.actualSpend * rate * 100) / 100;
+    }
+  }
+}
+
+/**
+ * Initialize credit toggles/amounts with defaults for a card.
+ */
+function initCreditDefaults(cardId, togglesObj, amountsObj) {
+  const card = CARDS[cardId];
+  if (!card || !card.credits) return;
+  const disabled = state.disabledCredits[cardId] || [];
+  for (const cr of card.credits) {
+    if (togglesObj[cr.name] === undefined) togglesObj[cr.name] = !disabled.includes(cr.name);
+    if (amountsObj[cr.name] === undefined) amountsObj[cr.name] = cr.amount;
+  }
+}
+
+/**
+ * Build per-row impact value for a shift row.
+ */
+function getRowImpact(amount, oldRate, oldPV, newRate, newPV) {
+  if (amount <= 0) return 0;
+  return (amount * newRate * newPV) - (amount * oldRate * oldPV);
+}
+
+/**
+ * Render the Card Scenarios view inside viewContainer.
+ */
+function renderCardScenarios() {
+  const container = document.getElementById('viewContainer');
+  const wi = state.cardScenarios;
+
+  // Pro gate check
+  if (window.TIER_CONFIG !== 'pro') {
+    container.innerHTML = `
+      <div class="card" style="text-align:center;padding:48px 24px;">
+        <div style="font-size:36px;margin-bottom:12px;">🔮</div>
+        <h2 class="card-title" style="margin:0 0 8px;">Card Scenarios</h2>
+        <p style="color:#78716c;margin-bottom:20px;">Model how adding or removing a card would change your wallet's value.</p>
+        <p style="color:#b45309;font-weight:500;">This feature requires Pro access.</p>
+      </div>`;
+    return;
+  }
+
+  if (!state.results || !state.results.processed || state.results.processed.length === 0) {
+    container.innerHTML = `
+      <div class="card" style="text-align:center;padding:48px 24px;">
+        <div style="font-size:36px;margin-bottom:12px;">🔮</div>
+        <h2 class="card-title" style="margin:0 0 8px;">Card Scenarios</h2>
+        <p style="color:#78716c;">Upload transaction data first to model scenarios.</p>
+      </div>`;
+    return;
+  }
+
+  // Build breadcrumb — all scenarios go straight to result at step 4
+  const stepLabels = ['Scenario', 'Card', 'Year', 'Result'];
+  const breadcrumb = stepLabels.map((label, i) => {
+    const stepNum = i + 1;
+    const cls = stepNum === wi.step ? 'active' : (stepNum < wi.step ? 'done' : '');
+    return `<span class="cardscenarios-breadcrumb-step ${cls}">${label}</span>`;
+  }).join('<span class="cardscenarios-breadcrumb-sep">›</span>');
+
+  let html = `<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h2 class="card-title" style="margin:0;">Card Scenarios</h2>
+      ${wi.step > 1 ? '<button class="btn btn-secondary cardscenarios-start-over" style="font-size:12px;padding:6px 12px;">Start Over</button>' : ''}
+    </div>
+    <div class="cardscenarios-breadcrumb">${breadcrumb}</div>`;
+
+  if (wi.step === 1) {
+    html += renderCardScenariosStep1();
+  } else if (wi.step === 2) {
+    html += wi.showRentPrompt ? renderCardScenariosStep2b() : renderCardScenariosStep2();
+  } else if (wi.step === 3) {
+    html += renderCardScenariosStep3();
+  } else if (wi.step === 4) {
+    html += renderCardScenariosStep4();
+  } else if (wi.step === 5) {
+    html += renderCardScenariosStep5();
+  }
+
+  html += '</div>';
+  container.innerHTML = html;
+  attachCardScenariosListeners();
+}
+
+function renderCardScenariosStep1() {
+  const wi = state.cardScenarios;
+  return `
+    <div class="cardscenarios-step">
+      <div class="cardscenarios-step-header">Step 1: What scenario do you want to model?</div>
+      <div class="cardscenarios-options">
+        <div class="cardscenarios-option ${wi.scenarioType === 'add' ? 'selected' : ''}" data-scenario="add">
+          <div class="cardscenarios-option-icon">➕</div>
+          <div class="cardscenarios-option-label">Add a Card</div>
+          <div class="cardscenarios-option-desc">See if a new card improves your wallet</div>
+        </div>
+        <div class="cardscenarios-option ${wi.scenarioType === 'remove' ? 'selected' : ''}" data-scenario="remove">
+          <div class="cardscenarios-option-icon">➖</div>
+          <div class="cardscenarios-option-label">Remove a Card</div>
+          <div class="cardscenarios-option-desc">See if dropping a card saves money</div>
+        </div>
+        <div class="cardscenarios-option ${wi.scenarioType === 'swap' ? 'selected' : ''}" data-scenario="swap">
+          <div class="cardscenarios-option-icon">🔄</div>
+          <div class="cardscenarios-option-label">Swap a Card</div>
+          <div class="cardscenarios-option-desc">Replace one card with another</div>
+        </div>
+      </div>
+      <div class="cardscenarios-nav">
+        <div></div>
+        <button class="btn btn-primary" id="cardscenariosNext1" ${!wi.scenarioType ? 'disabled' : ''}>Next →</button>
+      </div>
+    </div>`;
+}
+
+function renderCardScenariosStep2() {
+  const wi = state.cardScenarios;
+  const activeCardIds = getActiveCardIds(wi.selectedYear || state.selectedYear);
+
+  // All available cards for adding (not already in wallet)
+  const allCardIds = Object.keys(CARDS).filter(id => id !== 'skip');
+  const addOptions = allCardIds.filter(id => !activeCardIds.includes(id));
+  const removeOptions = activeCardIds;
+
+  let cardSelectors = '';
+
+  if (wi.scenarioType === 'add') {
+    cardSelectors = `
+      <div class="cardscenarios-step-header">Step 2: Which card would you add?</div>
+      <select class="form-select cardscenarios-card-select" id="cardscenariosAddCard">
+        <option value="">Select a card...</option>
+        ${addOptions.map(id => `<option value="${id}" ${wi.addCardId === id ? 'selected' : ''}>${escapeHtml(CARDS[id].name)} (${formatCurrency(CARDS[id].annualFee)}/yr)</option>`).join('')}
+        ${activeCardIds.length > 0 ? `<optgroup label="Already in wallet">${activeCardIds.map(id => `<option value="${id}" ${wi.addCardId === id ? 'selected' : ''}>${escapeHtml(CARDS[id].name)} (already have)</option>`).join('')}</optgroup>` : ''}
+      </select>`;
+  } else if (wi.scenarioType === 'remove') {
+    cardSelectors = `
+      <div class="cardscenarios-step-header">Step 2: Which card would you remove?</div>
+      <select class="form-select cardscenarios-card-select" id="cardscenariosRemoveCard">
+        <option value="">Select a card...</option>
+        ${removeOptions.map(id => `<option value="${id}" ${wi.removeCardId === id ? 'selected' : ''}>${escapeHtml(CARDS[id].name)}</option>`).join('')}
+      </select>`;
+  } else if (wi.scenarioType === 'swap') {
+    cardSelectors = `
+      <div class="cardscenarios-step-header">Step 2: Which cards are you swapping?</div>
+      <div style="margin-bottom:12px;">
+        <label style="font-size:13px;font-weight:500;color:#57534e;display:block;margin-bottom:4px;">Card to remove:</label>
+        <select class="form-select cardscenarios-card-select" id="cardscenariosRemoveCard">
+          <option value="">Select a card...</option>
+          ${removeOptions.map(id => `<option value="${id}" ${wi.removeCardId === id ? 'selected' : ''}>${escapeHtml(CARDS[id].name)}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:13px;font-weight:500;color:#57534e;display:block;margin-bottom:4px;">Card to add:</label>
+        <select class="form-select cardscenarios-card-select" id="cardscenariosAddCard">
+          <option value="">Select a card...</option>
+          ${allCardIds.map(id => `<option value="${id}" ${wi.addCardId === id ? 'selected' : ''}>${escapeHtml(CARDS[id].name)} (${formatCurrency(CARDS[id].annualFee)}/yr)</option>`).join('')}
+        </select>
+      </div>`;
+  }
+
+  const canProceed = (wi.scenarioType === 'add' && wi.addCardId) ||
+                     (wi.scenarioType === 'remove' && wi.removeCardId) ||
+                     (wi.scenarioType === 'swap' && wi.addCardId && wi.removeCardId);
+
+  return `
+    <div class="cardscenarios-step">
+      ${cardSelectors}
+      <div class="cardscenarios-nav">
+        <button class="btn btn-secondary" id="cardscenariosBack2">← Back</button>
+        <button class="btn btn-primary" id="cardscenariosNext2" ${!canProceed ? 'disabled' : ''}>Next →</button>
+      </div>
+    </div>`;
+}
+
+function renderCardScenariosStep2b() {
+  const wi = state.cardScenarios;
+  const cardName = CARDS[wi.addCardId]?.name || 'Bilt card';
+  return `
+    <div class="cardscenarios-step">
+      <div class="cardscenarios-step-header">Monthly Rent Amount</div>
+      <p style="font-size:13px;color:#57534e;margin-bottom:16px;">
+        The ${escapeHtml(cardName)} can earn points on rent payments — a benefit unique to Bilt cards.
+        Enter your monthly rent so we can estimate the value of those earnings.
+      </p>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:16px;font-weight:500;color:#44403c;">$</span>
+        <input type="number" id="cardscenariosRentAmount"
+          style="max-width:200px;font-size:16px;padding:10px 12px;border-radius:6px;border:1px solid #d6d3d1;font-family:inherit;"
+          placeholder="0" min="0" step="1"
+          value="${wi.rentAmount || ''}">
+        <span style="font-size:13px;color:#78716c;">/month</span>
+      </div>
+      <p style="font-size:11px;color:#a8a29e;margin-top:8px;">
+        No other credit card earns points on rent payments.
+      </p>
+      <div class="cardscenarios-nav">
+        <button class="btn btn-secondary" id="cardscenariosBack2b">← Back</button>
+        <button class="btn btn-primary" id="cardscenariosNext2b">Next →</button>
+      </div>
+    </div>`;
+}
+
+function renderCardScenariosStep3() {
+  const wi = state.cardScenarios;
+  const years = state.availableYears.length > 0
+    ? state.availableYears
+    : [...new Set(state.results.processed.map(t => getYearFromDateString(t.date)))].sort((a, b) => b - a);
+
+  return `
+    <div class="cardscenarios-step">
+      <div class="cardscenarios-step-header">Step 3: Which year's spending should we analyze?</div>
+      <select class="form-select cardscenarios-card-select" id="cardscenariosYear">
+        ${years.map(y => `<option value="${y}" ${wi.selectedYear === y ? 'selected' : ''}>${y}</option>`).join('')}
+      </select>
+      <p style="font-size:12px;color:#78716c;margin-top:8px;">We'll use your actual spending from this year to model the scenario.</p>
+      <div class="cardscenarios-nav">
+        <button class="btn btn-secondary" id="cardscenariosBack3">← Back</button>
+        <button class="btn btn-primary" id="cardscenariosNext3">Next →</button>
+      </div>
+    </div>`;
+}
+
+function renderCardScenariosStep4() {
+  const wi = state.cardScenarios;
+
+  if (wi.scenarioType === 'add') {
+    return renderStep4Add();
+  }
+  if (wi.scenarioType === 'remove') {
+    return renderStep4Remove();
+  }
+  if (wi.scenarioType === 'swap') {
+    return renderStep4Swap();
+  }
+  return '';
+}
+
+function renderStep4Add() {
+  const wi = state.cardScenarios;
+  const addCard = CARDS[wi.addCardId];
+  if (!addCard) return '<p>Card not found.</p>';
+
+  // Initialize credit defaults
+  initCreditDefaults(wi.addCardId, wi.creditToggles, wi.creditAmounts);
+
+  // Calculate value
+  const { totalGain, rows, annualizationFactor } = calculateAddCardValue(wi.addCardId, wi.selectedYear);
+  const creditsTotal = getAddCardCreditsTotal();
+  const annualFee = addCard.annualFee || 0;
+  const netImpact = totalGain + creditsTotal - annualFee;
+  const isPositive = netImpact >= 0;
+  const cardName = addCard.shortName || addCard.name;
+
+  let html = `<div class="cardscenarios-step">`;
+
+  // Headline
+  html += `<div class="cardscenarios-result-headline">
+    <div style="font-size:16px;color:#57534e;margin-bottom:8px;" id="cardscenariosAddHeadlineText">
+      Adding ${escapeHtml(cardName)} could ${isPositive ? 'earn you an estimated' : 'cost you an estimated'}
+    </div>
+    <div class="cardscenarios-result-amount ${isPositive ? 'positive' : 'negative'}" id="cardscenariosAddHeadline">
+      ${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}/yr
+    </div>
+  </div>`;
+
+  // Compact summary
+  html += `<div style="max-width:360px;margin:0 auto 20px;font-size:14px;line-height:2;">
+    <div style="display:flex;justify-content:space-between;">
+      <span>Credits</span>
+      <span class="mono" style="font-weight:600;color:${creditsTotal > 0 ? '#059669' : '#78716c'};" id="cardscenariosAddCreditsLine">+${formatCurrencyPrecise(creditsTotal)}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;">
+      <span>Point value change</span>
+      <span class="mono" style="font-weight:600;color:${totalGain > 0 ? '#059669' : '#78716c'};" id="cardscenariosAddRewardsLine">+${formatCurrencyPrecise(totalGain)}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;">
+      <span>Annual fee</span>
+      <span class="mono" style="font-weight:600;color:${annualFee > 0 ? '#dc2626' : '#78716c'};">-${formatCurrencyPrecise(annualFee)}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;border-top:2px solid #e7e5e4;padding-top:4px;margin-top:4px;">
+      <span style="font-weight:600;">Estimated net impact</span>
+      <span class="mono" style="font-weight:700;color:${isPositive ? '#059669' : '#dc2626'};" id="cardscenariosAddNetTop">${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}</span>
+    </div>
+  </div>`;
+
+  // Disclosure note
+  html += `<p style="font-size:12px;color:#78716c;text-align:center;max-width:480px;margin:0 auto 24px;line-height:1.5;">
+    This estimate assumes you always use the new card when it earns more. The actual value will likely be lower due to a small amount of sub-optimal spend throughout the year.
+  </p>`;
+
+  // === Ledger section: Credits, Spend Rewards (collapsible), Annual Fee, Total ===
+  html += `<div style="max-width:540px;margin:0 auto;">`;
+
+  // Credits (with toggles)
+  html += renderCreditAssumptions(wi.addCardId, wi.creditToggles, wi.creditAmounts, 'add');
+
+  // Spend Rewards — collapsible row with value on the right
+  html += `<div style="margin-top:16px;border-top:1px solid #e7e5e4;padding-top:12px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" id="cardscenariosAddRewardsToggle">
+      <span style="font-size:13px;font-weight:600;color:#57534e;">
+        <span class="toggle-arrow" style="font-size:10px;margin-right:4px;">▶</span>Point Value Change
+      </span>
+      <span class="mono" style="font-weight:600;color:${totalGain > 0 ? '#059669' : '#78716c'};font-size:14px;" id="cardscenariosAddRewardsValue">+${formatCurrencyPrecise(totalGain)}</span>
+    </div>
+    <div class="hidden" id="cardscenariosAddRewardsDetail" style="margin-top:12px;">`;
+
+  if (rows.length > 0) {
+    html += renderAddSpendTable(rows, totalGain, 'cardscenariosAddTable');
+  } else {
+    html += `<div style="padding:16px;text-align:center;color:#78716c;background:#f5f5f4;border-radius:8px;font-size:13px;">
+      No spending categories where ${escapeHtml(cardName)} earns more value than your current cards.
+    </div>`;
+  }
+
+  if (annualizationFactor > 1) {
+    html += `<p style="font-size:11px;color:#a8a29e;margin-top:8px;">Amounts annualized from ${Math.round(12 / annualizationFactor)} months of data.</p>`;
+  }
+
+  html += `</div></div>`; // end rewards detail + rewards section
+
+  // Annual fee
+  html += `<div class="cardscenarios-annual-fee" style="margin-top:12px;">
+    <span class="cardscenarios-annual-fee-label">Annual Fee</span>
+    <span class="cardscenarios-annual-fee-value">-${formatCurrencyPrecise(annualFee)}</span>
+  </div>`;
+
+  // Total line
+  html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:2px solid #1c1917;margin-top:8px;">
+    <span style="font-size:14px;font-weight:700;">Estimated Net Impact</span>
+    <span class="mono" style="font-weight:700;font-size:16px;color:${isPositive ? '#059669' : '#dc2626'};" id="cardscenariosAddNetLine">${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}</span>
+  </div>`;
+
+  html += `</div>`; // end ledger
+
+  html += `<div class="cardscenarios-nav">
+    <button class="btn btn-secondary" id="cardscenariosBack4">← Back</button>
+    <button class="btn btn-secondary cardscenarios-start-over">Start New Scenario</button>
+  </div></div>`;
+
+  return html;
+}
+
+/**
+ * Sortable table system for Card Scenarios spend tables.
+ * Stores row data and column config per table, re-renders tbody on sort.
+ */
+const _cardscenariosTables = {};
+
+function cardscenariosSortTable(tableId, sortKey) {
+  const table = _cardscenariosTables[tableId];
+  if (!table) return;
+
+  // Toggle direction if same key, otherwise default to asc
+  if (table.sortKey === sortKey) {
+    table.sortDir = table.sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    table.sortKey = sortKey;
+    table.sortDir = 'asc';
+  }
+
+  // Sort rows
+  const col = table.columns.find(c => c.key === sortKey);
+  if (!col || !col.getValue) return;
+  const sorted = [...table.rows].sort((a, b) => {
+    const va = col.getValue(a);
+    const vb = col.getValue(b);
+    const cmp = typeof va === 'string' ? va.localeCompare(vb) : va - vb;
+    return table.sortDir === 'asc' ? cmp : -cmp;
+  });
+
+  // Re-render tbody
+  const tbody = document.getElementById(tableId + 'Body');
+  if (!tbody) return;
+  let html = '';
+  for (const row of sorted) {
+    html += '<tr>';
+    for (const c of table.columns) html += c.render(row);
+    html += '</tr>';
+  }
+  html += table.totalRowHtml;
+  tbody.innerHTML = html;
+
+  // Update header arrows
+  const tableEl = document.getElementById(tableId);
+  if (tableEl) {
+    tableEl.querySelectorAll('th[data-sort]').forEach(th => {
+      const base = th.dataset.label || th.textContent.replace(/ [↑↓]$/, '');
+      th.dataset.label = base;
+      th.textContent = base + (th.dataset.sort === table.sortKey ? (table.sortDir === 'asc' ? ' ↑' : ' ↓') : '');
+    });
+  }
+}
+
+/**
+ * Render a unified spend table showing all subcategories where value changes.
+ * Used in both Remove and Swap result pages.
+ * @param {Array} rows - Normalized rows with { subcategory, currentCard, currentRate, afterCard, afterRate, spend, impact }
+ * @param {number} total - The total impact value
+ * @param {string} tableId - Unique ID for this table (for sorting)
+ * @returns {string} HTML
+ */
+function renderUnifiedSpendTable(rows, total, tableId) {
+  const columns = [
+    { key: 'subcategory', label: 'Subcategory', getValue: r => formatSubcategoryName(r.subcategory).toLowerCase(),
+      render: r => `<td>${escapeHtml(formatSubcategoryName(r.subcategory))}</td>` },
+    { key: 'currentCard', label: 'Current Card', getValue: r => r.currentCard.toLowerCase(),
+      render: r => `<td>${escapeHtml(r.currentCard)}</td>` },
+    { key: 'currentRate', label: 'Rate', getValue: r => r.currentRate,
+      render: r => `<td class="mono">${r.currentRate}x</td>` },
+    { key: '_arrow', label: '', sortable: false,
+      render: () => `<td style="color:#a8a29e;padding:0 2px;">→</td>` },
+    { key: 'afterCard', label: 'New Card', getValue: r => r.afterCard.toLowerCase(),
+      render: r => `<td>${escapeHtml(r.afterCard)}</td>` },
+    { key: 'afterRate', label: 'Rate', getValue: r => r.afterRate,
+      render: r => `<td class="mono">${r.afterRate}x</td>` },
+    { key: 'spend', label: 'Spend', align: 'right', getValue: r => r.spend,
+      render: r => `<td class="text-right mono">${formatCurrencyPrecise(r.spend)}</td>` },
+    { key: 'impact', label: 'Impact', align: 'right', getValue: r => r.impact,
+      render: r => { const p = r.impact >= 0; return `<td class="text-right cardscenarios-impact ${p ? 'positive' : 'negative'}">${p ? '+' : '-'}${formatCurrencyPrecise(Math.abs(r.impact))}</td>`; } }
+  ];
+
+  const totalPositive = total >= 0;
+  const totalRowHtml = `<tr style="font-weight:600;border-top:2px solid #e7e5e4;">
+    <td colspan="6"></td>
+    <td class="text-right mono">${formatCurrencyPrecise(rows.reduce((s, r) => s + r.spend, 0))}</td>
+    <td class="text-right cardscenarios-impact ${totalPositive ? 'positive' : 'negative'}">${totalPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(total))}</td>
+  </tr>`;
+
+  // Register with sort system
+  _cardscenariosTables[tableId] = { rows: [...rows], sortKey: 'impact', sortDir: 'asc', columns, totalRowHtml };
+
+  // Render headers
+  let html = `<div class="cardscenarios-shift-table-wrap"><table class="cardscenarios-shift-table" id="${tableId}">
+    <thead><tr>`;
+  for (const col of columns) {
+    const align = col.align === 'right' ? ' class="text-right"' : '';
+    if (col.sortable === false) {
+      html += `<th${align}>${col.label}</th>`;
+    } else {
+      const arrow = col.key === 'impact' ? ' ↑' : '';
+      html += `<th${align} data-sort="${col.key}" data-label="${col.label}" style="cursor:pointer;user-select:none;">${col.label}${arrow}</th>`;
+    }
+  }
+  html += `</tr></thead><tbody id="${tableId}Body">`;
+
+  // Render rows (already sorted by caller)
+  for (const row of rows) {
+    html += '<tr>';
+    for (const c of columns) html += c.render(row);
+    html += '</tr>';
+  }
+  html += totalRowHtml;
+  html += `</tbody></table></div>`;
+
+  return html;
+}
+
+function renderAddSpendTable(rows, total, tableId) {
+  const columns = [
+    { key: 'sourceCard', label: 'Source Card', getValue: r => r.sourceCardName.toLowerCase(),
+      render: r => `<td>${escapeHtml(r.sourceCardName)}</td>` },
+    { key: 'subcategory', label: 'Subcategory', getValue: r => formatSubcategoryName(r.subcategory).toLowerCase(),
+      render: r => `<td>${escapeHtml(formatSubcategoryName(r.subcategory))}</td>` },
+    { key: 'sourceRate', label: 'Actual Rate', getValue: r => r.sourceRate,
+      render: r => `<td class="mono">${r.sourceRate}x</td>` },
+    { key: 'newRate', label: 'New Rate', getValue: r => r.newRate,
+      render: r => `<td class="mono">${r.newRate}x</td>` },
+    { key: 'spend', label: 'Spend', align: 'right', getValue: r => r.spend,
+      render: r => `<td class="text-right mono">${formatCurrencyPrecise(r.spend)}</td>` },
+    { key: 'additionalValue', label: 'Additional Value', align: 'right', getValue: r => r.additionalValue,
+      render: r => `<td class="text-right cardscenarios-impact positive">+${formatCurrencyPrecise(r.additionalValue)}</td>` }
+  ];
+
+  const totalRowHtml = `<tr style="font-weight:600;border-top:2px solid #e7e5e4;">
+    <td colspan="4"></td>
+    <td class="text-right mono">${formatCurrencyPrecise(rows.reduce((s, r) => s + r.spend, 0))}</td>
+    <td class="text-right cardscenarios-impact positive">+${formatCurrencyPrecise(total)}</td>
+  </tr>`;
+
+  _cardscenariosTables[tableId] = { rows: [...rows], sortKey: 'additionalValue', sortDir: 'asc', columns, totalRowHtml };
+
+  let html = `<div class="cardscenarios-shift-table-wrap"><table class="cardscenarios-shift-table" id="${tableId}">
+    <thead><tr>`;
+  for (const col of columns) {
+    const align = col.align === 'right' ? ' class="text-right"' : '';
+    const arrow = col.key === 'additionalValue' ? ' ↑' : '';
+    html += `<th${align} data-sort="${col.key}" data-label="${col.label}" style="cursor:pointer;user-select:none;">${col.label}${arrow}</th>`;
+  }
+  html += `</tr></thead><tbody id="${tableId}Body">`;
+
+  // Sort ascending by additionalValue (default)
+  const sorted = [...rows].sort((a, b) => a.additionalValue - b.additionalValue);
+  for (const row of sorted) {
+    html += '<tr>';
+    for (const c of columns) html += c.render(row);
+    html += '</tr>';
+  }
+  html += totalRowHtml;
+  html += `</tbody></table></div>`;
+  return html;
+}
+
+function renderStep4Remove() {
+  const wi = state.cardScenarios;
+  const removeCard = CARDS[wi.removeCardId];
+  if (!removeCard) return '<p>Card not found.</p>';
+
+  // Initialize credit defaults for removed card
+  initCreditDefaults(wi.removeCardId, wi.removeCreditToggles, wi.removeCreditAmounts);
+
+  // Calculate spending value change
+  const { totalChange, rows, annualizationFactor } = calculateRemoveCardValue(wi.removeCardId, wi.selectedYear);
+  const creditsTotal = getRemoveCardCreditsTotal();
+  const annualFee = removeCard.annualFee || 0;
+  const netImpact = totalChange - creditsTotal + annualFee;
+  const isPositive = netImpact >= 0;
+  const cardName = removeCard.shortName || removeCard.name;
+
+  let html = `<div class="cardscenarios-step">`;
+
+  // Headline
+  html += `<div class="cardscenarios-result-headline">
+    <div style="font-size:16px;color:#57534e;margin-bottom:8px;" id="cardscenariosRemoveHeadlineText">
+      Removing ${escapeHtml(cardName)} could ${isPositive ? 'save you an estimated' : 'cost you an estimated'}
+    </div>
+    <div class="cardscenarios-result-amount ${isPositive ? 'positive' : 'negative'}" id="cardscenariosRemoveHeadline">
+      ${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}/yr
+    </div>
+  </div>`;
+
+  // Compact summary
+  html += `<div style="max-width:360px;margin:0 auto 20px;font-size:14px;line-height:2;">
+    <div style="display:flex;justify-content:space-between;">
+      <span>Lost credits</span>
+      <span class="mono" style="font-weight:600;color:${creditsTotal > 0 ? '#dc2626' : '#78716c'};" id="cardscenariosRemoveCreditsLine">-${formatCurrencyPrecise(creditsTotal)}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;">
+      <span>Point value change</span>
+      <span class="mono" style="font-weight:600;color:${totalChange > 0 ? '#059669' : totalChange < 0 ? '#dc2626' : '#78716c'};" id="cardscenariosRemoveRewardsLine">${totalChange >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(totalChange))}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;">
+      <span>Saved annual fee</span>
+      <span class="mono" style="font-weight:600;color:${annualFee > 0 ? '#059669' : '#78716c'};">+${formatCurrencyPrecise(annualFee)}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;border-top:2px solid #e7e5e4;padding-top:4px;margin-top:4px;">
+      <span style="font-weight:600;">Estimated net impact</span>
+      <span class="mono" style="font-weight:700;color:${isPositive ? '#059669' : '#dc2626'};" id="cardscenariosRemoveNetTop">${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}</span>
+    </div>
+  </div>`;
+
+  // Disclosure note
+  html += `<p style="font-size:12px;color:#78716c;text-align:center;max-width:480px;margin:0 auto 24px;line-height:1.5;">
+    This estimate assumes each subcategory's spending shifts to whichever remaining card earns the most. Actual value may vary based on your card usage habits.
+  </p>`;
+
+  // === Ledger section ===
+  html += `<div style="max-width:540px;margin:0 auto;">`;
+
+  // Lost credits (with toggles)
+  html += renderCreditAssumptions(wi.removeCardId, wi.removeCreditToggles, wi.removeCreditAmounts, 'remove');
+
+  // Point Value Change — single collapsible section
+  html += `<div style="margin-top:16px;border-top:1px solid #e7e5e4;padding-top:12px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" id="cardscenariosRemoveRewardsToggle">
+      <span style="font-size:13px;font-weight:600;color:#57534e;">
+        <span class="toggle-arrow" style="font-size:10px;margin-right:4px;">▶</span>Point Value Change
+      </span>
+      <span class="mono" style="font-weight:600;color:${totalChange >= 0 ? '#059669' : '#dc2626'};font-size:14px;" id="cardscenariosRemoveRewardsValue">${totalChange >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(totalChange))}</span>
+    </div>
+    <div class="hidden" id="cardscenariosRemoveRewardsDetail" style="margin-top:12px;">`;
+
+  // Normalize remove rows into unified format, filter out zero-impact rows
+  const unifiedRows = rows
+    .filter(r => Math.abs(r.valueChange) >= 0.005)
+    .map(r => ({
+      subcategory: r.subcategory,
+      currentCard: cardName,
+      currentRate: r.sourceRate,
+      afterCard: r.bestCardName,
+      afterRate: r.bestRate,
+      spend: r.spend,
+      impact: r.valueChange
+    }))
+    .sort((a, b) => a.impact - b.impact);
+
+  if (unifiedRows.length > 0) {
+    html += renderUnifiedSpendTable(unifiedRows, totalChange, 'cardscenariosRemoveTable');
+  } else {
+    html += `<div style="padding:16px;text-align:center;color:#78716c;background:#f5f5f4;border-radius:8px;font-size:13px;">
+      No spending found on ${escapeHtml(cardName)} for ${wi.selectedYear}.
+    </div>`;
+  }
+
+  if (annualizationFactor > 1) {
+    html += `<p style="font-size:11px;color:#a8a29e;margin-top:8px;">Amounts annualized from ${Math.round(12 / annualizationFactor)} months of data.</p>`;
+  }
+
+  html += `</div></div>`; // end rewards detail + spending section
+
+  // Saved annual fee
+  html += `<div class="cardscenarios-annual-fee" style="margin-top:12px;">
+    <span class="cardscenarios-annual-fee-label">Saved Annual Fee</span>
+    <span class="cardscenarios-annual-fee-value" style="color:#059669;">+${formatCurrencyPrecise(annualFee)}</span>
+  </div>`;
+
+  // Total line
+  html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:2px solid #1c1917;margin-top:8px;">
+    <span style="font-size:14px;font-weight:700;">Estimated Net Impact</span>
+    <span class="mono" style="font-weight:700;font-size:16px;color:${isPositive ? '#059669' : '#dc2626'};" id="cardscenariosRemoveNetLine">${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}</span>
+  </div>`;
+
+  html += `</div>`; // end ledger
+
+  html += `<div class="cardscenarios-nav">
+    <button class="btn btn-secondary" id="cardscenariosBack4">← Back</button>
+    <button class="btn btn-secondary cardscenarios-start-over">Start New Scenario</button>
+  </div></div>`;
+
+  return html;
+}
+
+function renderStep4Swap() {
+  const wi = state.cardScenarios;
+  const addCard = CARDS[wi.addCardId];
+  const removeCard = CARDS[wi.removeCardId];
+  if (!addCard || !removeCard) return '<p>Cards not found.</p>';
+
+  initCreditDefaults(wi.addCardId, wi.creditToggles, wi.creditAmounts);
+  initCreditDefaults(wi.removeCardId, wi.removeCreditToggles, wi.removeCreditAmounts);
+
+  const { removeChange, removeRows, addGain, addRows, totalSpendChange, annualizationFactor } = calculateSwapValue(wi.removeCardId, wi.addCardId, wi.selectedYear);
+  const addCredits = getAddCardCreditsTotal();
+  const removeCredits = getRemoveCardCreditsTotal();
+  const netCredits = addCredits - removeCredits;
+  const addFee = addCard.annualFee || 0;
+  const removeFee = removeCard.annualFee || 0;
+  const netFee = removeFee - addFee;
+  const netImpact = totalSpendChange + netCredits + netFee;
+  const isPositive = netImpact >= 0;
+  const removeName = removeCard.shortName || removeCard.name;
+  const addName = addCard.shortName || addCard.name;
+
+  let html = `<div class="cardscenarios-step">`;
+
+  // Headline
+  html += `<div class="cardscenarios-result-headline">
+    <div style="font-size:16px;color:#57534e;margin-bottom:8px;" id="cardscenariosSwapHeadlineText">
+      Swapping ${escapeHtml(removeName)} for ${escapeHtml(addName)} could ${isPositive ? 'earn you an estimated' : 'cost you an estimated'}
+    </div>
+    <div class="cardscenarios-result-amount ${isPositive ? 'positive' : 'negative'}" id="cardscenariosSwapHeadline">
+      ${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}/yr
+    </div>
+  </div>`;
+
+  // Compact summary
+  html += `<div style="max-width:360px;margin:0 auto 20px;font-size:14px;line-height:2;">
+    <div style="display:flex;justify-content:space-between;">
+      <span>Credits</span>
+      <span class="mono" style="font-weight:600;color:${netCredits >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosSwapCreditsLine">${netCredits >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netCredits))}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;">
+      <span>Point value change</span>
+      <span class="mono" style="font-weight:600;color:${totalSpendChange >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosSwapRewardsLine">${totalSpendChange >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(totalSpendChange))}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;">
+      <span>Annual fee</span>
+      <span class="mono" style="font-weight:600;color:${netFee >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosSwapFeeLine">${netFee >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netFee))}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;border-top:2px solid #e7e5e4;padding-top:4px;margin-top:4px;">
+      <span style="font-weight:600;">Estimated net impact</span>
+      <span class="mono" style="font-weight:700;color:${isPositive ? '#059669' : '#dc2626'};" id="cardscenariosSwapNetTop">${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}</span>
+    </div>
+  </div>`;
+
+  // Disclosure note
+  html += `<p style="font-size:12px;color:#78716c;text-align:center;max-width:480px;margin:0 auto 24px;line-height:1.5;">
+    This estimate assumes you always use the best card when it earns more. The actual value will likely be slightly different due to a small amount of suboptimal card usage throughout the year.
+  </p>`;
+
+  // === Ledger section ===
+  html += `<div style="max-width:540px;margin:0 auto;">`;
+
+  // Credits side-by-side: lost (removed) and gained (new)
+  html += renderSwapCredits(wi, removeCard, addCard, removeCredits, addCredits, netCredits);
+
+  // Point Value Change — single collapsible section
+  html += `<div style="margin-top:16px;border-top:1px solid #e7e5e4;padding-top:12px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" id="cardscenariosSwapRewardsToggle">
+      <span style="font-size:13px;font-weight:600;color:#57534e;">
+        <span class="toggle-arrow" style="font-size:10px;margin-right:4px;">▶</span>Point Value Change
+      </span>
+      <span class="mono" style="font-weight:600;color:${totalSpendChange >= 0 ? '#059669' : '#dc2626'};font-size:14px;" id="cardscenariosSwapRewardsValue">${totalSpendChange >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(totalSpendChange))}</span>
+    </div>
+    <div class="hidden" id="cardscenariosSwapRewardsDetail" style="margin-top:12px;">`;
+
+  // Combine removeRows and addRows into one unified table
+  const swapUnifiedRows = [];
+
+  // Remove rows: spending leaving the removed card
+  for (const r of removeRows) {
+    if (Math.abs(r.valueChange) < 0.005) continue;
+    swapUnifiedRows.push({
+      subcategory: r.subcategory,
+      currentCard: removeName,
+      currentRate: r.sourceRate,
+      afterCard: r.bestCardName,
+      afterRate: r.bestRate,
+      spend: r.spend,
+      impact: r.valueChange
+    });
+  }
+
+  // Add rows: spending shifting to new card from other cards
+  for (const r of addRows) {
+    if (Math.abs(r.additionalValue) < 0.005) continue;
+    swapUnifiedRows.push({
+      subcategory: r.subcategory,
+      currentCard: r.sourceCardName,
+      currentRate: r.sourceRate,
+      afterCard: addName,
+      afterRate: r.newRate,
+      spend: r.spend,
+      impact: r.additionalValue
+    });
+  }
+
+  // Sort by impact ascending (biggest losses first, biggest gains last)
+  swapUnifiedRows.sort((a, b) => a.impact - b.impact);
+
+  if (swapUnifiedRows.length > 0) {
+    html += renderUnifiedSpendTable(swapUnifiedRows, totalSpendChange, 'cardscenariosSwapTable');
+  } else {
+    html += `<div style="padding:12px;text-align:center;color:#78716c;background:#f5f5f4;border-radius:8px;font-size:13px;">
+      No spending categories where value changes as a result of this swap.
+    </div>`;
+  }
+
+  if (annualizationFactor > 1) {
+    html += `<p style="font-size:11px;color:#a8a29e;margin-top:8px;">Amounts annualized from ${Math.round(12 / annualizationFactor)} months of data.</p>`;
+  }
+
+  html += `</div></div>`; // end rewards detail + rewards section
+
+  // Annual fee section — show both
+  html += `<div style="margin-top:12px;border-top:1px solid #e7e5e4;padding-top:12px;">
+    <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
+      <span style="color:#78716c;">Saved fee (${escapeHtml(removeName)})</span>
+      <span class="mono" style="color:#059669;font-weight:500;">+${formatCurrencyPrecise(removeFee)}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:13px;">
+      <span style="color:#78716c;">New fee (${escapeHtml(addName)})</span>
+      <span class="mono" style="color:#dc2626;font-weight:500;">-${formatCurrencyPrecise(addFee)}</span>
+    </div>
+    <div class="cardscenarios-annual-fee" style="margin-top:4px;">
+      <span class="cardscenarios-annual-fee-label">Net Annual Fee</span>
+      <span class="cardscenarios-annual-fee-value" style="color:${netFee >= 0 ? '#059669' : '#dc2626'};">${netFee >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netFee))}</span>
+    </div>
+  </div>`;
+
+  // Total line
+  html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:2px solid #1c1917;margin-top:8px;">
+    <span style="font-size:14px;font-weight:700;">Estimated Net Impact</span>
+    <span class="mono" style="font-weight:700;font-size:16px;color:${isPositive ? '#059669' : '#dc2626'};" id="cardscenariosSwapNetLine">${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}</span>
+  </div>`;
+
+  html += `</div>`; // end ledger
+
+  html += `<div class="cardscenarios-nav">
+    <button class="btn btn-secondary" id="cardscenariosBack4">← Back</button>
+    <button class="btn btn-secondary cardscenarios-start-over">Start New Scenario</button>
+  </div></div>`;
+
+  return html;
+}
+
+function renderOptimizationSlider(value, isCustom) {
+  return `
+    <div class="cardscenarios-slider-wrap">
+      <div class="cardscenarios-slider-label">
+        <span>How often would you use the best card for each category?</span>
+        <span class="cardscenarios-slider-value ${isCustom ? 'custom' : ''}" id="cardscenariosSliderLabel">${isCustom ? 'Custom' : value + '%'}</span>
+      </div>
+      <input type="range" class="cardscenarios-slider ${isCustom ? 'inactive' : ''}" id="cardscenariosSlider" min="0" max="100" step="5" value="${value}">
+      ${isCustom ? '<span class="cardscenarios-slider-reset" id="cardscenariosSliderReset">Reset to slider</span>' : ''}
+    </div>`;
+}
+
+function renderSwapCredits(wi, removeCard, addCard, removeCredits, addCredits, netCredits) {
+  const removeHasCredits = removeCard.credits && removeCard.credits.length > 0;
+  const addHasCredits = addCard.credits && addCard.credits.length > 0;
+  if (!removeHasCredits && !addHasCredits) return '';
+
+  const removeName = escapeHtml(removeCard.shortName || removeCard.name);
+  const addName = escapeHtml(addCard.shortName || addCard.name);
+
+  let html = `<div style="border-top:1px solid #e7e5e4;padding-top:12px;">`;
+
+  // Side-by-side columns
+  html += `<div style="display:flex;gap:24px;flex-wrap:wrap;">`;
+
+  // Left column: Lost credits (removed card)
+  if (removeHasCredits) {
+    html += `<div style="flex:1;min-width:200px;">
+      <div style="font-size:13px;font-weight:600;color:#57534e;margin-bottom:8px;">Lost Credits — ${removeName}</div>`;
+    for (const cr of removeCard.credits) {
+      const enabled = wi.removeCreditToggles[cr.name] !== false;
+      const amount = wi.removeCreditAmounts[cr.name] !== undefined ? wi.removeCreditAmounts[cr.name] : cr.amount;
+      html += `<div class="cardscenarios-credit-row">
+        <div class="cardscenarios-credit-toggle ${enabled ? 'on' : ''}" data-credit="${escapeHtml(cr.name)}" data-prefix="remove-"></div>
+        <span class="cardscenarios-credit-name">${escapeHtml(cr.name)}</span>
+        <input type="number" class="cardscenarios-credit-amount" data-credit="${escapeHtml(cr.name)}" data-prefix="remove-" value="${amount.toFixed(0)}" min="0" max="${cr.amount}" step="1" ${!enabled ? 'disabled' : ''}>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+
+  // Right column: Gained credits (new card)
+  if (addHasCredits) {
+    html += `<div style="flex:1;min-width:200px;">
+      <div style="font-size:13px;font-weight:600;color:#57534e;margin-bottom:8px;">New Credits — ${addName}</div>`;
+    for (const cr of addCard.credits) {
+      const enabled = wi.creditToggles[cr.name] !== false;
+      const amount = wi.creditAmounts[cr.name] !== undefined ? wi.creditAmounts[cr.name] : cr.amount;
+      html += `<div class="cardscenarios-credit-row">
+        <div class="cardscenarios-credit-toggle ${enabled ? 'on' : ''}" data-credit="${escapeHtml(cr.name)}" data-prefix="add-"></div>
+        <span class="cardscenarios-credit-name">${escapeHtml(cr.name)}</span>
+        <input type="number" class="cardscenarios-credit-amount" data-credit="${escapeHtml(cr.name)}" data-prefix="add-" value="${amount.toFixed(0)}" min="0" max="${cr.amount}" step="1" ${!enabled ? 'disabled' : ''}>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+
+  html += `</div>`; // end flex columns
+
+  // Net credits total line
+  html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 0;border-top:1px solid #e7e5e4;margin-top:12px;">
+    <span style="font-size:13px;font-weight:600;color:#57534e;">Net Credits</span>
+    <span class="mono" style="font-weight:600;font-size:14px;color:${netCredits >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosSwapCreditsTotalValue">${netCredits >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netCredits))}</span>
+  </div>`;
+
+  html += `</div>`; // end credits section
+  return html;
+}
+
+function renderCreditAssumptions(cardId, toggles, amounts, mode) {
+  const card = CARDS[cardId];
+  if (!card || !card.credits || card.credits.length === 0) return '';
+  const label = mode === 'remove' ? 'Lost Credits' : 'Credit Assumptions';
+  const prefix = mode === 'remove' ? 'remove-' : 'add-';
+
+  let html = `<div class="cardscenarios-credits">
+    <div style="font-size:13px;font-weight:600;color:#57534e;margin-bottom:8px;">${label} — ${escapeHtml(card.shortName || card.name)}</div>`;
+
+  for (const cr of card.credits) {
+    const enabled = toggles[cr.name] !== false;
+    const amount = amounts[cr.name] !== undefined ? amounts[cr.name] : cr.amount;
+    html += `<div class="cardscenarios-credit-row">
+      <div class="cardscenarios-credit-toggle ${enabled ? 'on' : ''}" data-credit="${escapeHtml(cr.name)}" data-prefix="${prefix}"></div>
+      <span class="cardscenarios-credit-name">${escapeHtml(cr.name)}</span>
+      <input type="number" class="cardscenarios-credit-amount" data-credit="${escapeHtml(cr.name)}" data-prefix="${prefix}" value="${amount.toFixed(0)}" min="0" max="${cr.amount}" step="1" ${!enabled ? 'disabled' : ''}>
+    </div>`;
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function renderSummaryLine(scenarioType, impact) {
+  const isPositive = impact.totalImpact >= 0;
+  const wi = state.cardScenarios;
+  let cardName = '';
+  if (scenarioType === 'add') cardName = CARDS[wi.addCardId]?.shortName || CARDS[wi.addCardId]?.name || '';
+  else if (scenarioType === 'remove') cardName = CARDS[wi.removeCardId]?.shortName || CARDS[wi.removeCardId]?.name || '';
+  else cardName = (CARDS[wi.removeCardId]?.shortName || CARDS[wi.removeCardId]?.name || '') + ' → ' + (CARDS[wi.addCardId]?.shortName || CARDS[wi.addCardId]?.name || '');
+
+  const verb = scenarioType === 'add' ? 'adding' : scenarioType === 'remove' ? 'removing' : 'swapping';
+
+  let parts = [];
+  if (impact.spendingImpact !== 0) parts.push(`${impact.spendingImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(impact.spendingImpact)} from spending shifts`);
+
+  if (scenarioType === 'add' || scenarioType === 'swap') {
+    if (impact.addCreditsTotal > 0) parts.push(`+${formatCurrencyPrecise(impact.addCreditsTotal)} from credits`);
+    if (impact.addFee > 0) parts.push(`-${formatCurrencyPrecise(impact.addFee)} annual fee`);
+  }
+  if (scenarioType === 'remove' || scenarioType === 'swap') {
+    if (impact.removeCreditsTotal > 0) parts.push(`-${formatCurrencyPrecise(impact.removeCreditsTotal)} lost credits`);
+    if (impact.removeFee > 0) parts.push(`+${formatCurrencyPrecise(impact.removeFee)} saved annual fee`);
+  }
+
+  return `
+    <div class="cardscenarios-summary-line ${isPositive ? '' : 'negative'}" id="cardscenariosSummary">
+      Net impact of ${verb} ${escapeHtml(cardName)}: ${parts.join(' + ')} = <strong>${impact.totalImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(impact.totalImpact)} estimated annual change</strong>
+    </div>`;
+}
+
+function renderCardScenariosStep5() {
+  const wi = state.cardScenarios;
+  const impact = calculateCardScenariosNetImpact();
+  const currentValue = getCurrentWalletValue(wi.selectedYear);
+  const hypotheticalValue = currentValue + impact.totalImpact;
+  const isPositive = impact.totalImpact >= 0;
+
+  let cardName = '';
+  let verb = '';
+  if (wi.scenarioType === 'add') {
+    cardName = CARDS[wi.addCardId]?.shortName || CARDS[wi.addCardId]?.name || '';
+    verb = 'Adding';
+  } else if (wi.scenarioType === 'remove') {
+    cardName = CARDS[wi.removeCardId]?.shortName || CARDS[wi.removeCardId]?.name || '';
+    verb = 'Removing';
+  } else {
+    cardName = (CARDS[wi.removeCardId]?.shortName || '') + ' → ' + (CARDS[wi.addCardId]?.shortName || '');
+    verb = 'Swapping';
+  }
+
+  // Annualization info
+  const txns = state.results.processed.filter(t =>
+    !t.isPayment && wi.selectedYear && getYearFromDateString(t.date) === wi.selectedYear
+  );
+  const monthSet = new Set();
+  txns.forEach(t => { const p = parseDateString(t.date); if (p) monthSet.add(p.month); });
+  const annualized = monthSet.size > 0 && monthSet.size < 12;
+
+  let html = `
+    <div class="cardscenarios-step">
+      <div class="cardscenarios-result-headline">
+        <div style="font-size:16px;color:#57534e;margin-bottom:8px;">${verb} ${escapeHtml(cardName)} could ${isPositive ? 'increase' : 'decrease'} your estimated annual value by</div>
+        <div class="cardscenarios-result-amount ${isPositive ? 'positive' : 'negative'}">${isPositive ? '+' : ''}${formatCurrencyPrecise(impact.totalImpact)}</div>
+        <div class="cardscenarios-result-compact">
+          <div>Current wallet: <span>${formatCurrencyPrecise(currentValue)}</span></div>
+          <div>→</div>
+          <div>Hypothetical wallet: <span>${formatCurrencyPrecise(hypotheticalValue)}</span></div>
+        </div>
+      </div>
+      <div class="cardscenarios-context">
+        Optimization rate: ${wi.optimizationRate}%${wi.isCustomMode ? ' (custom adjustments)' : ''} • Year: ${wi.selectedYear}${annualized ? ` (annualized from ${monthSet.size} months)` : ''}
+      </div>`;
+
+  // Detail section (collapsed by default)
+  html += `
+    <div class="cardscenarios-detail-toggle" id="cardscenariosDetailToggle">▼ See the details</div>
+    <div class="cardscenarios-detail-section hidden" id="cardscenariosDetailSection">
+      ${renderDetailSection()}
+    </div>`;
+
+  html += `<div class="cardscenarios-nav">
+    <button class="btn btn-secondary" id="cardscenariosBack5">← Edit Assumptions</button>
+    <button class="btn btn-secondary cardscenarios-start-over">Start New Scenario</button>
+  </div></div>`;
+
+  return html;
+}
+
+/**
+ * Render the detailed per-card breakdown for current vs hypothetical wallets.
+ */
+function renderDetailSection() {
+  const wi = state.cardScenarios;
+  const year = wi.selectedYear;
+  const activeCards = getActiveCardIds(year);
+  const _today = new Date();
+  const sampleDate = `${_today.getFullYear()}-${String(_today.getMonth()+1).padStart(2,'0')}-${String(_today.getDate()).padStart(2,'0')}`;
+
+  // Build current wallet data
+  const currentWallet = [];
+  for (const cardId of activeCards) {
+    const card = CARDS[cardId];
+    if (!card) continue;
+    const { factor, categories } = getAnnualizedCardSpend(cardId, year);
+    let spend = 0, points = 0, pointsValue = 0;
+    for (const [cat, data] of Object.entries(categories)) {
+      spend += data.spend;
+      points += data.points;
+    }
+    const pv = getPointValue(cardId);
+    pointsValue = points * pv;
+    const annualFee = card.annualFee || 0;
+
+    // Calculate credits (simple — use actual detected credits for this year)
+    let credits = 0;
+    const txns = state.results.processed.filter(t =>
+      t.cardId === cardId && t.isCredit && !t.isRefund && !t.isPayment &&
+      getYearFromDateString(t.date) === year
+    );
+    txns.forEach(t => credits += Math.abs(t.amount));
+    if (factor > 1) credits *= factor;
+
+    const netValue = pointsValue + credits - annualFee;
+    currentWallet.push({ cardId, cardName: card.shortName || card.name, spend, points, pointsValue, credits, annualFee, netValue, categories });
+  }
+
+  // Build hypothetical wallet
+  const hypotheticalWallet = currentWallet.map(c => ({
+    ...c,
+    categories: { ...c.categories },
+    hypothetical: false,
+    estimated: !!wi.walletMismatch[c.cardId]
+  }));
+
+  // Apply shifts for "add" scenario
+  if (wi.scenarioType === 'add' || wi.scenarioType === 'swap') {
+    const addRows = wi.addCardId ? getAddCardShiftRows(wi.addCardId, wi.selectedYear) : [];
+    let newCardSpend = 0, newCardPoints = 0, newCardPointsValue = 0;
+    const newCardCategories = {};
+
+    for (const row of addRows) {
+      const key = `${row.sourceCardId}|${row.sourceCategory}`;
+      const amount = wi.shiftAmounts[key] || 0;
+      if (amount <= 0) continue;
+
+      // Deduct from source card in hypothetical
+      const sourceEntry = hypotheticalWallet.find(c => c.cardId === row.sourceCardId);
+      if (sourceEntry) {
+        if (sourceEntry.categories[row.sourceCategory]) {
+          sourceEntry.categories[row.sourceCategory] = {
+            spend: Math.max(0, sourceEntry.categories[row.sourceCategory].spend - amount),
+            points: Math.max(0, sourceEntry.categories[row.sourceCategory].points - (amount * row.sourceRate))
+          };
+        }
+        sourceEntry.spend = Math.max(0, sourceEntry.spend - amount);
+        const reducedPoints = amount * row.sourceRate;
+        sourceEntry.points = Math.max(0, sourceEntry.points - reducedPoints);
+        sourceEntry.pointsValue = sourceEntry.points * getPointValue(row.sourceCardId);
+        sourceEntry.netValue = sourceEntry.pointsValue + sourceEntry.credits - sourceEntry.annualFee;
+      }
+
+      // Add to new card
+      if (!newCardCategories[row.newCategory]) newCardCategories[row.newCategory] = { spend: 0, points: 0 };
+      newCardCategories[row.newCategory].spend += amount;
+      newCardCategories[row.newCategory].points += amount * row.newRate;
+      newCardSpend += amount;
+      newCardPoints += amount * row.newRate;
+    }
+
+    const addCard = CARDS[wi.addCardId];
+    const addPV = getPointValue(wi.addCardId);
+    newCardPointsValue = newCardPoints * addPV;
+
+    // Credits for new card
+    let addCredits = 0;
+    if (addCard && addCard.credits) {
+      for (const cr of addCard.credits) {
+        if (wi.creditToggles[cr.name] !== false) {
+          addCredits += (wi.creditAmounts[cr.name] !== undefined ? wi.creditAmounts[cr.name] : cr.amount);
+        }
+      }
+    }
+
+    const addFee = addCard?.annualFee || 0;
+    const addNetValue = newCardPointsValue + addCredits - addFee;
+
+    hypotheticalWallet.push({
+      cardId: wi.addCardId,
+      cardName: (addCard?.shortName || addCard?.name || wi.addCardId) + ' (new)',
+      spend: newCardSpend,
+      points: newCardPoints,
+      pointsValue: newCardPointsValue,
+      credits: addCredits,
+      annualFee: addFee,
+      netValue: addNetValue,
+      categories: newCardCategories,
+      hypothetical: true
+    });
+  }
+
+  // Apply shifts for "remove" scenario
+  if (wi.scenarioType === 'remove' || wi.scenarioType === 'swap') {
+    // Remove the card from hypothetical wallet
+    const removeIdx = hypotheticalWallet.findIndex(c => c.cardId === wi.removeCardId);
+    if (removeIdx >= 0) {
+      hypotheticalWallet.splice(removeIdx, 1);
+    }
+
+    // Apply spending redistribution
+    const swapExtrasDetail = wi.scenarioType === 'swap' && wi.addCardId ? [wi.addCardId] : undefined;
+    const removeRows = getRemoveCardShiftRows(wi.removeCardId, wi.selectedYear, swapExtrasDetail);
+    for (const row of removeRows) {
+      const key = `remove|${row.sourceCategory}`;
+      const amount = wi.shiftAmounts[key] || 0;
+      if (amount <= 0) continue;
+
+      const destEntry = hypotheticalWallet.find(c => c.cardId === row.bestCardId);
+      if (destEntry) {
+        if (!destEntry.categories[row.bestCategory]) destEntry.categories[row.bestCategory] = { spend: 0, points: 0 };
+        destEntry.categories[row.bestCategory].spend += amount;
+        destEntry.categories[row.bestCategory].points += amount * row.bestRate;
+        destEntry.spend += amount;
+        destEntry.points += amount * row.bestRate;
+        destEntry.pointsValue = destEntry.points * getPointValue(row.bestCardId);
+        destEntry.netValue = destEntry.pointsValue + destEntry.credits - destEntry.annualFee;
+      }
+    }
+  }
+
+  // Render tables
+  let html = `
+    <div class="cardscenarios-detail-wallet">
+      <div class="cardscenarios-detail-wallet-title">Current Wallet</div>
+      ${renderWalletTable(currentWallet)}
+    </div>
+    <div class="cardscenarios-detail-wallet">
+      <div class="cardscenarios-detail-wallet-title">Hypothetical Wallet</div>
+      ${renderWalletTable(hypotheticalWallet)}
+    </div>`;
+
+  return html;
+}
+
+function renderWalletTable(walletEntries) {
+  if (walletEntries.length === 0) return '<p style="color:#78716c;font-size:13px;">No cards.</p>';
+  let totalSpend = 0, totalPtsVal = 0, totalCredits = 0, totalFees = 0, totalNet = 0;
+
+  let html = `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">
+    <thead><tr>
+      <th style="text-align:left;padding:8px 6px;border-bottom:2px solid #e7e5e4;font-size:11px;text-transform:uppercase;color:#78716c;">Card</th>
+      <th class="text-right" style="padding:8px 6px;border-bottom:2px solid #e7e5e4;font-size:11px;text-transform:uppercase;color:#78716c;">Spend</th>
+      <th class="text-right" style="padding:8px 6px;border-bottom:2px solid #e7e5e4;font-size:11px;text-transform:uppercase;color:#78716c;">Pts Value</th>
+      <th class="text-right" style="padding:8px 6px;border-bottom:2px solid #e7e5e4;font-size:11px;text-transform:uppercase;color:#78716c;">Credits</th>
+      <th class="text-right" style="padding:8px 6px;border-bottom:2px solid #e7e5e4;font-size:11px;text-transform:uppercase;color:#78716c;">Ann. Fee</th>
+      <th class="text-right" style="padding:8px 6px;border-bottom:2px solid #e7e5e4;font-size:11px;text-transform:uppercase;color:#78716c;">Net Value</th>
+    </tr></thead><tbody>`;
+
+  for (const c of walletEntries) {
+    totalSpend += c.spend;
+    totalPtsVal += c.pointsValue;
+    totalCredits += c.credits;
+    totalFees += c.annualFee;
+    totalNet += c.netValue;
+    const nameExtra = c.estimated ? ' <span style="font-size:10px;color:#b45309;">(estimated)</span>' : '';
+    const nameStyle = c.hypothetical ? 'color:#059669;font-weight:600;' : '';
+
+    html += `<tr>
+      <td style="padding:8px 6px;border-bottom:1px solid #f5f5f4;${nameStyle}">${escapeHtml(c.cardName)}${nameExtra}</td>
+      <td class="text-right mono" style="padding:8px 6px;border-bottom:1px solid #f5f5f4;">${formatCurrencyPrecise(c.spend)}</td>
+      <td class="text-right mono" style="padding:8px 6px;border-bottom:1px solid #f5f5f4;">${formatCurrencyPrecise(c.pointsValue)}</td>
+      <td class="text-right mono" style="padding:8px 6px;border-bottom:1px solid #f5f5f4;">${formatCurrencyPrecise(c.credits)}</td>
+      <td class="text-right mono" style="padding:8px 6px;border-bottom:1px solid #f5f5f4;color:#dc2626;">-${formatCurrency(c.annualFee)}</td>
+      <td class="text-right mono" style="padding:8px 6px;border-bottom:1px solid #f5f5f4;font-weight:600;color:${c.netValue >= 0 ? '#166534' : '#dc2626'};">${formatCurrencyPrecise(c.netValue)}</td>
+    </tr>`;
+  }
+
+  html += `<tr style="font-weight:600;border-top:2px solid #e7e5e4;">
+    <td style="padding:8px 6px;">Total</td>
+    <td class="text-right mono" style="padding:8px 6px;">${formatCurrencyPrecise(totalSpend)}</td>
+    <td class="text-right mono" style="padding:8px 6px;">${formatCurrencyPrecise(totalPtsVal)}</td>
+    <td class="text-right mono" style="padding:8px 6px;">${formatCurrencyPrecise(totalCredits)}</td>
+    <td class="text-right mono" style="padding:8px 6px;color:#dc2626;">-${formatCurrency(totalFees)}</td>
+    <td class="text-right mono" style="padding:8px 6px;color:${totalNet >= 0 ? '#166534' : '#dc2626'};">${formatCurrencyPrecise(totalNet)}</td>
+  </tr></tbody></table></div>`;
+
+  return html;
+}
+
+/**
+ * Attach all event listeners for the current Card Scenarios step.
+ */
+function attachCardScenariosListeners() {
+  const wi = state.cardScenarios;
+
+  // Start Over / Start New Scenario buttons
+  document.querySelectorAll('.cardscenarios-start-over').forEach(btn => {
+    btn.addEventListener('click', () => { resetCardScenariosState(); renderView('cardscenarios'); });
+  });
+
+  // Step 1: Scenario selection
+  document.querySelectorAll('.cardscenarios-option[data-scenario]').forEach(opt => {
+    opt.addEventListener('click', () => {
+      wi.scenarioType = opt.dataset.scenario;
+      renderView('cardscenarios');
+    });
+  });
+
+  // Step 1 Next
+  const next1 = document.getElementById('cardscenariosNext1');
+  if (next1) next1.addEventListener('click', () => { wi.step = 2; renderView('cardscenarios'); });
+
+  // Step 2: Card selection
+  const addCardSel = document.getElementById('cardscenariosAddCard');
+  if (addCardSel) addCardSel.addEventListener('change', (e) => {
+    wi.addCardId = e.target.value || null;
+    const next2 = document.getElementById('cardscenariosNext2');
+    if (next2) next2.disabled = !canProceedStep2();
+  });
+
+  const removeCardSel = document.getElementById('cardscenariosRemoveCard');
+  if (removeCardSel) removeCardSel.addEventListener('change', (e) => {
+    wi.removeCardId = e.target.value || null;
+    const next2 = document.getElementById('cardscenariosNext2');
+    if (next2) next2.disabled = !canProceedStep2();
+  });
+
+  // Step 2 navigation
+  const back2 = document.getElementById('cardscenariosBack2');
+  if (back2) back2.addEventListener('click', () => { wi.step = 1; renderView('cardscenarios'); });
+  const next2 = document.getElementById('cardscenariosNext2');
+  if (next2) next2.addEventListener('click', () => {
+    // Check if adding first Bilt card — prompt for rent amount
+    if (isAddingFirstBilt()) {
+      wi.showRentPrompt = true;
+      renderView('cardscenarios');
+      return;
+    }
+    wi.step = 3;
+    // Default year to most recent
+    if (!wi.selectedYear && state.availableYears.length > 0) {
+      wi.selectedYear = state.availableYears[0];
+    }
+    renderView('cardscenarios');
+  });
+
+  // Step 2b: Rent amount prompt for first Bilt card
+  const back2b = document.getElementById('cardscenariosBack2b');
+  if (back2b) back2b.addEventListener('click', () => {
+    wi.showRentPrompt = false;
+    renderView('cardscenarios');
+  });
+  const next2b = document.getElementById('cardscenariosNext2b');
+  if (next2b) next2b.addEventListener('click', () => {
+    const input = document.getElementById('cardscenariosRentAmount');
+    wi.rentAmount = input ? parseFloat(input.value) || 0 : 0;
+    wi.showRentPrompt = false;
+    wi.step = 3;
+    if (!wi.selectedYear && state.availableYears.length > 0) {
+      wi.selectedYear = state.availableYears[0];
+    }
+    renderView('cardscenarios');
+  });
+
+  // Step 3: Year selection
+  const yearSel = document.getElementById('cardscenariosYear');
+  if (yearSel) yearSel.addEventListener('change', (e) => {
+    wi.selectedYear = parseInt(e.target.value);
+  });
+
+  const back3 = document.getElementById('cardscenariosBack3');
+  if (back3) back3.addEventListener('click', () => { wi.step = 2; renderView('cardscenarios'); });
+  const next3 = document.getElementById('cardscenariosNext3');
+  if (next3) next3.addEventListener('click', () => {
+    if (!wi.selectedYear && state.availableYears.length > 0) {
+      wi.selectedYear = state.availableYears[0];
+    }
+    // Reset shift amounts and custom mode when entering step 4
+    wi.isCustomMode = false;
+    wi.optimizationRate = null;
+    wi.shiftAmounts = {};
+    wi.step = 4;
+    renderView('cardscenarios');
+  });
+
+  // Step 4: Assumption review
+  const back4 = document.getElementById('cardscenariosBack4');
+  if (back4) back4.addEventListener('click', () => { wi.step = 3; renderView('cardscenarios'); });
+
+  // Optimization slider
+  const slider = document.getElementById('cardscenariosSlider');
+  if (slider) {
+    slider.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value);
+      wi.optimizationRate = val;
+      wi.isCustomMode = false;
+      wi.shiftAmounts = {};
+      renderView('cardscenarios');
+    });
+  }
+
+  // Reset to slider button
+  const resetBtn = document.getElementById('cardscenariosSliderReset');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      wi.isCustomMode = false;
+      wi.shiftAmounts = {};
+      renderView('cardscenarios');
+    });
+  }
+
+  // Shift amount inputs
+  document.querySelectorAll('.cardscenarios-shift-input').forEach(input => {
+    input.addEventListener('change', (e) => {
+      const key = e.target.dataset.key;
+      const max = parseFloat(e.target.dataset.max);
+      let val = parseFloat(e.target.value) || 0;
+
+      // Validation: clamp to 0..max
+      if (val < 0) val = 0;
+      if (val > max) val = max;
+      e.target.value = val.toFixed(0);
+
+      if (val < 0 || val > max) {
+        e.target.classList.add('invalid');
+      } else {
+        e.target.classList.remove('invalid');
+      }
+
+      wi.shiftAmounts[key] = val;
+      wi.isCustomMode = true;
+
+      // Update summary and impacts without full re-render
+      updateCardScenariosSummary();
+    });
+  });
+
+  // Credit toggles
+  document.querySelectorAll('.cardscenarios-credit-toggle[data-credit]').forEach(toggle => {
+    toggle.addEventListener('click', () => {
+      const creditName = toggle.dataset.credit;
+      const prefix = toggle.dataset.prefix;
+      const togglesObj = prefix === 'remove-' ? wi.removeCreditToggles : wi.creditToggles;
+
+      togglesObj[creditName] = !toggle.classList.contains('on');
+      toggle.classList.toggle('on');
+
+      // Enable/disable amount input
+      const row = toggle.parentElement;
+      const amountInput = row.querySelector('.cardscenarios-credit-amount');
+      if (amountInput) amountInput.disabled = !togglesObj[creditName];
+
+      if (wi.scenarioType === 'add') { updateAddCardResult(); } else if (wi.scenarioType === 'remove') { updateRemoveCardResult(); } else if (wi.scenarioType === 'swap') { updateSwapCardResult(); } else { updateCardScenariosSummary(); }
+    });
+  });
+
+  // Credit amount inputs
+  document.querySelectorAll('.cardscenarios-credit-amount').forEach(input => {
+    input.addEventListener('change', (e) => {
+      const creditName = e.target.dataset.credit;
+      const prefix = e.target.dataset.prefix;
+      const amountsObj = prefix === 'remove-' ? wi.removeCreditAmounts : wi.creditAmounts;
+      let val = parseFloat(e.target.value) || 0;
+      if (val < 0) val = 0;
+      const max = parseFloat(e.target.max) || Infinity;
+      if (val > max) val = max;
+      e.target.value = val.toFixed(0);
+      amountsObj[creditName] = val;
+      if (wi.scenarioType === 'add') { updateAddCardResult(); } else if (wi.scenarioType === 'remove') { updateRemoveCardResult(); } else if (wi.scenarioType === 'swap') { updateSwapCardResult(); } else { updateCardScenariosSummary(); }
+    });
+  });
+
+  // Calculate button
+  const calcBtn = document.getElementById('cardscenariosCalculate');
+  if (calcBtn) calcBtn.addEventListener('click', () => {
+    wi.resultCalculated = true;
+    wi.step = 5;
+    renderView('cardscenarios');
+  });
+
+  // Step 5 navigation
+  const back5 = document.getElementById('cardscenariosBack5');
+  if (back5) back5.addEventListener('click', () => { wi.step = 4; renderView('cardscenarios'); });
+
+  // Detail toggles
+  const detailToggle = document.getElementById('cardscenariosDetailToggle');
+  if (detailToggle) {
+    detailToggle.addEventListener('click', () => {
+      const section = document.getElementById('cardscenariosDetailSection');
+      if (section) {
+        const isHidden = section.classList.contains('hidden');
+        section.classList.toggle('hidden');
+        detailToggle.textContent = isHidden ? '▲ Hide the details' : '▼ See the details';
+      }
+    });
+  }
+
+  // Point value change collapsible toggle (Add)
+  const rewardsToggle = document.getElementById('cardscenariosAddRewardsToggle');
+  if (rewardsToggle) {
+    rewardsToggle.addEventListener('click', () => {
+      const detail = document.getElementById('cardscenariosAddRewardsDetail');
+      const arrow = rewardsToggle.querySelector('.toggle-arrow');
+      if (detail) {
+        const isHidden = detail.classList.contains('hidden');
+        detail.classList.toggle('hidden');
+        if (arrow) arrow.textContent = isHidden ? '▼' : '▶';
+      }
+    });
+  }
+
+  // Point value change collapsible toggle (Remove)
+  const removeRewardsToggle = document.getElementById('cardscenariosRemoveRewardsToggle');
+  if (removeRewardsToggle) {
+    removeRewardsToggle.addEventListener('click', () => {
+      const detail = document.getElementById('cardscenariosRemoveRewardsDetail');
+      const arrow = removeRewardsToggle.querySelector('.toggle-arrow');
+      if (detail) {
+        const isHidden = detail.classList.contains('hidden');
+        detail.classList.toggle('hidden');
+        if (arrow) arrow.textContent = isHidden ? '▼' : '▶';
+      }
+    });
+  }
+
+  // Point value change collapsible toggle (Swap)
+  const swapRewardsToggle = document.getElementById('cardscenariosSwapRewardsToggle');
+  if (swapRewardsToggle) {
+    swapRewardsToggle.addEventListener('click', () => {
+      const detail = document.getElementById('cardscenariosSwapRewardsDetail');
+      const arrow = swapRewardsToggle.querySelector('.toggle-arrow');
+      if (detail) {
+        const isHidden = detail.classList.contains('hidden');
+        detail.classList.toggle('hidden');
+        if (arrow) arrow.textContent = isHidden ? '▼' : '▶';
+      }
+    });
+  }
+
+  // Sortable table headers
+  document.querySelectorAll('.cardscenarios-shift-table th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+      const tableEl = th.closest('table');
+      if (tableEl && tableEl.id) {
+        cardscenariosSortTable(tableEl.id, th.dataset.sort);
+      }
+    });
+  });
+
+}
+
+function canProceedStep2() {
+  const wi = state.cardScenarios;
+  if (wi.scenarioType === 'add') return !!wi.addCardId;
+  if (wi.scenarioType === 'remove') return !!wi.removeCardId;
+  if (wi.scenarioType === 'swap') return !!wi.addCardId && !!wi.removeCardId;
+  return false;
+}
+
+/**
+ * Update the summary line and per-row impacts without a full re-render.
+ */
+/**
+ * Update Add card result headline and breakdown dynamically when credits change.
+ */
+function updateAddCardResult() {
+  const wi = state.cardScenarios;
+  const addCard = CARDS[wi.addCardId];
+  if (!addCard) return;
+
+  const { totalGain } = calculateAddCardValue(wi.addCardId, wi.selectedYear);
+  const creditsTotal = getAddCardCreditsTotal();
+  const annualFee = addCard.annualFee || 0;
+  const netImpact = totalGain + creditsTotal - annualFee;
+  const isPositive = netImpact >= 0;
+
+  // Update headline
+  const headlineEl = document.getElementById('cardscenariosAddHeadline');
+  if (headlineEl) {
+    headlineEl.textContent = `${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}/yr`;
+    headlineEl.className = `cardscenarios-result-amount ${isPositive ? 'positive' : 'negative'}`;
+  }
+  const headlineTextEl = document.getElementById('cardscenariosAddHeadlineText');
+  if (headlineTextEl) {
+    const cardName = addCard.shortName || addCard.name;
+    headlineTextEl.textContent = `Adding ${cardName} could ${isPositive ? 'earn you an estimated' : 'cost you an estimated'}`;
+  }
+
+  // Update top compact summary
+  const creditsLineEl = document.getElementById('cardscenariosAddCreditsLine');
+  if (creditsLineEl) creditsLineEl.textContent = `+${formatCurrencyPrecise(creditsTotal)}`;
+
+  const netTopEl = document.getElementById('cardscenariosAddNetTop');
+  if (netTopEl) {
+    netTopEl.textContent = `${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}`;
+    netTopEl.style.color = isPositive ? '#059669' : '#dc2626';
+  }
+
+  // Update bottom ledger total
+  const netLineEl = document.getElementById('cardscenariosAddNetLine');
+  if (netLineEl) {
+    netLineEl.textContent = `${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}`;
+    netLineEl.style.color = isPositive ? '#059669' : '#dc2626';
+  }
+}
+
+function updateRemoveCardResult() {
+  const wi = state.cardScenarios;
+  const removeCard = CARDS[wi.removeCardId];
+  if (!removeCard) return;
+
+  const { totalChange } = calculateRemoveCardValue(wi.removeCardId, wi.selectedYear);
+  const creditsTotal = getRemoveCardCreditsTotal();
+  const annualFee = removeCard.annualFee || 0;
+  const netImpact = totalChange - creditsTotal + annualFee;
+  const isPositive = netImpact >= 0;
+
+  // Update headline
+  const headlineEl = document.getElementById('cardscenariosRemoveHeadline');
+  if (headlineEl) {
+    headlineEl.textContent = `${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}/yr`;
+    headlineEl.className = `cardscenarios-result-amount ${isPositive ? 'positive' : 'negative'}`;
+  }
+  const headlineTextEl = document.getElementById('cardscenariosRemoveHeadlineText');
+  if (headlineTextEl) {
+    const cardName = removeCard.shortName || removeCard.name;
+    headlineTextEl.textContent = `Removing ${cardName} could ${isPositive ? 'save you an estimated' : 'cost you an estimated'}`;
+  }
+
+  // Update top compact summary
+  const creditsLineEl = document.getElementById('cardscenariosRemoveCreditsLine');
+  if (creditsLineEl) creditsLineEl.textContent = `-${formatCurrencyPrecise(creditsTotal)}`;
+
+  const rewardsLineEl = document.getElementById('cardscenariosRemoveRewardsLine');
+  if (rewardsLineEl) {
+    rewardsLineEl.textContent = `${totalChange >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(totalChange))}`;
+    rewardsLineEl.style.color = totalChange >= 0 ? '#059669' : '#dc2626';
+  }
+
+  const rewardsValueEl = document.getElementById('cardscenariosRemoveRewardsValue');
+  if (rewardsValueEl) {
+    rewardsValueEl.textContent = `${totalChange >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(totalChange))}`;
+    rewardsValueEl.style.color = totalChange >= 0 ? '#059669' : '#dc2626';
+  }
+
+  const netTopEl = document.getElementById('cardscenariosRemoveNetTop');
+  if (netTopEl) {
+    netTopEl.textContent = `${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}`;
+    netTopEl.style.color = isPositive ? '#059669' : '#dc2626';
+  }
+
+  // Update bottom ledger total
+  const netLineEl = document.getElementById('cardscenariosRemoveNetLine');
+  if (netLineEl) {
+    netLineEl.textContent = `${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}`;
+    netLineEl.style.color = isPositive ? '#059669' : '#dc2626';
+  }
+}
+
+function updateSwapCardResult() {
+  const wi = state.cardScenarios;
+  const addCard = CARDS[wi.addCardId];
+  const removeCard = CARDS[wi.removeCardId];
+  if (!addCard || !removeCard) return;
+
+  const { totalSpendChange } = calculateSwapValue(wi.removeCardId, wi.addCardId, wi.selectedYear);
+  const addCredits = getAddCardCreditsTotal();
+  const removeCredits = getRemoveCardCreditsTotal();
+  const netCredits = addCredits - removeCredits;
+  const addFee = addCard.annualFee || 0;
+  const removeFee = removeCard.annualFee || 0;
+  const netFee = removeFee - addFee;
+  const netImpact = totalSpendChange + netCredits + netFee;
+  const isPositive = netImpact >= 0;
+
+  // Update headline
+  const headlineEl = document.getElementById('cardscenariosSwapHeadline');
+  if (headlineEl) {
+    headlineEl.textContent = `${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}/yr`;
+    headlineEl.className = `cardscenarios-result-amount ${isPositive ? 'positive' : 'negative'}`;
+  }
+  const headlineTextEl = document.getElementById('cardscenariosSwapHeadlineText');
+  if (headlineTextEl) {
+    const removeName = removeCard.shortName || removeCard.name;
+    const addName = addCard.shortName || addCard.name;
+    headlineTextEl.textContent = `Swapping ${removeName} for ${addName} could ${isPositive ? 'earn you an estimated' : 'cost you an estimated'}`;
+  }
+
+  // Update top compact summary — credits line
+  const creditsLineEl = document.getElementById('cardscenariosSwapCreditsLine');
+  if (creditsLineEl) {
+    creditsLineEl.textContent = `${netCredits >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netCredits))}`;
+    creditsLineEl.style.color = netCredits >= 0 ? '#059669' : '#dc2626';
+  }
+
+  // Update ledger credits total
+  const creditsTotalEl = document.getElementById('cardscenariosSwapCreditsTotalValue');
+  if (creditsTotalEl) {
+    creditsTotalEl.textContent = `${netCredits >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netCredits))}`;
+    creditsTotalEl.style.color = netCredits >= 0 ? '#059669' : '#dc2626';
+  }
+
+  // Update spend rewards line
+  const rewardsLineEl = document.getElementById('cardscenariosSwapRewardsLine');
+  if (rewardsLineEl) {
+    rewardsLineEl.textContent = `${totalSpendChange >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(totalSpendChange))}`;
+    rewardsLineEl.style.color = totalSpendChange >= 0 ? '#059669' : '#dc2626';
+  }
+
+  const rewardsValueEl = document.getElementById('cardscenariosSwapRewardsValue');
+  if (rewardsValueEl) {
+    rewardsValueEl.textContent = `${totalSpendChange >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(totalSpendChange))}`;
+    rewardsValueEl.style.color = totalSpendChange >= 0 ? '#059669' : '#dc2626';
+  }
+
+  const netTopEl = document.getElementById('cardscenariosSwapNetTop');
+  if (netTopEl) {
+    netTopEl.textContent = `${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}`;
+    netTopEl.style.color = isPositive ? '#059669' : '#dc2626';
+  }
+
+  // Update bottom ledger total
+  const netLineEl = document.getElementById('cardscenariosSwapNetLine');
+  if (netLineEl) {
+    netLineEl.textContent = `${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}`;
+    netLineEl.style.color = isPositive ? '#059669' : '#dc2626';
+  }
+}
+
+function updateCardScenariosSummary() {
+  const impact = calculateCardScenariosNetImpact();
+  const summaryEl = document.getElementById('cardscenariosSummary');
+  if (summaryEl) {
+    const wi = state.cardScenarios;
+    const isPositive = impact.totalImpact >= 0;
+    summaryEl.className = 'cardscenarios-summary-line' + (isPositive ? '' : ' negative');
+
+    let cardName = '';
+    let verb = '';
+    if (wi.scenarioType === 'add') { cardName = CARDS[wi.addCardId]?.shortName || CARDS[wi.addCardId]?.name || ''; verb = 'adding'; }
+    else if (wi.scenarioType === 'remove') { cardName = CARDS[wi.removeCardId]?.shortName || CARDS[wi.removeCardId]?.name || ''; verb = 'removing'; }
+    else { cardName = (CARDS[wi.removeCardId]?.shortName || '') + ' → ' + (CARDS[wi.addCardId]?.shortName || ''); verb = 'swapping'; }
+
+    let parts = [];
+    if (impact.spendingImpact !== 0) parts.push(`${impact.spendingImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(impact.spendingImpact)} from spending shifts`);
+    if (wi.scenarioType === 'add' || wi.scenarioType === 'swap') {
+      if (impact.addCreditsTotal > 0) parts.push(`+${formatCurrencyPrecise(impact.addCreditsTotal)} from credits`);
+      if (impact.addFee > 0) parts.push(`-${formatCurrencyPrecise(impact.addFee)} annual fee`);
+    }
+    if (wi.scenarioType === 'remove' || wi.scenarioType === 'swap') {
+      if (impact.removeCreditsTotal > 0) parts.push(`-${formatCurrencyPrecise(impact.removeCreditsTotal)} lost credits`);
+      if (impact.removeFee > 0) parts.push(`+${formatCurrencyPrecise(impact.removeFee)} saved annual fee`);
+    }
+
+    summaryEl.innerHTML = `Net impact of ${verb} ${escapeHtml(cardName)}: ${parts.join(' + ')} = <strong>${impact.totalImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(impact.totalImpact)} estimated annual change</strong>`;
+  }
+
+  // Update per-row impacts
+  document.querySelectorAll('.cardscenarios-shift-input').forEach(input => {
+    const key = input.dataset.key;
+    const amount = parseFloat(input.value) || 0;
+    const row = input.closest('tr');
+    if (!row) return;
+    const impactCell = row.querySelector('.cardscenarios-impact');
+    if (!impactCell) return;
+
+    // Re-derive the rates from the row data
+    // We need to find the matching row in our data
+    const wi = state.cardScenarios;
+    let rowImpact = 0;
+
+    if (key.startsWith('remove|')) {
+      const cat = key.replace('remove|', '');
+      const swapExtrasUpd = wi.scenarioType === 'swap' && wi.addCardId ? [wi.addCardId] : undefined;
+      const removeRows = getRemoveCardShiftRows(wi.removeCardId, wi.selectedYear, swapExtrasUpd);
+      const matchRow = removeRows.find(r => r.sourceCategory === cat);
+      if (matchRow) {
+        rowImpact = getRowImpact(amount, matchRow.sourceRate, matchRow.sourcePointValue, matchRow.bestRate, matchRow.bestPointValue);
+      }
+    } else {
+      const [srcCard, srcCat] = key.split('|');
+      const addRows = getAddCardShiftRows(wi.addCardId, wi.selectedYear);
+      const matchRow = addRows.find(r => r.sourceCardId === srcCard && r.sourceCategory === srcCat);
+      if (matchRow) {
+        rowImpact = getRowImpact(amount, matchRow.sourceRate, matchRow.sourcePointValue, matchRow.newRate, matchRow.newPointValue);
+      }
+    }
+
+    impactCell.className = 'text-right cardscenarios-impact ' + (rowImpact >= 0 ? 'positive' : 'negative');
+    impactCell.textContent = `${rowImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(rowImpact)}`;
+  });
+}
+
+// =============================================================================
+// END CARD SCENARIOS
+// =============================================================================
+
 function renderView(view) {
   state.activeView = view;
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
-  
+  document.getElementById('topMetrics').style.display = (view === 'cardscenarios') ? 'none' : '';
+
   const container = document.getElementById('viewContainer');
   const r = state.results;
   
@@ -4460,6 +7257,10 @@ function renderView(view) {
         renderView('transactions');
       });
     });
+  }
+
+  if (view === 'cardscenarios') {
+    renderCardScenarios();
   }
 }
 

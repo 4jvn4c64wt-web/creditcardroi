@@ -208,9 +208,9 @@ window.CardTracker.cards['us-bank-cash-plus'] = {
         'Albertsons', 'Jewel-Osco', 'Safeway',
         'Cub Foods', 'King Soopers', 'Schnucks',
         'Dierbergs', 'Kroger', 'Sprouts Farmers Market',
-        'Fred Meyer', 'Lunds & Byerlys', 'Target',
+        'Fred Meyer', 'Lunds & Byerlys',
         'Giant Eagle', 'Pick\'n Save', 'Trader Joe\'s',
-        'Hy-Vee', 'Publix', 'Wal-mart',
+        'Hy-Vee', 'Publix',
         'Instacart', 'Ralphs', 'Whole Foods Market'
       ]
     },

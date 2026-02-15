@@ -3957,39 +3957,55 @@ function getAddCardShiftRows(newCardId, year) {
   if (!newCard) return [];
 
   const activeCardIds = getActiveCardIds(year);
+  const walletCardIds = getActiveCardIds().filter(id => id !== newCardId);
   const newPV = getPointValue(newCardId);
   const rows = [];
   const today = new Date();
   const sampleDate = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
 
+  // Pre-compute best existing card value for each subcategory across full wallet
+  const bestExistingCache = {};
+  function getBestExisting(sub) {
+    if (bestExistingCache[sub]) return bestExistingCache[sub];
+    let best = { cardId: null, rate: 0, value: 0, pv: 0.01, name: '' };
+    for (const cid of walletCardIds) {
+      const pv = getPointValue(cid);
+      const mapped = mapToCardCategory(sub, cid, sampleDate);
+      const mult = getWhatIfMultiplier(cid, mapped);
+      const val = mult.rate * pv;
+      if (val > best.value) {
+        best = { cardId: cid, rate: mult.rate, value: val, pv, name: CARDS[cid]?.shortName || CARDS[cid]?.name || cid };
+      }
+    }
+    bestExistingCache[sub] = best;
+    return best;
+  }
+
   for (const cardId of activeCardIds) {
     if (cardId === newCardId) continue;
     const card = CARDS[cardId];
     if (!card) continue;
-    const cardPV = getPointValue(cardId);
     const { subcategories } = getAnnualizedCardSpend(cardId, year);
 
     for (const [sub, data] of Object.entries(subcategories)) {
       if (data.spend <= 0) continue;
 
-      // Current card's value for this subcategory
-      const currentCat = mapToCardCategory(sub, cardId, sampleDate);
-      const currentMult = getWhatIfMultiplier(cardId, currentCat);
-      const currentValue = currentMult.rate * cardPV;
+      // Best existing card in the full wallet for this subcategory
+      const best = getBestExisting(sub);
 
       // New card's value for this subcategory
       const newCat = mapToCardCategory(sub, newCardId, sampleDate);
       const newMult = getWhatIfMultiplier(newCardId, newCat);
       const newValue = newMult.rate * newPV;
 
-      // Only count if the new card has a strictly higher multiplier rate
-      if (newMult.rate > currentMult.rate && newValue > currentValue) {
+      // Only count if the new card beats the BEST existing card in full wallet
+      if (newMult.rate > best.rate && newValue > best.value) {
         rows.push({
-          sourceCardId: cardId,
-          sourceCardName: card.shortName || card.name,
+          sourceCardId: best.cardId || cardId,
+          sourceCardName: best.name || (card.shortName || card.name),
           sourceCategory: sub,
-          sourceRate: currentMult.rate,
-          sourcePointValue: cardPV,
+          sourceRate: best.rate,
+          sourcePointValue: best.pv,
           newCategory: newCat,
           newRate: newMult.rate,
           newPointValue: newPV,
@@ -4014,8 +4030,8 @@ function getRemoveCardShiftRows(removeCardId, year, extraCardIds) {
   const removeCard = CARDS[removeCardId];
   if (!removeCard) return [];
 
-  // Build hypothetical wallet card IDs: current cards minus removed, plus any extras
-  let walletCardIds = getActiveCardIds(year).filter(id => id !== removeCardId);
+  // Build hypothetical wallet card IDs: all owned cards minus removed, plus any extras
+  let walletCardIds = getActiveCardIds().filter(id => id !== removeCardId);
   if (extraCardIds) {
     for (const id of extraCardIds) {
       if (!walletCardIds.includes(id) && CARDS[id]) walletCardIds.push(id);
@@ -4128,7 +4144,7 @@ function calculateWhatIfNetImpact() {
     const removeRows = wi.removeCardId ? getRemoveCardShiftRows(wi.removeCardId, year, swapExtras) : [];
 
     // Pre-compute best base-rate value among remaining cards for unshifted spending
-    const remainingCards = getActiveCardIds(year).filter(id => id !== wi.removeCardId);
+    const remainingCards = getActiveCardIds().filter(id => id !== wi.removeCardId);
     if (swapExtras) swapExtras.forEach(id => { if (!remainingCards.includes(id) && CARDS[id]) remainingCards.push(id); });
     let bestBaseValue = 0;
     for (const cid of remainingCards) {
@@ -4537,29 +4553,7 @@ function renderStep4Add() {
     <div class="hidden" id="whatifAddRewardsDetail" style="margin-top:12px;">`;
 
   if (rows.length > 0) {
-    html += `<div class="whatif-shift-table-wrap"><table class="whatif-shift-table">
-      <thead><tr>
-        <th>Source Card</th><th>Subcategory</th><th>Actual Rate</th>
-        <th>New Rate</th>
-        <th class="text-right">Spend</th><th class="text-right">Additional Value</th>
-      </tr></thead><tbody>`;
-
-    for (const row of rows) {
-      html += `<tr>
-        <td>${escapeHtml(row.sourceCardName)}</td>
-        <td>${escapeHtml(formatSubcategoryName(row.subcategory))}</td>
-        <td class="mono">${row.sourceRate}x</td>
-        <td class="mono">${row.newRate}x</td>
-        <td class="text-right mono">${formatCurrencyPrecise(row.spend)}</td>
-        <td class="text-right whatif-impact positive">+${formatCurrencyPrecise(row.additionalValue)}</td>
-      </tr>`;
-    }
-
-    html += `<tr style="font-weight:600;border-top:2px solid #e7e5e4;">
-      <td colspan="4"></td>
-      <td class="text-right mono">${formatCurrencyPrecise(rows.reduce((s, r) => s + r.spend, 0))}</td>
-      <td class="text-right whatif-impact positive">+${formatCurrencyPrecise(totalGain)}</td>
-    </tr></tbody></table></div>`;
+    html += renderAddSpendTable(rows, totalGain, 'whatifAddTable');
   } else {
     html += `<div style="padding:16px;text-align:center;color:#78716c;background:#f5f5f4;border-radius:8px;font-size:13px;">
       No spending categories where ${escapeHtml(cardName)} earns more value than your current cards.
@@ -4595,42 +4589,162 @@ function renderStep4Add() {
 }
 
 /**
- * Render a unified spend table showing all subcategories where value changes.
- * Used in both Remove and Swap result pages.
- * Each row: Subcategory | Current Card | Rate | → | New Card | Rate | Spend | Impact
- * @param {Array} rows - Normalized rows with { subcategory, currentCard, currentRate, afterCard, afterRate, spend, impact }
- * @param {number} total - The total impact value
- * @returns {string} HTML
+ * Sortable table system for What If spend tables.
+ * Stores row data and column config per table, re-renders tbody on sort.
  */
-function renderUnifiedSpendTable(rows, total) {
-  const totalPositive = total >= 0;
-  let html = `<div class="whatif-shift-table-wrap"><table class="whatif-shift-table">
-    <thead><tr>
-      <th>Subcategory</th><th>Current Card</th><th>Rate</th>
-      <th></th><th>New Card</th><th>Rate</th>
-      <th class="text-right">Spend</th><th class="text-right">Impact</th>
-    </tr></thead><tbody>`;
+const _whatifTables = {};
 
-  for (const row of rows) {
-    const impactPositive = row.impact >= 0;
-    html += `<tr>
-      <td>${escapeHtml(formatSubcategoryName(row.subcategory))}</td>
-      <td>${escapeHtml(row.currentCard)}</td>
-      <td class="mono">${row.currentRate}x</td>
-      <td style="color:#a8a29e;padding:0 2px;">→</td>
-      <td>${escapeHtml(row.afterCard)}</td>
-      <td class="mono">${row.afterRate}x</td>
-      <td class="text-right mono">${formatCurrencyPrecise(row.spend)}</td>
-      <td class="text-right whatif-impact ${impactPositive ? 'positive' : 'negative'}">${impactPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(row.impact))}</td>
-    </tr>`;
+function whatifSortTable(tableId, sortKey) {
+  const table = _whatifTables[tableId];
+  if (!table) return;
+
+  // Toggle direction if same key, otherwise default to asc
+  if (table.sortKey === sortKey) {
+    table.sortDir = table.sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    table.sortKey = sortKey;
+    table.sortDir = 'asc';
   }
 
-  html += `<tr style="font-weight:600;border-top:2px solid #e7e5e4;">
+  // Sort rows
+  const col = table.columns.find(c => c.key === sortKey);
+  if (!col || !col.getValue) return;
+  const sorted = [...table.rows].sort((a, b) => {
+    const va = col.getValue(a);
+    const vb = col.getValue(b);
+    const cmp = typeof va === 'string' ? va.localeCompare(vb) : va - vb;
+    return table.sortDir === 'asc' ? cmp : -cmp;
+  });
+
+  // Re-render tbody
+  const tbody = document.getElementById(tableId + 'Body');
+  if (!tbody) return;
+  let html = '';
+  for (const row of sorted) {
+    html += '<tr>';
+    for (const c of table.columns) html += c.render(row);
+    html += '</tr>';
+  }
+  html += table.totalRowHtml;
+  tbody.innerHTML = html;
+
+  // Update header arrows
+  const tableEl = document.getElementById(tableId);
+  if (tableEl) {
+    tableEl.querySelectorAll('th[data-sort]').forEach(th => {
+      const base = th.dataset.label || th.textContent.replace(/ [↑↓]$/, '');
+      th.dataset.label = base;
+      th.textContent = base + (th.dataset.sort === table.sortKey ? (table.sortDir === 'asc' ? ' ↑' : ' ↓') : '');
+    });
+  }
+}
+
+/**
+ * Render a unified spend table showing all subcategories where value changes.
+ * Used in both Remove and Swap result pages.
+ * @param {Array} rows - Normalized rows with { subcategory, currentCard, currentRate, afterCard, afterRate, spend, impact }
+ * @param {number} total - The total impact value
+ * @param {string} tableId - Unique ID for this table (for sorting)
+ * @returns {string} HTML
+ */
+function renderUnifiedSpendTable(rows, total, tableId) {
+  const columns = [
+    { key: 'subcategory', label: 'Subcategory', getValue: r => formatSubcategoryName(r.subcategory).toLowerCase(),
+      render: r => `<td>${escapeHtml(formatSubcategoryName(r.subcategory))}</td>` },
+    { key: 'currentCard', label: 'Current Card', getValue: r => r.currentCard.toLowerCase(),
+      render: r => `<td>${escapeHtml(r.currentCard)}</td>` },
+    { key: 'currentRate', label: 'Rate', getValue: r => r.currentRate,
+      render: r => `<td class="mono">${r.currentRate}x</td>` },
+    { key: '_arrow', label: '', sortable: false,
+      render: () => `<td style="color:#a8a29e;padding:0 2px;">→</td>` },
+    { key: 'afterCard', label: 'New Card', getValue: r => r.afterCard.toLowerCase(),
+      render: r => `<td>${escapeHtml(r.afterCard)}</td>` },
+    { key: 'afterRate', label: 'Rate', getValue: r => r.afterRate,
+      render: r => `<td class="mono">${r.afterRate}x</td>` },
+    { key: 'spend', label: 'Spend', align: 'right', getValue: r => r.spend,
+      render: r => `<td class="text-right mono">${formatCurrencyPrecise(r.spend)}</td>` },
+    { key: 'impact', label: 'Impact', align: 'right', getValue: r => r.impact,
+      render: r => { const p = r.impact >= 0; return `<td class="text-right whatif-impact ${p ? 'positive' : 'negative'}">${p ? '+' : '-'}${formatCurrencyPrecise(Math.abs(r.impact))}</td>`; } }
+  ];
+
+  const totalPositive = total >= 0;
+  const totalRowHtml = `<tr style="font-weight:600;border-top:2px solid #e7e5e4;">
     <td colspan="6"></td>
     <td class="text-right mono">${formatCurrencyPrecise(rows.reduce((s, r) => s + r.spend, 0))}</td>
     <td class="text-right whatif-impact ${totalPositive ? 'positive' : 'negative'}">${totalPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(total))}</td>
-  </tr></tbody></table></div>`;
+  </tr>`;
 
+  // Register with sort system
+  _whatifTables[tableId] = { rows: [...rows], sortKey: 'impact', sortDir: 'asc', columns, totalRowHtml };
+
+  // Render headers
+  let html = `<div class="whatif-shift-table-wrap"><table class="whatif-shift-table" id="${tableId}">
+    <thead><tr>`;
+  for (const col of columns) {
+    const align = col.align === 'right' ? ' class="text-right"' : '';
+    if (col.sortable === false) {
+      html += `<th${align}>${col.label}</th>`;
+    } else {
+      const arrow = col.key === 'impact' ? ' ↑' : '';
+      html += `<th${align} data-sort="${col.key}" data-label="${col.label}" style="cursor:pointer;user-select:none;">${col.label}${arrow}</th>`;
+    }
+  }
+  html += `</tr></thead><tbody id="${tableId}Body">`;
+
+  // Render rows (already sorted by caller)
+  for (const row of rows) {
+    html += '<tr>';
+    for (const c of columns) html += c.render(row);
+    html += '</tr>';
+  }
+  html += totalRowHtml;
+  html += `</tbody></table></div>`;
+
+  return html;
+}
+
+function renderAddSpendTable(rows, total, tableId) {
+  const columns = [
+    { key: 'sourceCard', label: 'Source Card', getValue: r => r.sourceCardName.toLowerCase(),
+      render: r => `<td>${escapeHtml(r.sourceCardName)}</td>` },
+    { key: 'subcategory', label: 'Subcategory', getValue: r => formatSubcategoryName(r.subcategory).toLowerCase(),
+      render: r => `<td>${escapeHtml(formatSubcategoryName(r.subcategory))}</td>` },
+    { key: 'sourceRate', label: 'Actual Rate', getValue: r => r.sourceRate,
+      render: r => `<td class="mono">${r.sourceRate}x</td>` },
+    { key: 'newRate', label: 'New Rate', getValue: r => r.newRate,
+      render: r => `<td class="mono">${r.newRate}x</td>` },
+    { key: 'spend', label: 'Spend', align: 'right', getValue: r => r.spend,
+      render: r => `<td class="text-right mono">${formatCurrencyPrecise(r.spend)}</td>` },
+    { key: 'additionalValue', label: 'Additional Value', align: 'right', getValue: r => r.additionalValue,
+      render: r => `<td class="text-right whatif-impact positive">+${formatCurrencyPrecise(r.additionalValue)}</td>` }
+  ];
+
+  const totalRowHtml = `<tr style="font-weight:600;border-top:2px solid #e7e5e4;">
+    <td colspan="4"></td>
+    <td class="text-right mono">${formatCurrencyPrecise(rows.reduce((s, r) => s + r.spend, 0))}</td>
+    <td class="text-right whatif-impact positive">+${formatCurrencyPrecise(total)}</td>
+  </tr>`;
+
+  _whatifTables[tableId] = { rows: [...rows], sortKey: 'additionalValue', sortDir: 'asc', columns, totalRowHtml };
+
+  let html = `<div class="whatif-shift-table-wrap"><table class="whatif-shift-table" id="${tableId}">
+    <thead><tr>`;
+  for (const col of columns) {
+    const align = col.align === 'right' ? ' class="text-right"' : '';
+    const arrow = col.key === 'additionalValue' ? ' ↑' : '';
+    html += `<th${align} data-sort="${col.key}" data-label="${col.label}" style="cursor:pointer;user-select:none;">${col.label}${arrow}</th>`;
+  }
+  html += `</tr></thead><tbody id="${tableId}Body">`;
+
+  // Sort ascending by additionalValue (default)
+  const sorted = [...rows].sort((a, b) => a.additionalValue - b.additionalValue);
+  for (const row of sorted) {
+    html += '<tr>';
+    for (const c of columns) html += c.render(row);
+    html += '</tr>';
+  }
+  html += totalRowHtml;
+  html += `</tbody></table></div>`;
   return html;
 }
 
@@ -4718,7 +4832,7 @@ function renderStep4Remove() {
     .sort((a, b) => a.impact - b.impact);
 
   if (unifiedRows.length > 0) {
-    html += renderUnifiedSpendTable(unifiedRows, totalChange);
+    html += renderUnifiedSpendTable(unifiedRows, totalChange, 'whatifRemoveTable');
   } else {
     html += `<div style="padding:16px;text-align:center;color:#78716c;background:#f5f5f4;border-radius:8px;font-size:13px;">
       No spending found on ${escapeHtml(cardName)} for ${wi.selectedYear}.
@@ -4862,7 +4976,7 @@ function renderStep4Swap() {
   swapUnifiedRows.sort((a, b) => a.impact - b.impact);
 
   if (swapUnifiedRows.length > 0) {
-    html += renderUnifiedSpendTable(swapUnifiedRows, totalSpendChange);
+    html += renderUnifiedSpendTable(swapUnifiedRows, totalSpendChange, 'whatifSwapTable');
   } else {
     html += `<div style="padding:12px;text-align:center;color:#78716c;background:#f5f5f4;border-radius:8px;font-size:13px;">
       No spending categories where value changes as a result of this swap.
@@ -5505,6 +5619,16 @@ function attachWhatIfListeners() {
       }
     });
   }
+
+  // Sortable table headers
+  document.querySelectorAll('.whatif-shift-table th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+      const tableEl = th.closest('table');
+      if (tableEl && tableEl.id) {
+        whatifSortTable(tableEl.id, th.dataset.sort);
+      }
+    });
+  });
 
 }
 

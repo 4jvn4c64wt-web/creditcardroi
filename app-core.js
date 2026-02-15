@@ -295,7 +295,9 @@ let state = {
     removeCreditAmounts: {},  // For removed card's lost credit amounts
 
     walletMismatch: {},     // Step 3b: { cardId: { estimated: true, ... } }
-    resultCalculated: false // Whether results have been calculated
+    resultCalculated: false, // Whether results have been calculated
+    showRentPrompt: false,  // Whether to show rent amount input (step 2b)
+    rentAmount: null         // Monthly rent amount for first Bilt card scenario
   },
 
   // Tour state
@@ -3420,8 +3422,22 @@ function resetCardScenariosState() {
     removeCreditToggles: {},
     removeCreditAmounts: {},
     walletMismatch: {},
-    resultCalculated: false
+    resultCalculated: false,
+    showRentPrompt: false,
+    rentAmount: null
   };
+}
+
+/**
+ * Check if the user is adding/swapping in their FIRST Bilt card (no Bilt currently in wallet).
+ * Used to trigger the rent amount prompt at step 2b.
+ */
+function isAddingFirstBilt() {
+  const wi = state.cardScenarios;
+  const addId = wi.addCardId;
+  if (!addId || !CARDS[addId]?.isBilt) return false;
+  // If user already has any Bilt card in wallet, they have rent data — no prompt needed
+  return !getActiveCardIds().some(id => CARDS[id]?.isBilt);
 }
 
 /**
@@ -3575,6 +3591,29 @@ function calculateAddCardValue(newCardId, year) {
       r.additionalValue *= annualizationFactor;
     }
   }
+
+  // Add synthetic rent row when adding first Bilt card with rent amount specified
+  if (state.cardScenarios.rentAmount > 0 && CARDS[newCardId]?.isBilt) {
+    const walletHasBilt = getActiveCardIds().some(id => CARDS[id]?.isBilt);
+    if (!walletHasBilt) {
+      const annualRent = state.cardScenarios.rentAmount * 12;
+      const rentMult = getCardScenariosMultiplier(newCardId, 'rent');
+      const rentValue = annualRent * rentMult.rate * newPV;
+      rows.push({
+        sourceCardId: '_rent',
+        sourceCardName: 'New (rent)',
+        subcategory: 'rent',
+        sourceRate: 0,
+        sourcePointValue: 0,
+        newCategory: 'rent',
+        newRate: rentMult.rate,
+        newPointValue: newPV,
+        spend: annualRent,
+        additionalValue: rentValue
+      });
+    }
+  }
+
   // Sort by additional value descending
   rows.sort((a, b) => b.additionalValue - a.additionalValue);
 
@@ -3973,6 +4012,28 @@ function calculateSwapValue(removeCardId, addCardId, year) {
   if (annualizationFactor > 1) {
     for (const r of addRows) { r.spend *= annualizationFactor; r.additionalValue *= annualizationFactor; }
   }
+
+  // Add synthetic rent row when swapping in first Bilt card with rent amount specified
+  if (state.cardScenarios.rentAmount > 0 && CARDS[addCardId]?.isBilt) {
+    const walletHasBilt = getActiveCardIds().some(id => CARDS[id]?.isBilt);
+    if (!walletHasBilt) {
+      const annualRent = state.cardScenarios.rentAmount * 12;
+      const rentMult = getCardScenariosMultiplier(addCardId, 'rent');
+      const rentValue = annualRent * rentMult.rate * addPV;
+      addRows.push({
+        sourceCardId: '_rent',
+        sourceCardName: 'New (rent)',
+        subcategory: 'rent',
+        sourceRate: 0,
+        sourcePointValue: 0,
+        newRate: rentMult.rate,
+        newPointValue: addPV,
+        spend: annualRent,
+        additionalValue: rentValue
+      });
+    }
+  }
+
   addRows.sort((a, b) => b.additionalValue - a.additionalValue);
   const addGain = addRows.reduce((sum, r) => sum + r.additionalValue, 0);
 
@@ -4106,6 +4167,26 @@ function getAddCardShiftRows(newCardId, year) {
           actualSpend: data.spend
         });
       }
+    }
+  }
+
+  // Add synthetic rent row when adding first Bilt card with rent amount specified
+  if (state.cardScenarios.rentAmount > 0 && CARDS[newCardId]?.isBilt) {
+    const walletHasBilt = getActiveCardIds().some(id => CARDS[id]?.isBilt);
+    if (!walletHasBilt) {
+      const annualRent = state.cardScenarios.rentAmount * 12;
+      const rentMult = getCardScenariosMultiplier(newCardId, 'rent');
+      rows.push({
+        sourceCardId: '_rent',
+        sourceCardName: 'New (rent)',
+        sourceCategory: 'rent',
+        sourceRate: 0,
+        sourcePointValue: 0,
+        newCategory: 'rent',
+        newRate: rentMult.rate,
+        newPointValue: newPV,
+        actualSpend: annualRent
+      });
     }
   }
 
@@ -4479,7 +4560,7 @@ function renderCardScenarios() {
   if (wi.step === 1) {
     html += renderCardScenariosStep1();
   } else if (wi.step === 2) {
-    html += renderCardScenariosStep2();
+    html += wi.showRentPrompt ? renderCardScenariosStep2b() : renderCardScenariosStep2();
   } else if (wi.step === 3) {
     html += renderCardScenariosStep3();
   } else if (wi.step === 4) {
@@ -4577,6 +4658,34 @@ function renderCardScenariosStep2() {
       <div class="cardscenarios-nav">
         <button class="btn btn-secondary" id="cardscenariosBack2">← Back</button>
         <button class="btn btn-primary" id="cardscenariosNext2" ${!canProceed ? 'disabled' : ''}>Next →</button>
+      </div>
+    </div>`;
+}
+
+function renderCardScenariosStep2b() {
+  const wi = state.cardScenarios;
+  const cardName = CARDS[wi.addCardId]?.name || 'Bilt card';
+  return `
+    <div class="cardscenarios-step">
+      <div class="cardscenarios-step-header">Monthly Rent Amount</div>
+      <p style="font-size:13px;color:#57534e;margin-bottom:16px;">
+        The ${escapeHtml(cardName)} can earn points on rent payments — a benefit unique to Bilt cards.
+        Enter your monthly rent so we can estimate the value of those earnings.
+      </p>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:16px;font-weight:500;color:#44403c;">$</span>
+        <input type="number" id="cardscenariosRentAmount"
+          style="max-width:200px;font-size:16px;padding:10px 12px;border-radius:6px;border:1px solid #d6d3d1;font-family:inherit;"
+          placeholder="0" min="0" step="1"
+          value="${wi.rentAmount || ''}">
+        <span style="font-size:13px;color:#78716c;">/month</span>
+      </div>
+      <p style="font-size:11px;color:#a8a29e;margin-top:8px;">
+        No other credit card earns points on rent payments.
+      </p>
+      <div class="cardscenarios-nav">
+        <button class="btn btn-secondary" id="cardscenariosBack2b">← Back</button>
+        <button class="btn btn-primary" id="cardscenariosNext2b">Next →</button>
       </div>
     </div>`;
 }
@@ -5575,8 +5684,32 @@ function attachCardScenariosListeners() {
   if (back2) back2.addEventListener('click', () => { wi.step = 1; renderView('cardscenarios'); });
   const next2 = document.getElementById('cardscenariosNext2');
   if (next2) next2.addEventListener('click', () => {
+    // Check if adding first Bilt card — prompt for rent amount
+    if (isAddingFirstBilt()) {
+      wi.showRentPrompt = true;
+      renderView('cardscenarios');
+      return;
+    }
     wi.step = 3;
     // Default year to most recent
+    if (!wi.selectedYear && state.availableYears.length > 0) {
+      wi.selectedYear = state.availableYears[0];
+    }
+    renderView('cardscenarios');
+  });
+
+  // Step 2b: Rent amount prompt for first Bilt card
+  const back2b = document.getElementById('cardscenariosBack2b');
+  if (back2b) back2b.addEventListener('click', () => {
+    wi.showRentPrompt = false;
+    renderView('cardscenarios');
+  });
+  const next2b = document.getElementById('cardscenariosNext2b');
+  if (next2b) next2b.addEventListener('click', () => {
+    const input = document.getElementById('cardscenariosRentAmount');
+    wi.rentAmount = input ? parseFloat(input.value) || 0 : 0;
+    wi.showRentPrompt = false;
+    wi.step = 3;
     if (!wi.selectedYear && state.availableYears.length > 0) {
       wi.selectedYear = state.availableYears[0];
     }

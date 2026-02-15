@@ -4508,7 +4508,7 @@ function renderStep4Add() {
       Adding ${escapeHtml(cardName)} could ${isPositive ? 'earn you an estimated' : 'cost you an estimated'}
     </div>
     <div class="cardscenarios-result-amount ${isPositive ? 'positive' : 'negative'}" id="cardscenariosAddHeadline">
-      ~${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}/yr
+      ${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}/yr
     </div>
   </div>`;
 
@@ -4528,7 +4528,7 @@ function renderStep4Add() {
     </div>
     <div style="display:flex;justify-content:space-between;border-top:2px solid #e7e5e4;padding-top:4px;margin-top:4px;">
       <span style="font-weight:600;">Estimated net impact</span>
-      <span class="mono" style="font-weight:700;color:${isPositive ? '#059669' : '#dc2626'};" id="cardscenariosAddNetTop">~${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}</span>
+      <span class="mono" style="font-weight:700;color:${isPositive ? '#059669' : '#dc2626'};" id="cardscenariosAddNetTop">${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}</span>
     </div>
   </div>`;
 
@@ -4576,7 +4576,7 @@ function renderStep4Add() {
   // Total line
   html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:2px solid #1c1917;margin-top:8px;">
     <span style="font-size:14px;font-weight:700;">Estimated Net Impact</span>
-    <span class="mono" style="font-weight:700;font-size:16px;color:${isPositive ? '#059669' : '#dc2626'};" id="cardscenariosAddNetLine">~${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}</span>
+    <span class="mono" style="font-weight:700;font-size:16px;color:${isPositive ? '#059669' : '#dc2626'};" id="cardscenariosAddNetLine">${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}</span>
   </div>`;
 
   html += `</div>`; // end ledger
@@ -4773,7 +4773,7 @@ function renderStep4Remove() {
       Removing ${escapeHtml(cardName)} could ${isPositive ? 'save you an estimated' : 'cost you an estimated'}
     </div>
     <div class="cardscenarios-result-amount ${isPositive ? 'positive' : 'negative'}" id="cardscenariosRemoveHeadline">
-      ~${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}/yr
+      ${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}/yr
     </div>
   </div>`;
 
@@ -4793,7 +4793,7 @@ function renderStep4Remove() {
     </div>
     <div style="display:flex;justify-content:space-between;border-top:2px solid #e7e5e4;padding-top:4px;margin-top:4px;">
       <span style="font-weight:600;">Estimated net impact</span>
-      <span class="mono" style="font-weight:700;color:${isPositive ? '#059669' : '#dc2626'};" id="cardscenariosRemoveNetTop">~${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}</span>
+      <span class="mono" style="font-weight:700;color:${isPositive ? '#059669' : '#dc2626'};" id="cardscenariosRemoveNetTop">${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}</span>
     </div>
   </div>`;
 
@@ -4855,7 +4855,7 @@ function renderStep4Remove() {
   // Total line
   html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:2px solid #1c1917;margin-top:8px;">
     <span style="font-size:14px;font-weight:700;">Estimated Net Impact</span>
-    <span class="mono" style="font-weight:700;font-size:16px;color:${isPositive ? '#059669' : '#dc2626'};" id="cardscenariosRemoveNetLine">~${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}</span>
+    <span class="mono" style="font-weight:700;font-size:16px;color:${isPositive ? '#059669' : '#dc2626'};" id="cardscenariosRemoveNetLine">${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}</span>
   </div>`;
 
   html += `</div>`; // end ledger
@@ -4897,7 +4897,7 @@ function renderStep4Swap() {
       Swapping ${escapeHtml(removeName)} for ${escapeHtml(addName)} could ${isPositive ? 'earn you an estimated' : 'cost you an estimated'}
     </div>
     <div class="cardscenarios-result-amount ${isPositive ? 'positive' : 'negative'}" id="cardscenariosSwapHeadline">
-      ~${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}/yr
+      ${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}/yr
     </div>
   </div>`;
 
@@ -4917,7 +4917,7 @@ function renderStep4Swap() {
     </div>
     <div style="display:flex;justify-content:space-between;border-top:2px solid #e7e5e4;padding-top:4px;margin-top:4px;">
       <span style="font-weight:600;">Estimated net impact</span>
-      <span class="mono" style="font-weight:700;color:${isPositive ? '#059669' : '#dc2626'};" id="cardscenariosSwapNetTop">~${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}</span>
+      <span class="mono" style="font-weight:700;color:${isPositive ? '#059669' : '#dc2626'};" id="cardscenariosSwapNetTop">${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}</span>
     </div>
   </div>`;
 
@@ -5009,7 +5009,7 @@ function renderStep4Swap() {
   // Total line
   html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:2px solid #1c1917;margin-top:8px;">
     <span style="font-size:14px;font-weight:700;">Estimated Net Impact</span>
-    <span class="mono" style="font-weight:700;font-size:16px;color:${isPositive ? '#059669' : '#dc2626'};" id="cardscenariosSwapNetLine">~${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}</span>
+    <span class="mono" style="font-weight:700;font-size:16px;color:${isPositive ? '#059669' : '#dc2626'};" id="cardscenariosSwapNetLine">${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}</span>
   </div>`;
 
   html += `</div>`; // end ledger
@@ -5125,7 +5125,7 @@ function renderSummaryLine(scenarioType, impact) {
   const verb = scenarioType === 'add' ? 'adding' : scenarioType === 'remove' ? 'removing' : 'swapping';
 
   let parts = [];
-  if (impact.spendingImpact !== 0) parts.push(`~${impact.spendingImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(impact.spendingImpact)} from spending shifts`);
+  if (impact.spendingImpact !== 0) parts.push(`${impact.spendingImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(impact.spendingImpact)} from spending shifts`);
 
   if (scenarioType === 'add' || scenarioType === 'swap') {
     if (impact.addCreditsTotal > 0) parts.push(`+${formatCurrencyPrecise(impact.addCreditsTotal)} from credits`);
@@ -5174,7 +5174,7 @@ function renderCardScenariosStep5() {
     <div class="cardscenarios-step">
       <div class="cardscenarios-result-headline">
         <div style="font-size:16px;color:#57534e;margin-bottom:8px;">${verb} ${escapeHtml(cardName)} could ${isPositive ? 'increase' : 'decrease'} your estimated annual value by</div>
-        <div class="cardscenarios-result-amount ${isPositive ? 'positive' : 'negative'}">~${isPositive ? '+' : ''}${formatCurrencyPrecise(impact.totalImpact)}</div>
+        <div class="cardscenarios-result-amount ${isPositive ? 'positive' : 'negative'}">${isPositive ? '+' : ''}${formatCurrencyPrecise(impact.totalImpact)}</div>
         <div class="cardscenarios-result-compact">
           <div>Current wallet: <span>${formatCurrencyPrecise(currentValue)}</span></div>
           <div>→</div>
@@ -5666,7 +5666,7 @@ function updateAddCardResult() {
   // Update headline
   const headlineEl = document.getElementById('cardscenariosAddHeadline');
   if (headlineEl) {
-    headlineEl.textContent = `~${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}/yr`;
+    headlineEl.textContent = `${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}/yr`;
     headlineEl.className = `cardscenarios-result-amount ${isPositive ? 'positive' : 'negative'}`;
   }
   const headlineTextEl = document.getElementById('cardscenariosAddHeadlineText');
@@ -5681,14 +5681,14 @@ function updateAddCardResult() {
 
   const netTopEl = document.getElementById('cardscenariosAddNetTop');
   if (netTopEl) {
-    netTopEl.textContent = `~${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}`;
+    netTopEl.textContent = `${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}`;
     netTopEl.style.color = isPositive ? '#059669' : '#dc2626';
   }
 
   // Update bottom ledger total
   const netLineEl = document.getElementById('cardscenariosAddNetLine');
   if (netLineEl) {
-    netLineEl.textContent = `~${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}`;
+    netLineEl.textContent = `${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}`;
     netLineEl.style.color = isPositive ? '#059669' : '#dc2626';
   }
 }
@@ -5707,7 +5707,7 @@ function updateRemoveCardResult() {
   // Update headline
   const headlineEl = document.getElementById('cardscenariosRemoveHeadline');
   if (headlineEl) {
-    headlineEl.textContent = `~${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}/yr`;
+    headlineEl.textContent = `${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}/yr`;
     headlineEl.className = `cardscenarios-result-amount ${isPositive ? 'positive' : 'negative'}`;
   }
   const headlineTextEl = document.getElementById('cardscenariosRemoveHeadlineText');
@@ -5734,14 +5734,14 @@ function updateRemoveCardResult() {
 
   const netTopEl = document.getElementById('cardscenariosRemoveNetTop');
   if (netTopEl) {
-    netTopEl.textContent = `~${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}`;
+    netTopEl.textContent = `${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}`;
     netTopEl.style.color = isPositive ? '#059669' : '#dc2626';
   }
 
   // Update bottom ledger total
   const netLineEl = document.getElementById('cardscenariosRemoveNetLine');
   if (netLineEl) {
-    netLineEl.textContent = `~${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}`;
+    netLineEl.textContent = `${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}`;
     netLineEl.style.color = isPositive ? '#059669' : '#dc2626';
   }
 }
@@ -5765,7 +5765,7 @@ function updateSwapCardResult() {
   // Update headline
   const headlineEl = document.getElementById('cardscenariosSwapHeadline');
   if (headlineEl) {
-    headlineEl.textContent = `~${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}/yr`;
+    headlineEl.textContent = `${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}/yr`;
     headlineEl.className = `cardscenarios-result-amount ${isPositive ? 'positive' : 'negative'}`;
   }
   const headlineTextEl = document.getElementById('cardscenariosSwapHeadlineText');
@@ -5804,14 +5804,14 @@ function updateSwapCardResult() {
 
   const netTopEl = document.getElementById('cardscenariosSwapNetTop');
   if (netTopEl) {
-    netTopEl.textContent = `~${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}`;
+    netTopEl.textContent = `${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}`;
     netTopEl.style.color = isPositive ? '#059669' : '#dc2626';
   }
 
   // Update bottom ledger total
   const netLineEl = document.getElementById('cardscenariosSwapNetLine');
   if (netLineEl) {
-    netLineEl.textContent = `~${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}`;
+    netLineEl.textContent = `${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}`;
     netLineEl.style.color = isPositive ? '#059669' : '#dc2626';
   }
 }
@@ -5831,7 +5831,7 @@ function updateCardScenariosSummary() {
     else { cardName = (CARDS[wi.removeCardId]?.shortName || '') + ' → ' + (CARDS[wi.addCardId]?.shortName || ''); verb = 'swapping'; }
 
     let parts = [];
-    if (impact.spendingImpact !== 0) parts.push(`~${impact.spendingImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(impact.spendingImpact)} from spending shifts`);
+    if (impact.spendingImpact !== 0) parts.push(`${impact.spendingImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(impact.spendingImpact)} from spending shifts`);
     if (wi.scenarioType === 'add' || wi.scenarioType === 'swap') {
       if (impact.addCreditsTotal > 0) parts.push(`+${formatCurrencyPrecise(impact.addCreditsTotal)} from credits`);
       if (impact.addFee > 0) parts.push(`-${formatCurrencyPrecise(impact.addFee)} annual fee`);

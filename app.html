@@ -109,75 +109,75 @@
     .tour-confirm-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 10005; }
     .tour-confirm-content { background: #ffffff; border-radius: 12px; padding: 24px; max-width: 400px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.4); }
 
-    /* What If Calculator Styles */
-    .whatif-step { margin-bottom: 20px; }
-    .whatif-step-header { font-size: 13px; font-weight: 600; color: #78716c; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; }
-    .whatif-options { display: flex; gap: 12px; flex-wrap: wrap; }
-    .whatif-option { flex: 1; min-width: 140px; padding: 16px; border: 2px solid #e7e5e4; border-radius: 10px; background: #fff; cursor: pointer; text-align: center; transition: all 0.15s; }
-    .whatif-option:hover { border-color: #a8a29e; background: #fafaf9; }
-    .whatif-option.selected { border-color: #1c1917; background: #f5f5f4; }
-    .whatif-option-icon { font-size: 24px; margin-bottom: 6px; }
-    .whatif-option-label { font-size: 14px; font-weight: 600; }
-    .whatif-option-desc { font-size: 12px; color: #78716c; margin-top: 4px; }
-    .whatif-card-select { width: 100%; max-width: 400px; }
-    .whatif-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; padding-top: 16px; border-top: 1px solid #e7e5e4; }
-    .whatif-breadcrumb { display: flex; gap: 6px; align-items: center; font-size: 12px; color: #a8a29e; margin-bottom: 16px; }
-    .whatif-breadcrumb-step { padding: 2px 8px; border-radius: 4px; }
-    .whatif-breadcrumb-step.active { background: #1c1917; color: #fff; font-weight: 500; }
-    .whatif-breadcrumb-step.done { color: #059669; }
-    .whatif-breadcrumb-sep { color: #d6d3d1; }
-    .whatif-slider-wrap { background: #f5f5f4; border-radius: 10px; padding: 16px 20px; margin-bottom: 20px; }
-    .whatif-slider-label { font-size: 13px; font-weight: 500; color: #57534e; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
-    .whatif-slider-value { font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 14px; color: #1c1917; }
-    .whatif-slider-value.custom { color: #a8a29e; font-style: italic; }
-    .whatif-slider { width: 100%; height: 6px; -webkit-appearance: none; appearance: none; background: #d6d3d1; border-radius: 3px; outline: none; cursor: pointer; }
-    .whatif-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #1c1917; cursor: pointer; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
-    .whatif-slider.inactive { opacity: 0.5; }
-    .whatif-slider-reset { font-size: 12px; color: #2563eb; cursor: pointer; text-decoration: underline; margin-left: 8px; }
-    .whatif-shift-table { width: 100%; border-collapse: separate; border-spacing: 0; }
-    .whatif-shift-table th { font-size: 11px; text-transform: uppercase; color: #78716c; font-weight: 600; padding: 8px 6px; border-bottom: 2px solid #e7e5e4; white-space: nowrap; }
-    .whatif-shift-table th[data-sort]:hover { color: #1c1917; }
-    .whatif-shift-table td { padding: 10px 6px; border-bottom: 1px solid #f5f5f4; vertical-align: middle; font-size: 13px; }
-    .whatif-shift-arrow { color: #059669; font-weight: 700; font-size: 16px; text-align: center; padding: 0 4px; }
-    .whatif-shift-input { width: 90px; padding: 6px 8px; border: 1px solid #d6d3d1; border-radius: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; text-align: right; background: #fff; }
-    .whatif-shift-input:focus { outline: none; border-color: #1c1917; box-shadow: 0 0 0 2px rgba(28,25,23,0.1); }
-    .whatif-shift-input.invalid { border-color: #dc2626; background: #fef2f2; }
-    .whatif-impact { font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 13px; white-space: nowrap; }
-    .whatif-impact.positive { color: #059669; }
-    .whatif-impact.negative { color: #dc2626; }
-    .whatif-credits { margin-top: 20px; padding-top: 16px; border-top: 1px solid #e7e5e4; }
-    .whatif-credit-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #f5f5f4; flex-wrap: wrap; }
-    .whatif-credit-toggle { width: 36px; height: 20px; border-radius: 10px; background: #d6d3d1; position: relative; cursor: pointer; transition: background 0.2s; flex-shrink: 0; }
-    .whatif-credit-toggle.on { background: #059669; }
-    .whatif-credit-toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
-    .whatif-credit-toggle.on::after { transform: translateX(16px); }
-    .whatif-credit-name { flex: 1; font-size: 13px; min-width: 120px; }
-    .whatif-credit-amount { width: 80px; padding: 4px 8px; border: 1px solid #d6d3d1; border-radius: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; text-align: right; }
-    .whatif-summary-line { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 16px 20px; margin-top: 20px; font-size: 14px; line-height: 1.6; }
-    .whatif-summary-line.negative { background: #fef2f2; border-color: #fecaca; }
-    .whatif-result-headline { text-align: center; padding: 32px 20px; }
-    .whatif-result-amount { font-size: 36px; font-weight: 700; font-family: 'IBM Plex Mono', monospace; letter-spacing: -0.02em; }
-    .whatif-result-amount.positive { color: #059669; }
-    .whatif-result-amount.negative { color: #dc2626; }
-    .whatif-result-label { font-size: 16px; color: #57534e; margin-top: 8px; }
-    .whatif-result-compact { display: flex; justify-content: center; gap: 24px; margin-top: 16px; font-size: 14px; color: #78716c; flex-wrap: wrap; }
-    .whatif-result-compact span { font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: #1c1917; }
-    .whatif-detail-toggle { cursor: pointer; text-align: center; padding: 12px; color: #78716c; font-size: 14px; border-top: 1px solid #e7e5e4; margin-top: 16px; }
-    .whatif-detail-toggle:hover { color: #1c1917; }
-    .whatif-detail-section { margin-top: 16px; }
-    .whatif-detail-wallet { margin-bottom: 20px; }
-    .whatif-detail-wallet-title { font-size: 14px; font-weight: 600; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #e7e5e4; }
-    .whatif-context { font-size: 12px; color: #a8a29e; text-align: center; margin-top: 12px; }
-    .whatif-section-sep { margin: 24px 0; padding: 0; border: none; border-top: 2px dashed #e7e5e4; }
-    .whatif-annual-fee { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; font-size: 14px; border-bottom: 1px solid #f5f5f4; }
-    .whatif-annual-fee-label { color: #57534e; }
-    .whatif-annual-fee-value { font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: #dc2626; }
+    /* Card Scenarios Styles */
+    .cardscenarios-step { margin-bottom: 20px; }
+    .cardscenarios-step-header { font-size: 13px; font-weight: 600; color: #78716c; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; }
+    .cardscenarios-options { display: flex; gap: 12px; flex-wrap: wrap; }
+    .cardscenarios-option { flex: 1; min-width: 140px; padding: 16px; border: 2px solid #e7e5e4; border-radius: 10px; background: #fff; cursor: pointer; text-align: center; transition: all 0.15s; }
+    .cardscenarios-option:hover { border-color: #a8a29e; background: #fafaf9; }
+    .cardscenarios-option.selected { border-color: #1c1917; background: #f5f5f4; }
+    .cardscenarios-option-icon { font-size: 24px; margin-bottom: 6px; }
+    .cardscenarios-option-label { font-size: 14px; font-weight: 600; }
+    .cardscenarios-option-desc { font-size: 12px; color: #78716c; margin-top: 4px; }
+    .cardscenarios-card-select { width: 100%; max-width: 400px; }
+    .cardscenarios-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; padding-top: 16px; border-top: 1px solid #e7e5e4; }
+    .cardscenarios-breadcrumb { display: flex; gap: 6px; align-items: center; font-size: 12px; color: #a8a29e; margin-bottom: 16px; }
+    .cardscenarios-breadcrumb-step { padding: 2px 8px; border-radius: 4px; }
+    .cardscenarios-breadcrumb-step.active { background: #1c1917; color: #fff; font-weight: 500; }
+    .cardscenarios-breadcrumb-step.done { color: #059669; }
+    .cardscenarios-breadcrumb-sep { color: #d6d3d1; }
+    .cardscenarios-slider-wrap { background: #f5f5f4; border-radius: 10px; padding: 16px 20px; margin-bottom: 20px; }
+    .cardscenarios-slider-label { font-size: 13px; font-weight: 500; color: #57534e; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+    .cardscenarios-slider-value { font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 14px; color: #1c1917; }
+    .cardscenarios-slider-value.custom { color: #a8a29e; font-style: italic; }
+    .cardscenarios-slider { width: 100%; height: 6px; -webkit-appearance: none; appearance: none; background: #d6d3d1; border-radius: 3px; outline: none; cursor: pointer; }
+    .cardscenarios-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #1c1917; cursor: pointer; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+    .cardscenarios-slider.inactive { opacity: 0.5; }
+    .cardscenarios-slider-reset { font-size: 12px; color: #2563eb; cursor: pointer; text-decoration: underline; margin-left: 8px; }
+    .cardscenarios-shift-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+    .cardscenarios-shift-table th { font-size: 11px; text-transform: uppercase; color: #78716c; font-weight: 600; padding: 8px 6px; border-bottom: 2px solid #e7e5e4; white-space: nowrap; }
+    .cardscenarios-shift-table th[data-sort]:hover { color: #1c1917; }
+    .cardscenarios-shift-table td { padding: 10px 6px; border-bottom: 1px solid #f5f5f4; vertical-align: middle; font-size: 13px; }
+    .cardscenarios-shift-arrow { color: #059669; font-weight: 700; font-size: 16px; text-align: center; padding: 0 4px; }
+    .cardscenarios-shift-input { width: 90px; padding: 6px 8px; border: 1px solid #d6d3d1; border-radius: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; text-align: right; background: #fff; }
+    .cardscenarios-shift-input:focus { outline: none; border-color: #1c1917; box-shadow: 0 0 0 2px rgba(28,25,23,0.1); }
+    .cardscenarios-shift-input.invalid { border-color: #dc2626; background: #fef2f2; }
+    .cardscenarios-impact { font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 13px; white-space: nowrap; }
+    .cardscenarios-impact.positive { color: #059669; }
+    .cardscenarios-impact.negative { color: #dc2626; }
+    .cardscenarios-credits { margin-top: 20px; padding-top: 16px; border-top: 1px solid #e7e5e4; }
+    .cardscenarios-credit-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #f5f5f4; flex-wrap: wrap; }
+    .cardscenarios-credit-toggle { width: 36px; height: 20px; border-radius: 10px; background: #d6d3d1; position: relative; cursor: pointer; transition: background 0.2s; flex-shrink: 0; }
+    .cardscenarios-credit-toggle.on { background: #059669; }
+    .cardscenarios-credit-toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+    .cardscenarios-credit-toggle.on::after { transform: translateX(16px); }
+    .cardscenarios-credit-name { flex: 1; font-size: 13px; min-width: 120px; }
+    .cardscenarios-credit-amount { width: 80px; padding: 4px 8px; border: 1px solid #d6d3d1; border-radius: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; text-align: right; }
+    .cardscenarios-summary-line { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 16px 20px; margin-top: 20px; font-size: 14px; line-height: 1.6; }
+    .cardscenarios-summary-line.negative { background: #fef2f2; border-color: #fecaca; }
+    .cardscenarios-result-headline { text-align: center; padding: 32px 20px; }
+    .cardscenarios-result-amount { font-size: 36px; font-weight: 700; font-family: 'IBM Plex Mono', monospace; letter-spacing: -0.02em; }
+    .cardscenarios-result-amount.positive { color: #059669; }
+    .cardscenarios-result-amount.negative { color: #dc2626; }
+    .cardscenarios-result-label { font-size: 16px; color: #57534e; margin-top: 8px; }
+    .cardscenarios-result-compact { display: flex; justify-content: center; gap: 24px; margin-top: 16px; font-size: 14px; color: #78716c; flex-wrap: wrap; }
+    .cardscenarios-result-compact span { font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: #1c1917; }
+    .cardscenarios-detail-toggle { cursor: pointer; text-align: center; padding: 12px; color: #78716c; font-size: 14px; border-top: 1px solid #e7e5e4; margin-top: 16px; }
+    .cardscenarios-detail-toggle:hover { color: #1c1917; }
+    .cardscenarios-detail-section { margin-top: 16px; }
+    .cardscenarios-detail-wallet { margin-bottom: 20px; }
+    .cardscenarios-detail-wallet-title { font-size: 14px; font-weight: 600; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #e7e5e4; }
+    .cardscenarios-context { font-size: 12px; color: #a8a29e; text-align: center; margin-top: 12px; }
+    .cardscenarios-section-sep { margin: 24px 0; padding: 0; border: none; border-top: 2px dashed #e7e5e4; }
+    .cardscenarios-annual-fee { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; font-size: 14px; border-bottom: 1px solid #f5f5f4; }
+    .cardscenarios-annual-fee-label { color: #57534e; }
+    .cardscenarios-annual-fee-value { font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: #dc2626; }
     @media (max-width: 700px) {
-      .whatif-shift-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-      .whatif-shift-table { min-width: 600px; }
-      .whatif-options { flex-direction: column; }
-      .whatif-option { min-width: auto; }
-      .whatif-result-amount { font-size: 28px; }
+      .cardscenarios-shift-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      .cardscenarios-shift-table { min-width: 600px; }
+      .cardscenarios-options { flex-direction: column; }
+      .cardscenarios-option { min-width: auto; }
+      .cardscenarios-result-amount { font-size: 28px; }
     }
 
     /* Newsletter Popup */
@@ -421,7 +421,7 @@
       <div class="tabs">
         <button class="tab active" data-view="summary">Summary</button>
         <button class="tab" data-view="transactions">All Transactions</button>
-        <button class="tab" data-view="whatif">What If</button>
+        <button class="tab" data-view="cardscenarios">Card Scenarios</button>
       </div>
 
       <div id="viewContainer"></div>

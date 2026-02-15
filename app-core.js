@@ -3518,7 +3518,8 @@ function calculateAddCardValue(newCardId, year) {
     const newMult = getWhatIfMultiplier(newCardId, newCat);
     const newValue = newMult.rate * newPV;
 
-    if (newValue > actualValue) {
+    // Only count if the new card has a strictly higher multiplier rate
+    if (newMult.rate > actualRate && newValue > actualValue) {
       const key = `${cardId}|${sub}`;
       if (!buckets[key]) {
         buckets[key] = {
@@ -3665,7 +3666,8 @@ function getAddCardShiftRows(newCardId, year) {
       const newMult = getWhatIfMultiplier(newCardId, newCat);
       const newValue = newMult.rate * newPV;
 
-      if (newValue > currentValue) {
+      // Only count if the new card has a strictly higher multiplier rate
+      if (newMult.rate > currentMult.rate && newValue > currentValue) {
         rows.push({
           sourceCardId: cardId,
           sourceCardName: card.shortName || card.name,

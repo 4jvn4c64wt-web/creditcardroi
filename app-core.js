@@ -3510,7 +3510,9 @@ function getAddCardShiftRows(newCardId, year) {
   const activeCardIds = getActiveCardIds(year);
   const newPV = getPointValue(newCardId);
   const rows = [];
-  const sampleDate = year ? `${year}-06-15` : null;
+  // Use today's date for rate lookups — What If models current/future rates, not historical
+  const today = new Date();
+  const sampleDate = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
 
   for (const cardId of activeCardIds) {
     if (cardId === newCardId) continue;
@@ -3565,7 +3567,9 @@ function getRemoveCardShiftRows(removeCardId, year) {
   const activeCardIds = getActiveCardIds(year).filter(id => id !== removeCardId);
   const removePV = getPointValue(removeCardId);
   const { categories } = getAnnualizedCardSpend(removeCardId, year);
-  const sampleDate = year ? `${year}-06-15` : null;
+  // Use today's date for rate lookups — What If models current/future rates, not historical
+  const today = new Date();
+  const sampleDate = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
   const rows = [];
 
   for (const [cat, data] of Object.entries(categories)) {
@@ -3645,7 +3649,8 @@ function calculateWhatIfNetImpact() {
 
   // Re-derive from rows for accuracy
   const year = wi.selectedYear;
-  const sampleDate = year ? `${year}-06-15` : null;
+  const _today = new Date();
+  const sampleDate = `${_today.getFullYear()}-${String(_today.getMonth()+1).padStart(2,'0')}-${String(_today.getDate()).padStart(2,'0')}`;
 
   if (wi.scenarioType === 'add' || wi.scenarioType === 'swap') {
     const addRows = wi.addCardId ? getAddCardShiftRows(wi.addCardId, year) : [];
@@ -4403,7 +4408,8 @@ function renderDetailSection() {
   const wi = state.whatif;
   const year = wi.selectedYear;
   const activeCards = getActiveCardIds(year);
-  const sampleDate = year ? `${year}-06-15` : null;
+  const _today = new Date();
+  const sampleDate = `${_today.getFullYear()}-${String(_today.getMonth()+1).padStart(2,'0')}-${String(_today.getDate()).padStart(2,'0')}`;
 
   // Build current wallet data
   const currentWallet = [];

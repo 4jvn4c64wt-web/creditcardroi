@@ -3481,12 +3481,12 @@ function calculateOptimizationRate() {
 }
 
 /**
- * Get annualized spending data for a card in a given year.
- * Returns { annualizationFactor, pointsByCategory } where pointsByCategory
- * has spend amounts scaled to a full year if data is partial.
+ * Get annualized spending data for a card in a given year, grouped by subcategory.
+ * Returns { factor, subcategories } where subcategories maps
+ * subcategory → { spend, points, rate, category (card-effective) }
  */
 function getAnnualizedCardSpend(cardId, year) {
-  if (!state.results || !state.results.processed) return { factor: 1, categories: {} };
+  if (!state.results || !state.results.processed) return { factor: 1, categories: {}, subcategories: {} };
   const txns = state.results.processed.filter(t =>
     t.cardId === cardId && !t.isPayment && !t.isCredit &&
     getYearFromDateString(t.date) === year
@@ -3501,30 +3501,47 @@ function getAnnualizedCardSpend(cardId, year) {
   const monthCount = months.size;
   const factor = monthCount > 0 && monthCount < 12 ? 12 / monthCount : 1;
 
-  // Aggregate by effective category for this card
+  // Aggregate by card-effective category (kept for backward compat)
   const categories = {};
+  // Aggregate by subcategory for granular comparison
+  const subcategories = {};
   txns.forEach(t => {
     const cat = t.category || 'other';
+    const sub = t.subcategory || cat;
+    const amt = Math.abs(t.amount);
+    const pts = t.points || 0;
+    const mult = t.multiplier || { rate: 1 };
+
     if (!categories[cat]) categories[cat] = { spend: 0, points: 0 };
-    categories[cat].spend += Math.abs(t.amount);
-    categories[cat].points += t.points || 0;
+    categories[cat].spend += amt;
+    categories[cat].points += pts;
+
+    if (!subcategories[sub]) subcategories[sub] = { spend: 0, points: 0, rate: mult.rate, category: cat };
+    subcategories[sub].spend += amt;
+    subcategories[sub].points += pts;
   });
 
   // Annualize
   if (factor > 1) {
-    for (const cat of Object.keys(categories)) {
-      categories[cat].spend *= factor;
-      categories[cat].points *= factor;
+    for (const d of [...Object.values(categories), ...Object.values(subcategories)]) {
+      d.spend *= factor;
+      d.points *= factor;
     }
   }
 
-  return { factor, categories };
+  return { factor, categories, subcategories };
+}
+
+/**
+ * Format a subcategory name for display: "flights-direct" → "Flights Direct"
+ */
+function formatSubcategoryName(sub) {
+  return sub.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 /**
  * Get spending shift rows for "Add a Card" scenario.
- * Returns array of { sourceCardId, sourceCardName, sourceCategory, sourceRate, sourcePointValue,
- *   newCategory, newRate, newPointValue, actualSpend, shiftAmount }
+ * Compares at subcategory level. Only shows rows where new card earns more value.
  */
 function getAddCardShiftRows(newCardId, year) {
   if (!state.results || !state.results.processed) return [];
@@ -3534,7 +3551,6 @@ function getAddCardShiftRows(newCardId, year) {
   const activeCardIds = getActiveCardIds(year);
   const newPV = getPointValue(newCardId);
   const rows = [];
-  // Use today's date for rate lookups — What If models current/future rates, not historical
   const today = new Date();
   const sampleDate = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
 
@@ -3543,26 +3559,26 @@ function getAddCardShiftRows(newCardId, year) {
     const card = CARDS[cardId];
     if (!card) continue;
     const cardPV = getPointValue(cardId);
-    const { categories } = getAnnualizedCardSpend(cardId, year);
+    const { subcategories } = getAnnualizedCardSpend(cardId, year);
 
-    for (const [cat, data] of Object.entries(categories)) {
+    for (const [sub, data] of Object.entries(subcategories)) {
       if (data.spend <= 0) continue;
 
-      // Get current card's value for this category
-      const currentMult = getWhatIfMultiplier(cardId, cat);
+      // Current card's value for this subcategory
+      const currentCat = mapToCardCategory(sub, cardId, sampleDate);
+      const currentMult = getWhatIfMultiplier(cardId, currentCat);
       const currentValue = currentMult.rate * cardPV;
 
-      // Map this category to the new card's category system
-      const newCat = mapToCardCategory(cat, newCardId, sampleDate);
+      // New card's value for this subcategory
+      const newCat = mapToCardCategory(sub, newCardId, sampleDate);
       const newMult = getWhatIfMultiplier(newCardId, newCat);
       const newValue = newMult.rate * newPV;
 
-      // Only show row if new card earns MORE value
       if (newValue > currentValue) {
         rows.push({
           sourceCardId: cardId,
           sourceCardName: card.shortName || card.name,
-          sourceCategory: cat,
+          sourceCategory: sub,
           sourceRate: currentMult.rate,
           sourcePointValue: cardPV,
           newCategory: newCat,
@@ -3579,37 +3595,47 @@ function getAddCardShiftRows(newCardId, year) {
 
 /**
  * Get spending shift rows for "Remove a Card" scenario.
- * Returns array of { sourceCategory, sourceRate, sourcePointValue, actualSpend,
- *   bestCardId, bestCardName, bestCategory, bestRate, bestPointValue }
+ * Compares at subcategory level. Shows ALL subcategories — every dollar must go somewhere.
+ * @param {string} removeCardId - Card being removed
+ * @param {number} year - Year to analyze
+ * @param {string[]} [extraCardIds] - Additional card IDs in the hypothetical wallet (e.g. newly added card in swap)
  */
-function getRemoveCardShiftRows(removeCardId, year) {
+function getRemoveCardShiftRows(removeCardId, year, extraCardIds) {
   if (!state.results || !state.results.processed) return [];
   const removeCard = CARDS[removeCardId];
   if (!removeCard) return [];
 
-  const activeCardIds = getActiveCardIds(year).filter(id => id !== removeCardId);
+  // Build hypothetical wallet card IDs: current cards minus removed, plus any extras
+  let walletCardIds = getActiveCardIds(year).filter(id => id !== removeCardId);
+  if (extraCardIds) {
+    for (const id of extraCardIds) {
+      if (!walletCardIds.includes(id) && CARDS[id]) walletCardIds.push(id);
+    }
+  }
+
   const removePV = getPointValue(removeCardId);
-  const { categories } = getAnnualizedCardSpend(removeCardId, year);
-  // Use today's date for rate lookups — What If models current/future rates, not historical
+  const { subcategories } = getAnnualizedCardSpend(removeCardId, year);
   const today = new Date();
   const sampleDate = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
   const rows = [];
 
-  for (const [cat, data] of Object.entries(categories)) {
+  for (const [sub, data] of Object.entries(subcategories)) {
     if (data.spend <= 0) continue;
 
-    const removeMult = getWhatIfMultiplier(removeCardId, cat);
+    // Value on the removed card
+    const removeCat = mapToCardCategory(sub, removeCardId, sampleDate);
+    const removeMult = getWhatIfMultiplier(removeCardId, removeCat);
 
-    // Find best remaining card for this category
+    // Find best destination card in hypothetical wallet for this subcategory
     let bestCardId = null;
     let bestValue = 0;
     let bestCat = 'other';
     let bestRate = 1;
     let bestPV = 0.01;
 
-    for (const cardId of activeCardIds) {
+    for (const cardId of walletCardIds) {
       const cardPV = getPointValue(cardId);
-      const mapped = mapToCardCategory(cat, cardId, sampleDate);
+      const mapped = mapToCardCategory(sub, cardId, sampleDate);
       const mult = getWhatIfMultiplier(cardId, mapped);
       const val = mult.rate * cardPV;
       if (val > bestValue) {
@@ -3621,16 +3647,17 @@ function getRemoveCardShiftRows(removeCardId, year) {
       }
     }
 
+    // Always show the row — every dollar of removed card spending must be accounted for
     if (bestCardId) {
       rows.push({
-        sourceCategory: cat,
+        sourceCategory: sub,
         sourceRate: removeMult.rate,
         sourcePointValue: removePV,
         actualSpend: data.spend,
-        bestCardId: bestCardId,
+        bestCardId,
         bestCardName: (CARDS[bestCardId]?.shortName || CARDS[bestCardId]?.name || bestCardId),
         bestCategory: bestCat,
-        bestRate: bestRate,
+        bestRate,
         bestPointValue: bestPV
       });
     }
@@ -3688,42 +3715,32 @@ function calculateWhatIfNetImpact() {
   }
 
   if (wi.scenarioType === 'remove' || wi.scenarioType === 'swap') {
-    const removeRows = wi.removeCardId ? getRemoveCardShiftRows(wi.removeCardId, year) : [];
-    for (const row of removeRows) {
-      const key = `remove|${row.sourceCategory}`;
-      const amount = wi.shiftAmounts[key] || 0;
-      if (amount <= 0) continue;
-      // Impact = new card value - old card value (old = removed card, new = best remaining)
-      const oldValue = amount * row.sourceRate * row.sourcePointValue;
-      const newValue = amount * row.bestRate * row.bestPointValue;
-      spendingImpact += (newValue - oldValue);
+    const swapExtras = wi.scenarioType === 'swap' && wi.addCardId ? [wi.addCardId] : undefined;
+    const removeRows = wi.removeCardId ? getRemoveCardShiftRows(wi.removeCardId, year, swapExtras) : [];
+
+    // Pre-compute best base-rate value among remaining cards for unshifted spending
+    const remainingCards = getActiveCardIds(year).filter(id => id !== wi.removeCardId);
+    if (swapExtras) swapExtras.forEach(id => { if (!remainingCards.includes(id) && CARDS[id]) remainingCards.push(id); });
+    let bestBaseValue = 0;
+    for (const cid of remainingCards) {
+      const card = CARDS[cid];
+      if (card) {
+        const baseVal = (card.baseRate || 1) * getPointValue(cid);
+        if (baseVal > bestBaseValue) bestBaseValue = baseVal;
+      }
     }
-    // Also account for spending that DOESN'T shift (stays at 0 value since card is removed)
+
     for (const row of removeRows) {
       const key = `remove|${row.sourceCategory}`;
       const shiftedAmount = wi.shiftAmounts[key] || 0;
       const unshifted = row.actualSpend - shiftedAmount;
-      if (unshifted > 0) {
-        // This spending loses its current value entirely
-        const lostValue = unshifted * row.sourceRate * row.sourcePointValue;
-        spendingImpact -= lostValue;
-        // But goes to 'other' on whatever catch-all card the user has
-        // For simplicity, assume 1x at lowest point value among remaining cards
-        const activeCards = getActiveCardIds(year).filter(id => id !== wi.removeCardId);
-        if (activeCards.length > 0) {
-          // Use the best card's base rate
-          let bestBaseValue = 0;
-          for (const cid of activeCards) {
-            const card = CARDS[cid];
-            if (card) {
-              const pv = getPointValue(cid);
-              const baseVal = (card.baseRate || 1) * pv;
-              if (baseVal > bestBaseValue) bestBaseValue = baseVal;
-            }
-          }
-          spendingImpact += unshifted * bestBaseValue;
-        }
-      }
+      // All spending on removed card loses its current value
+      const lostValue = row.actualSpend * row.sourceRate * row.sourcePointValue;
+      // Shifted portion earns best-destination value
+      const shiftedGain = shiftedAmount * row.bestRate * row.bestPointValue;
+      // Unshifted portion falls to catch-all base rate
+      const unshiftedGain = unshifted > 0 ? unshifted * bestBaseValue : 0;
+      spendingImpact += (shiftedGain + unshiftedGain - lostValue);
     }
   }
 
@@ -3828,7 +3845,8 @@ function prefillShiftAmounts() {
   }
 
   if (wi.scenarioType === 'remove' || wi.scenarioType === 'swap') {
-    const removeRows = wi.removeCardId ? getRemoveCardShiftRows(wi.removeCardId, wi.selectedYear) : [];
+    const swapExtras = wi.scenarioType === 'swap' && wi.addCardId ? [wi.addCardId] : undefined;
+    const removeRows = wi.removeCardId ? getRemoveCardShiftRows(wi.removeCardId, wi.selectedYear, swapExtras) : [];
     for (const row of removeRows) {
       const key = `remove|${row.sourceCategory}`;
       wi.shiftAmounts[key] = Math.round(row.actualSpend * rate * 100) / 100;
@@ -4089,12 +4107,12 @@ function renderStep4Add() {
 
       html += `<tr>
         <td>${escapeHtml(row.sourceCardName)}</td>
-        <td style="text-transform:capitalize;">${escapeHtml(row.sourceCategory)}</td>
+        <td>${escapeHtml(formatSubcategoryName(row.sourceCategory))}</td>
         <td class="mono">${row.sourceRate}x</td>
         <td><input type="number" class="whatif-shift-input" data-key="${escapeHtml(key)}" data-max="${row.actualSpend.toFixed(2)}" value="${amount.toFixed(0)}" min="0" max="${row.actualSpend.toFixed(2)}" step="1"></td>
         <td class="whatif-shift-arrow">→</td>
         <td>${escapeHtml(addCard.shortName || addCard.name)}</td>
-        <td style="text-transform:capitalize;">${escapeHtml(row.newCategory)}</td>
+        <td>${escapeHtml(formatSubcategoryName(row.newCategory))}</td>
         <td class="mono">${row.newRate}x</td>
         <td class="text-right whatif-impact ${rowImpact >= 0 ? 'positive' : 'negative'}">${rowImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(rowImpact)}</td>
       </tr>`;
@@ -4169,12 +4187,12 @@ function renderStep4Remove() {
 
       html += `<tr>
         <td>${escapeHtml(removeCard.shortName || removeCard.name)}</td>
-        <td style="text-transform:capitalize;">${escapeHtml(row.sourceCategory)}</td>
+        <td>${escapeHtml(formatSubcategoryName(row.sourceCategory))}</td>
         <td class="mono">${row.sourceRate}x</td>
         <td><input type="number" class="whatif-shift-input" data-key="${escapeHtml(key)}" data-max="${row.actualSpend.toFixed(2)}" value="${amount.toFixed(0)}" min="0" max="${row.actualSpend.toFixed(2)}" step="1"></td>
         <td class="whatif-shift-arrow">→</td>
         <td>${escapeHtml(row.bestCardName)}</td>
-        <td style="text-transform:capitalize;">${escapeHtml(row.bestCategory)}</td>
+        <td>${escapeHtml(formatSubcategoryName(row.bestCategory))}</td>
         <td class="mono">${row.bestRate}x</td>
         <td class="text-right whatif-impact ${rowImpact >= 0 ? 'positive' : 'negative'}">${rowImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(rowImpact)}</td>
       </tr>`;
@@ -4229,7 +4247,7 @@ function renderStep4Swap() {
 
   // Section 1: Spending leaving the removed card
   html += `<h3 style="font-size:14px;font-weight:600;margin:16px 0 8px;color:#dc2626;">Spending leaving ${escapeHtml(removeCard.shortName || removeCard.name)}</h3>`;
-  const removeRows = getRemoveCardShiftRows(wi.removeCardId, wi.selectedYear);
+  const removeRows = getRemoveCardShiftRows(wi.removeCardId, wi.selectedYear, wi.addCardId ? [wi.addCardId] : undefined);
   if (removeRows.length > 0) {
     html += `<div class="whatif-shift-table-wrap"><table class="whatif-shift-table">
       <thead><tr><th>Category</th><th>Rate</th><th>Redirect Amount</th><th></th><th>To Card</th><th>Category</th><th>Rate</th><th class="text-right">Impact</th></tr></thead><tbody>`;
@@ -4238,12 +4256,12 @@ function renderStep4Swap() {
       const amount = wi.shiftAmounts[key] || 0;
       const rowImpact = getRowImpact(amount, row.sourceRate, row.sourcePointValue, row.bestRate, row.bestPointValue);
       html += `<tr>
-        <td style="text-transform:capitalize;">${escapeHtml(row.sourceCategory)}</td>
+        <td>${escapeHtml(formatSubcategoryName(row.sourceCategory))}</td>
         <td class="mono">${row.sourceRate}x</td>
         <td><input type="number" class="whatif-shift-input" data-key="${escapeHtml(key)}" data-max="${row.actualSpend.toFixed(2)}" value="${amount.toFixed(0)}" min="0" max="${row.actualSpend.toFixed(2)}" step="1"></td>
         <td class="whatif-shift-arrow">→</td>
         <td>${escapeHtml(row.bestCardName)}</td>
-        <td style="text-transform:capitalize;">${escapeHtml(row.bestCategory)}</td>
+        <td>${escapeHtml(formatSubcategoryName(row.bestCategory))}</td>
         <td class="mono">${row.bestRate}x</td>
         <td class="text-right whatif-impact ${rowImpact >= 0 ? 'positive' : 'negative'}">${rowImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(rowImpact)}</td>
       </tr>`;
@@ -4272,11 +4290,11 @@ function renderStep4Swap() {
       const rowImpact = getRowImpact(amount, row.sourceRate, row.sourcePointValue, row.newRate, row.newPointValue);
       html += `<tr>
         <td>${escapeHtml(row.sourceCardName)}</td>
-        <td style="text-transform:capitalize;">${escapeHtml(row.sourceCategory)}</td>
+        <td>${escapeHtml(formatSubcategoryName(row.sourceCategory))}</td>
         <td class="mono">${row.sourceRate}x</td>
         <td><input type="number" class="whatif-shift-input" data-key="${escapeHtml(key)}" data-max="${row.actualSpend.toFixed(2)}" value="${amount.toFixed(0)}" min="0" max="${row.actualSpend.toFixed(2)}" step="1"></td>
         <td class="whatif-shift-arrow">→</td>
-        <td style="text-transform:capitalize;">${escapeHtml(row.newCategory)}</td>
+        <td>${escapeHtml(formatSubcategoryName(row.newCategory))}</td>
         <td class="mono">${row.newRate}x</td>
         <td class="text-right whatif-impact ${rowImpact >= 0 ? 'positive' : 'negative'}">${rowImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(rowImpact)}</td>
       </tr>`;
@@ -4545,7 +4563,8 @@ function renderDetailSection() {
     }
 
     // Apply spending redistribution
-    const removeRows = getRemoveCardShiftRows(wi.removeCardId, wi.selectedYear);
+    const swapExtrasDetail = wi.scenarioType === 'swap' && wi.addCardId ? [wi.addCardId] : undefined;
+    const removeRows = getRemoveCardShiftRows(wi.removeCardId, wi.selectedYear, swapExtrasDetail);
     for (const row of removeRows) {
       const key = `remove|${row.sourceCategory}`;
       const amount = wi.shiftAmounts[key] || 0;
@@ -4858,7 +4877,8 @@ function updateWhatIfSummary() {
 
     if (key.startsWith('remove|')) {
       const cat = key.replace('remove|', '');
-      const removeRows = getRemoveCardShiftRows(wi.removeCardId, wi.selectedYear);
+      const swapExtrasUpd = wi.scenarioType === 'swap' && wi.addCardId ? [wi.addCardId] : undefined;
+      const removeRows = getRemoveCardShiftRows(wi.removeCardId, wi.selectedYear, swapExtrasUpd);
       const matchRow = removeRows.find(r => r.sourceCategory === cat);
       if (matchRow) {
         rowImpact = getRowImpact(amount, matchRow.sourceRate, matchRow.sourcePointValue, matchRow.bestRate, matchRow.bestPointValue);

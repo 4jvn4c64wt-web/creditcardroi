@@ -3511,7 +3511,10 @@ function calculateAddCardValue(newCardId, year) {
     const sub = t.subcategory || t.category || 'other';
     const cardId = t.cardId;
     const cardPV = getPointValue(cardId);
-    const actualRate = (t.multiplier && t.multiplier.rate) || 1;
+    // Use current rates, not historical — What If is forward-looking
+    const currentCat = mapToCardCategory(sub, cardId, t.date);
+    const currentMult = getWhatIfMultiplier(cardId, currentCat);
+    const actualRate = currentMult.rate;
     const actualValue = actualRate * cardPV;
 
     const newCat = mapToCardCategory(sub, newCardId, t.date);

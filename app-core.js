@@ -3505,19 +3505,23 @@ function calculateAddCardValue(newCardId, year) {
   const monthCount = months.size;
   const annualizationFactor = monthCount > 0 && monthCount < 12 ? 12 / monthCount : 1;
 
+  // Use today's date for all category mapping — What If is forward-looking
+  const _today = new Date();
+  const todayStr = `${_today.getFullYear()}-${String(_today.getMonth()+1).padStart(2,'0')}-${String(_today.getDate()).padStart(2,'0')}`;
+
   // Aggregate by [sourceCardId + subcategory]
   const buckets = {};
   for (const t of txns) {
     const sub = t.subcategory || t.category || 'other';
     const cardId = t.cardId;
     const cardPV = getPointValue(cardId);
-    // Use current rates, not historical — What If is forward-looking
-    const currentCat = mapToCardCategory(sub, cardId, t.date);
+    // Use current rates, not historical
+    const currentCat = mapToCardCategory(sub, cardId, todayStr);
     const currentMult = getWhatIfMultiplier(cardId, currentCat);
     const actualRate = currentMult.rate;
     const actualValue = actualRate * cardPV;
 
-    const newCat = mapToCardCategory(sub, newCardId, t.date);
+    const newCat = mapToCardCategory(sub, newCardId, todayStr);
     const newMult = getWhatIfMultiplier(newCardId, newCat);
     const newValue = newMult.rate * newPV;
 

@@ -3511,32 +3511,47 @@ function calculateAddCardValue(newCardId, year) {
   const _today = new Date();
   const todayStr = `${_today.getFullYear()}-${String(_today.getMonth()+1).padStart(2,'0')}-${String(_today.getDate()).padStart(2,'0')}`;
 
-  // Aggregate by [sourceCardId + subcategory]
+  // Full wallet (all owned cards) excluding the new card — for best-card comparison
+  const walletCardIds = getActiveCardIds().filter(id => id !== newCardId);
+
+  // Aggregate by [bestExistingCardId + subcategory]
   const buckets = {};
   for (const t of txns) {
     const sub = t.subcategory || t.category || 'other';
-    const cardId = t.cardId;
-    const cardPV = getPointValue(cardId);
-    // Use current rates, not historical
-    const currentCat = mapToCardCategory(sub, cardId, todayStr);
-    const currentMult = getWhatIfMultiplier(cardId, currentCat);
-    const actualRate = currentMult.rate;
-    const actualValue = actualRate * cardPV;
+
+    // Find the best existing card in the full wallet for this subcategory
+    let bestExistingCardId = t.cardId;
+    let bestExistingRate = 0;
+    let bestExistingValue = 0;
+    let bestExistingPV = getPointValue(t.cardId);
+
+    for (const cid of walletCardIds) {
+      const pv = getPointValue(cid);
+      const mapped = mapToCardCategory(sub, cid, todayStr);
+      const mult = getWhatIfMultiplier(cid, mapped);
+      const val = mult.rate * pv;
+      if (val > bestExistingValue) {
+        bestExistingValue = val;
+        bestExistingCardId = cid;
+        bestExistingRate = mult.rate;
+        bestExistingPV = pv;
+      }
+    }
 
     const newCat = mapToCardCategory(sub, newCardId, todayStr);
     const newMult = getWhatIfMultiplier(newCardId, newCat);
     const newValue = newMult.rate * newPV;
 
-    // Only count if the new card has a strictly higher multiplier rate
-    if (newMult.rate > actualRate && newValue > actualValue) {
-      const key = `${cardId}|${sub}`;
+    // Only count if the new card beats the BEST existing card in the full wallet
+    if (newMult.rate > bestExistingRate && newValue > bestExistingValue) {
+      const key = `${bestExistingCardId}|${sub}`;
       if (!buckets[key]) {
         buckets[key] = {
-          sourceCardId: cardId,
-          sourceCardName: CARDS[cardId]?.shortName || CARDS[cardId]?.name || cardId,
+          sourceCardId: bestExistingCardId,
+          sourceCardName: CARDS[bestExistingCardId]?.shortName || CARDS[bestExistingCardId]?.name || bestExistingCardId,
           subcategory: sub,
-          sourceRate: actualRate,
-          sourcePointValue: cardPV,
+          sourceRate: bestExistingRate,
+          sourcePointValue: bestExistingPV,
           newCategory: newCat,
           newRate: newMult.rate,
           newPointValue: newPV,
@@ -3546,7 +3561,7 @@ function calculateAddCardValue(newCardId, year) {
       }
       const amt = Math.abs(t.amount);
       buckets[key].spend += amt;
-      buckets[key].additionalValue += amt * (newValue - actualValue);
+      buckets[key].additionalValue += amt * (newValue - bestExistingValue);
     }
   }
 
@@ -3609,8 +3624,8 @@ function calculateRemoveCardValue(removeCardId, year) {
   const removePV = getPointValue(removeCardId);
   const removeBaseRate = removeCard.baseRate || 1;
 
-  // Remaining wallet cards
-  const walletCardIds = getActiveCardIds(year).filter(id => id !== removeCardId);
+  // Remaining wallet cards — use full wallet (all cards user owns), not just base-year cards
+  const walletCardIds = getActiveCardIds().filter(id => id !== removeCardId);
 
   const txns = state.results.processed.filter(t =>
     !t.isPayment && !t.isCredit && !t.isRefund && t.cardId === removeCardId &&
@@ -3722,8 +3737,8 @@ function calculateSwapValue(removeCardId, addCardId, year) {
   const addPV = getPointValue(addCardId);
   const removeBaseRate = removeCard.baseRate || 1;
 
-  // Hypothetical wallet: current cards minus removed, plus new card
-  const hypotheticalWallet = getActiveCardIds(year).filter(id => id !== removeCardId);
+  // Hypothetical wallet: all owned cards minus removed, plus new card
+  const hypotheticalWallet = getActiveCardIds().filter(id => id !== removeCardId);
   if (!hypotheticalWallet.includes(addCardId) && CARDS[addCardId]) {
     hypotheticalWallet.push(addCardId);
   }
@@ -3813,30 +3828,46 @@ function calculateSwapValue(removeCardId, addCardId, year) {
     getYearFromDateString(t.date) === year
   );
 
+  // Compare new card against best existing card in hypothetical wallet (excl. new card)
+  const existingWallet = hypotheticalWallet.filter(id => id !== addCardId);
+
   const addBuckets = {};
   for (const t of addTxns) {
     const sub = t.subcategory || t.category || 'other';
-    const cardId = t.cardId;
-    const cardPV = getPointValue(cardId);
 
-    const currentCat = mapToCardCategory(sub, cardId, todayStr);
-    const currentMult = getWhatIfMultiplier(cardId, currentCat);
-    const actualRate = currentMult.rate;
-    const actualValue = actualRate * cardPV;
+    // Find the best existing card in the wallet for this subcategory
+    let bestExistingCardId = t.cardId;
+    let bestExistingRate = 0;
+    let bestExistingValue = 0;
+    let bestExistingPV = getPointValue(t.cardId);
+
+    for (const cid of existingWallet) {
+      const pv = getPointValue(cid);
+      const mapped = mapToCardCategory(sub, cid, todayStr);
+      const mult = getWhatIfMultiplier(cid, mapped);
+      const val = mult.rate * pv;
+      if (val > bestExistingValue) {
+        bestExistingValue = val;
+        bestExistingCardId = cid;
+        bestExistingRate = mult.rate;
+        bestExistingPV = pv;
+      }
+    }
 
     const newCat = mapToCardCategory(sub, addCardId, todayStr);
     const newMult = getWhatIfMultiplier(addCardId, newCat);
     const newValue = newMult.rate * addPV;
 
-    if (newMult.rate > actualRate && newValue > actualValue) {
-      const key = `${cardId}|${sub}`;
+    // Only count if the new card beats the BEST existing card in the wallet
+    if (newMult.rate > bestExistingRate && newValue > bestExistingValue) {
+      const key = `${bestExistingCardId}|${sub}`;
       if (!addBuckets[key]) {
         addBuckets[key] = {
-          sourceCardId: cardId,
-          sourceCardName: CARDS[cardId]?.shortName || CARDS[cardId]?.name || cardId,
+          sourceCardId: bestExistingCardId,
+          sourceCardName: CARDS[bestExistingCardId]?.shortName || CARDS[bestExistingCardId]?.name || bestExistingCardId,
           subcategory: sub,
-          sourceRate: actualRate,
-          sourcePointValue: cardPV,
+          sourceRate: bestExistingRate,
+          sourcePointValue: bestExistingPV,
           newRate: newMult.rate,
           newPointValue: addPV,
           spend: 0, additionalValue: 0
@@ -3844,7 +3875,7 @@ function calculateSwapValue(removeCardId, addCardId, year) {
       }
       const amt = Math.abs(t.amount);
       addBuckets[key].spend += amt;
-      addBuckets[key].additionalValue += amt * (newValue - actualValue);
+      addBuckets[key].additionalValue += amt * (newValue - bestExistingValue);
     }
   }
 

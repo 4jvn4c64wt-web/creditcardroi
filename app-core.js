@@ -3597,8 +3597,10 @@ function calculateAddCardValue(newCardId, year) {
     const walletHasBilt = getActiveCardIds().some(id => CARDS[id]?.isBilt);
     if (!walletHasBilt) {
       const annualRent = state.cardScenarios.rentAmount * 12;
-      const rentMult = getCardScenariosMultiplier(newCardId, 'rent');
-      const rentValue = annualRent * rentMult.rate * newPV;
+      // Use 1x conservative rate — user hasn't configured Bilt 2.0 settings yet,
+      // so getCardScenariosMultiplier would return 0x (no biltConfig exists)
+      const syntheticRentRate = 1;
+      const rentValue = annualRent * syntheticRentRate * newPV;
       rows.push({
         sourceCardId: '_rent',
         sourceCardName: 'New (rent)',
@@ -3606,7 +3608,7 @@ function calculateAddCardValue(newCardId, year) {
         sourceRate: 0,
         sourcePointValue: 0,
         newCategory: 'rent',
-        newRate: rentMult.rate,
+        newRate: syntheticRentRate,
         newPointValue: newPV,
         spend: annualRent,
         additionalValue: rentValue
@@ -4018,15 +4020,15 @@ function calculateSwapValue(removeCardId, addCardId, year) {
     const walletHasBilt = getActiveCardIds().some(id => CARDS[id]?.isBilt);
     if (!walletHasBilt) {
       const annualRent = state.cardScenarios.rentAmount * 12;
-      const rentMult = getCardScenariosMultiplier(addCardId, 'rent');
-      const rentValue = annualRent * rentMult.rate * addPV;
+      const syntheticRentRate = 1; // Conservative 1x default
+      const rentValue = annualRent * syntheticRentRate * addPV;
       addRows.push({
         sourceCardId: '_rent',
         sourceCardName: 'New (rent)',
         subcategory: 'rent',
         sourceRate: 0,
         sourcePointValue: 0,
-        newRate: rentMult.rate,
+        newRate: syntheticRentRate,
         newPointValue: addPV,
         spend: annualRent,
         additionalValue: rentValue
@@ -4175,7 +4177,7 @@ function getAddCardShiftRows(newCardId, year) {
     const walletHasBilt = getActiveCardIds().some(id => CARDS[id]?.isBilt);
     if (!walletHasBilt) {
       const annualRent = state.cardScenarios.rentAmount * 12;
-      const rentMult = getCardScenariosMultiplier(newCardId, 'rent');
+      const syntheticRentRate = 1; // Conservative 1x default
       rows.push({
         sourceCardId: '_rent',
         sourceCardName: 'New (rent)',
@@ -4183,7 +4185,7 @@ function getAddCardShiftRows(newCardId, year) {
         sourceRate: 0,
         sourcePointValue: 0,
         newCategory: 'rent',
-        newRate: rentMult.rate,
+        newRate: syntheticRentRate,
         newPointValue: newPV,
         actualSpend: annualRent
       });
@@ -4757,15 +4759,15 @@ function renderStep4Add() {
   html += `<div style="max-width:360px;margin:0 auto 20px;font-size:14px;line-height:2;">
     <div style="display:flex;justify-content:space-between;">
       <span>Credits</span>
-      <span class="mono" style="font-weight:600;color:#059669;" id="cardscenariosAddCreditsLine">+${formatCurrencyPrecise(creditsTotal)}</span>
+      <span class="mono" style="font-weight:600;color:${creditsTotal > 0 ? '#059669' : '#78716c'};" id="cardscenariosAddCreditsLine">+${formatCurrencyPrecise(creditsTotal)}</span>
     </div>
     <div style="display:flex;justify-content:space-between;">
       <span>Point value change</span>
-      <span class="mono" style="font-weight:600;color:#059669;" id="cardscenariosAddRewardsLine">+${formatCurrencyPrecise(totalGain)}</span>
+      <span class="mono" style="font-weight:600;color:${totalGain > 0 ? '#059669' : '#78716c'};" id="cardscenariosAddRewardsLine">+${formatCurrencyPrecise(totalGain)}</span>
     </div>
     <div style="display:flex;justify-content:space-between;">
       <span>Annual fee</span>
-      <span class="mono" style="font-weight:600;color:#dc2626;">-${formatCurrencyPrecise(annualFee)}</span>
+      <span class="mono" style="font-weight:600;color:${annualFee > 0 ? '#dc2626' : '#78716c'};">-${formatCurrencyPrecise(annualFee)}</span>
     </div>
     <div style="display:flex;justify-content:space-between;border-top:2px solid #e7e5e4;padding-top:4px;margin-top:4px;">
       <span style="font-weight:600;">Estimated net impact</span>
@@ -4788,9 +4790,9 @@ function renderStep4Add() {
   html += `<div style="margin-top:16px;border-top:1px solid #e7e5e4;padding-top:12px;">
     <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" id="cardscenariosAddRewardsToggle">
       <span style="font-size:13px;font-weight:600;color:#57534e;">
-        <span class="toggle-arrow" style="font-size:10px;margin-right:4px;">▼</span>Point Value Change
+        <span class="toggle-arrow" style="font-size:10px;margin-right:4px;">▶</span>Point Value Change
       </span>
-      <span class="mono" style="font-weight:600;color:#059669;font-size:14px;" id="cardscenariosAddRewardsValue">+${formatCurrencyPrecise(totalGain)}</span>
+      <span class="mono" style="font-weight:600;color:${totalGain > 0 ? '#059669' : '#78716c'};font-size:14px;" id="cardscenariosAddRewardsValue">+${formatCurrencyPrecise(totalGain)}</span>
     </div>
     <div class="hidden" id="cardscenariosAddRewardsDetail" style="margin-top:12px;">`;
 
@@ -5022,15 +5024,15 @@ function renderStep4Remove() {
   html += `<div style="max-width:360px;margin:0 auto 20px;font-size:14px;line-height:2;">
     <div style="display:flex;justify-content:space-between;">
       <span>Lost credits</span>
-      <span class="mono" style="font-weight:600;color:#dc2626;" id="cardscenariosRemoveCreditsLine">-${formatCurrencyPrecise(creditsTotal)}</span>
+      <span class="mono" style="font-weight:600;color:${creditsTotal > 0 ? '#dc2626' : '#78716c'};" id="cardscenariosRemoveCreditsLine">-${formatCurrencyPrecise(creditsTotal)}</span>
     </div>
     <div style="display:flex;justify-content:space-between;">
       <span>Point value change</span>
-      <span class="mono" style="font-weight:600;color:${totalChange >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosRemoveRewardsLine">${totalChange >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(totalChange))}</span>
+      <span class="mono" style="font-weight:600;color:${totalChange > 0 ? '#059669' : totalChange < 0 ? '#dc2626' : '#78716c'};" id="cardscenariosRemoveRewardsLine">${totalChange >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(totalChange))}</span>
     </div>
     <div style="display:flex;justify-content:space-between;">
       <span>Saved annual fee</span>
-      <span class="mono" style="font-weight:600;color:#059669;">+${formatCurrencyPrecise(annualFee)}</span>
+      <span class="mono" style="font-weight:600;color:${annualFee > 0 ? '#059669' : '#78716c'};">+${formatCurrencyPrecise(annualFee)}</span>
     </div>
     <div style="display:flex;justify-content:space-between;border-top:2px solid #e7e5e4;padding-top:4px;margin-top:4px;">
       <span style="font-weight:600;">Estimated net impact</span>
@@ -5858,7 +5860,7 @@ function attachCardScenariosListeners() {
       if (detail) {
         const isHidden = detail.classList.contains('hidden');
         detail.classList.toggle('hidden');
-        if (arrow) arrow.textContent = isHidden ? '▲' : '▼';
+        if (arrow) arrow.textContent = isHidden ? '▼' : '▶';
       }
     });
   }

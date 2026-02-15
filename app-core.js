@@ -4241,8 +4241,8 @@ function renderStep4Add() {
   if (rows.length > 0) {
     html += `<div class="whatif-shift-table-wrap"><table class="whatif-shift-table">
       <thead><tr>
-        <th>Source Card</th><th>Subcategory</th><th>Actual Rate</th><th>Actual Pt Value</th>
-        <th>New Rate</th><th>New Pt Value</th>
+        <th>Source Card</th><th>Subcategory</th><th>Actual Rate</th>
+        <th>New Rate</th>
         <th class="text-right">Spend</th><th class="text-right">Additional Value</th>
       </tr></thead><tbody>`;
 
@@ -4251,16 +4251,14 @@ function renderStep4Add() {
         <td>${escapeHtml(row.sourceCardName)}</td>
         <td>${escapeHtml(formatSubcategoryName(row.subcategory))}</td>
         <td class="mono">${row.sourceRate}x</td>
-        <td class="mono">${(row.sourcePointValue * 100).toFixed(1)}¢</td>
         <td class="mono">${row.newRate}x</td>
-        <td class="mono">${(row.newPointValue * 100).toFixed(1)}¢</td>
         <td class="text-right mono">${formatCurrencyPrecise(row.spend)}</td>
         <td class="text-right whatif-impact positive">+${formatCurrencyPrecise(row.additionalValue)}</td>
       </tr>`;
     }
 
     html += `<tr style="font-weight:600;border-top:2px solid #e7e5e4;">
-      <td colspan="6"></td>
+      <td colspan="4"></td>
       <td class="text-right mono">${formatCurrencyPrecise(rows.reduce((s, r) => s + r.spend, 0))}</td>
       <td class="text-right whatif-impact positive">+${formatCurrencyPrecise(totalGain)}</td>
     </tr></tbody></table></div>`;

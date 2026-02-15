@@ -3378,6 +3378,30 @@ function showResults(results, isNewUpload = false) {
 // =============================================================================
 
 /**
+ * Get multiplier for What If scenarios. Uses current rates (today's date)
+ * and skips CFF quarterly bonuses since those are unpredictable for future scenarios.
+ * Falls back to CFF's static multipliers (chase-travel 5x, dining 3x, drugstore 3x, 1x base).
+ */
+function getWhatIfMultiplier(cardId, category) {
+  const _today = new Date();
+  const todayStr = `${_today.getFullYear()}-${String(_today.getMonth()+1).padStart(2,'0')}-${String(_today.getDate()).padStart(2,'0')}`;
+
+  if (cardId === 'chase-freedom-flex') {
+    // Skip quarterly bonus lookup — use only static multipliers
+    const card = CARDS[cardId];
+    if (!card) return { rate: 1, reason: 'Unknown card' };
+    const effectiveCat = getEffectiveCategory(category, cardId);
+    if (card.multipliers[effectiveCat]) {
+      const rate = card.multipliers[effectiveCat];
+      return { rate, reason: `${rate}x ${effectiveCat}` };
+    }
+    return { rate: card.baseRate, reason: `${card.baseRate}x base rate` };
+  }
+
+  return getMultiplier(cardId, category, todayStr);
+}
+
+/**
  * Reset What If state for a new scenario
  */
 function resetWhatIfState() {
@@ -3525,13 +3549,12 @@ function getAddCardShiftRows(newCardId, year) {
       if (data.spend <= 0) continue;
 
       // Get current card's value for this category
-      const currentMult = getMultiplier(cardId, cat, sampleDate);
+      const currentMult = getWhatIfMultiplier(cardId, cat);
       const currentValue = currentMult.rate * cardPV;
 
       // Map this category to the new card's category system
-      // We need to figure out what subcategory maps to on the new card
       const newCat = mapToCardCategory(cat, newCardId, sampleDate);
-      const newMult = getMultiplier(newCardId, newCat, sampleDate);
+      const newMult = getWhatIfMultiplier(newCardId, newCat);
       const newValue = newMult.rate * newPV;
 
       // Only show row if new card earns MORE value
@@ -3575,7 +3598,7 @@ function getRemoveCardShiftRows(removeCardId, year) {
   for (const [cat, data] of Object.entries(categories)) {
     if (data.spend <= 0) continue;
 
-    const removeMult = getMultiplier(removeCardId, cat, sampleDate);
+    const removeMult = getWhatIfMultiplier(removeCardId, cat);
 
     // Find best remaining card for this category
     let bestCardId = null;
@@ -3587,7 +3610,7 @@ function getRemoveCardShiftRows(removeCardId, year) {
     for (const cardId of activeCardIds) {
       const cardPV = getPointValue(cardId);
       const mapped = mapToCardCategory(cat, cardId, sampleDate);
-      const mult = getMultiplier(cardId, mapped, sampleDate);
+      const mult = getWhatIfMultiplier(cardId, mapped);
       const val = mult.rate * cardPV;
       if (val > bestValue) {
         bestValue = val;

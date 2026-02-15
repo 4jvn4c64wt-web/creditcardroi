@@ -4285,8 +4285,9 @@ function prefillShiftAmounts() {
 function initCreditDefaults(cardId, togglesObj, amountsObj) {
   const card = CARDS[cardId];
   if (!card || !card.credits) return;
+  const disabled = state.disabledCredits[cardId] || [];
   for (const cr of card.credits) {
-    if (togglesObj[cr.name] === undefined) togglesObj[cr.name] = true;
+    if (togglesObj[cr.name] === undefined) togglesObj[cr.name] = !disabled.includes(cr.name);
     if (amountsObj[cr.name] === undefined) amountsObj[cr.name] = cr.amount;
   }
 }
@@ -4339,7 +4340,7 @@ function renderWhatIf() {
   let html = `<div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
       <h2 class="card-title" style="margin:0;">What If Calculator</h2>
-      ${wi.step > 1 ? '<button class="btn btn-secondary" onclick="resetWhatIfState(); renderView(\'whatif\');" style="font-size:12px;padding:6px 12px;">Start Over</button>' : ''}
+      ${wi.step > 1 ? '<button class="btn btn-secondary whatif-start-over" style="font-size:12px;padding:6px 12px;">Start Over</button>' : ''}
     </div>
     <div class="whatif-breadcrumb">${breadcrumb}</div>`;
 
@@ -4503,7 +4504,7 @@ function renderStep4Add() {
 
   // Headline
   html += `<div class="whatif-result-headline">
-    <div style="font-size:16px;color:#57534e;margin-bottom:8px;">
+    <div style="font-size:16px;color:#57534e;margin-bottom:8px;" id="whatifAddHeadlineText">
       Adding ${escapeHtml(cardName)} could ${isPositive ? 'earn you an estimated' : 'cost you an estimated'}
     </div>
     <div class="whatif-result-amount ${isPositive ? 'positive' : 'negative'}" id="whatifAddHeadline">
@@ -4518,7 +4519,7 @@ function renderStep4Add() {
       <span class="mono" style="font-weight:600;color:#059669;" id="whatifAddCreditsLine">+${formatCurrencyPrecise(creditsTotal)}</span>
     </div>
     <div style="display:flex;justify-content:space-between;">
-      <span>Spend rewards</span>
+      <span>Point value change</span>
       <span class="mono" style="font-weight:600;color:#059669;" id="whatifAddRewardsLine">+${formatCurrencyPrecise(totalGain)}</span>
     </div>
     <div style="display:flex;justify-content:space-between;">
@@ -4546,7 +4547,7 @@ function renderStep4Add() {
   html += `<div style="margin-top:16px;border-top:1px solid #e7e5e4;padding-top:12px;">
     <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" id="whatifAddRewardsToggle">
       <span style="font-size:13px;font-weight:600;color:#57534e;">
-        <span class="toggle-arrow" style="font-size:10px;margin-right:4px;">▼</span>Additional Spend Rewards
+        <span class="toggle-arrow" style="font-size:10px;margin-right:4px;">▼</span>Point Value Change
       </span>
       <span class="mono" style="font-weight:600;color:#059669;font-size:14px;" id="whatifAddRewardsValue">+${formatCurrencyPrecise(totalGain)}</span>
     </div>
@@ -4582,7 +4583,7 @@ function renderStep4Add() {
 
   html += `<div class="whatif-nav">
     <button class="btn btn-secondary" id="whatifBack4">← Back</button>
-    <button class="btn btn-secondary" onclick="resetWhatIfState(); renderView('whatif');">Start New Scenario</button>
+    <button class="btn btn-secondary whatif-start-over">Start New Scenario</button>
   </div></div>`;
 
   return html;
@@ -4768,7 +4769,7 @@ function renderStep4Remove() {
 
   // Headline
   html += `<div class="whatif-result-headline">
-    <div style="font-size:16px;color:#57534e;margin-bottom:8px;">
+    <div style="font-size:16px;color:#57534e;margin-bottom:8px;" id="whatifRemoveHeadlineText">
       Removing ${escapeHtml(cardName)} could ${isPositive ? 'save you an estimated' : 'cost you an estimated'}
     </div>
     <div class="whatif-result-amount ${isPositive ? 'positive' : 'negative'}" id="whatifRemoveHeadline">
@@ -4783,7 +4784,7 @@ function renderStep4Remove() {
       <span class="mono" style="font-weight:600;color:#dc2626;" id="whatifRemoveCreditsLine">-${formatCurrencyPrecise(creditsTotal)}</span>
     </div>
     <div style="display:flex;justify-content:space-between;">
-      <span>Spend rewards change</span>
+      <span>Point value change</span>
       <span class="mono" style="font-weight:600;color:${totalChange >= 0 ? '#059669' : '#dc2626'};" id="whatifRemoveRewardsLine">${totalChange >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(totalChange))}</span>
     </div>
     <div style="display:flex;justify-content:space-between;">
@@ -4807,11 +4808,11 @@ function renderStep4Remove() {
   // Lost credits (with toggles)
   html += renderCreditAssumptions(wi.removeCardId, wi.removeCreditToggles, wi.removeCreditAmounts, 'remove');
 
-  // Spend Rewards Detail — single collapsible section
+  // Point Value Change — single collapsible section
   html += `<div style="margin-top:16px;border-top:1px solid #e7e5e4;padding-top:12px;">
     <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" id="whatifRemoveRewardsToggle">
       <span style="font-size:13px;font-weight:600;color:#57534e;">
-        <span class="toggle-arrow" style="font-size:10px;margin-right:4px;">▶</span>Spend Rewards Detail
+        <span class="toggle-arrow" style="font-size:10px;margin-right:4px;">▶</span>Point Value Change
       </span>
       <span class="mono" style="font-weight:600;color:${totalChange >= 0 ? '#059669' : '#dc2626'};font-size:14px;" id="whatifRemoveRewardsValue">${totalChange >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(totalChange))}</span>
     </div>
@@ -4861,7 +4862,7 @@ function renderStep4Remove() {
 
   html += `<div class="whatif-nav">
     <button class="btn btn-secondary" id="whatifBack4">← Back</button>
-    <button class="btn btn-secondary" onclick="resetWhatIfState(); renderView('whatif');">Start New Scenario</button>
+    <button class="btn btn-secondary whatif-start-over">Start New Scenario</button>
   </div></div>`;
 
   return html;
@@ -4892,7 +4893,7 @@ function renderStep4Swap() {
 
   // Headline
   html += `<div class="whatif-result-headline">
-    <div style="font-size:16px;color:#57534e;margin-bottom:8px;">
+    <div style="font-size:16px;color:#57534e;margin-bottom:8px;" id="whatifSwapHeadlineText">
       Swapping ${escapeHtml(removeName)} for ${escapeHtml(addName)} could ${isPositive ? 'earn you an estimated' : 'cost you an estimated'}
     </div>
     <div class="whatif-result-amount ${isPositive ? 'positive' : 'negative'}" id="whatifSwapHeadline">
@@ -4907,7 +4908,7 @@ function renderStep4Swap() {
       <span class="mono" style="font-weight:600;color:${netCredits >= 0 ? '#059669' : '#dc2626'};" id="whatifSwapCreditsLine">${netCredits >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netCredits))}</span>
     </div>
     <div style="display:flex;justify-content:space-between;">
-      <span>Spend rewards</span>
+      <span>Point value change</span>
       <span class="mono" style="font-weight:600;color:${totalSpendChange >= 0 ? '#059669' : '#dc2626'};" id="whatifSwapRewardsLine">${totalSpendChange >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(totalSpendChange))}</span>
     </div>
     <div style="display:flex;justify-content:space-between;">
@@ -4931,11 +4932,11 @@ function renderStep4Swap() {
   // Credits side-by-side: lost (removed) and gained (new)
   html += renderSwapCredits(wi, removeCard, addCard, removeCredits, addCredits, netCredits);
 
-  // Spend Rewards Detail — single collapsible section
+  // Point Value Change — single collapsible section
   html += `<div style="margin-top:16px;border-top:1px solid #e7e5e4;padding-top:12px;">
     <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" id="whatifSwapRewardsToggle">
       <span style="font-size:13px;font-weight:600;color:#57534e;">
-        <span class="toggle-arrow" style="font-size:10px;margin-right:4px;">▶</span>Spend Rewards Detail
+        <span class="toggle-arrow" style="font-size:10px;margin-right:4px;">▶</span>Point Value Change
       </span>
       <span class="mono" style="font-weight:600;color:${totalSpendChange >= 0 ? '#059669' : '#dc2626'};font-size:14px;" id="whatifSwapRewardsValue">${totalSpendChange >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(totalSpendChange))}</span>
     </div>
@@ -5015,7 +5016,7 @@ function renderStep4Swap() {
 
   html += `<div class="whatif-nav">
     <button class="btn btn-secondary" id="whatifBack4">← Back</button>
-    <button class="btn btn-secondary" onclick="resetWhatIfState(); renderView('whatif');">Start New Scenario</button>
+    <button class="btn btn-secondary whatif-start-over">Start New Scenario</button>
   </div></div>`;
 
   return html;
@@ -5193,7 +5194,7 @@ function renderWhatIfStep5() {
 
   html += `<div class="whatif-nav">
     <button class="btn btn-secondary" id="whatifBack5">← Edit Assumptions</button>
-    <button class="btn btn-secondary" onclick="resetWhatIfState(); renderView('whatif');">Start New Scenario</button>
+    <button class="btn btn-secondary whatif-start-over">Start New Scenario</button>
   </div></div>`;
 
   return html;
@@ -5405,6 +5406,11 @@ function renderWalletTable(walletEntries) {
 function attachWhatIfListeners() {
   const wi = state.whatif;
 
+  // Start Over / Start New Scenario buttons
+  document.querySelectorAll('.whatif-start-over').forEach(btn => {
+    btn.addEventListener('click', () => { resetWhatIfState(); renderView('whatif'); });
+  });
+
   // Step 1: Scenario selection
   document.querySelectorAll('.whatif-option[data-scenario]').forEach(opt => {
     opt.addEventListener('click', () => {
@@ -5578,7 +5584,7 @@ function attachWhatIfListeners() {
     });
   }
 
-  // Spend rewards collapsible toggle (Add)
+  // Point value change collapsible toggle (Add)
   const rewardsToggle = document.getElementById('whatifAddRewardsToggle');
   if (rewardsToggle) {
     rewardsToggle.addEventListener('click', () => {
@@ -5592,7 +5598,7 @@ function attachWhatIfListeners() {
     });
   }
 
-  // Spend rewards collapsible toggle (Remove)
+  // Point value change collapsible toggle (Remove)
   const removeRewardsToggle = document.getElementById('whatifRemoveRewardsToggle');
   if (removeRewardsToggle) {
     removeRewardsToggle.addEventListener('click', () => {
@@ -5606,7 +5612,7 @@ function attachWhatIfListeners() {
     });
   }
 
-  // Spend rewards collapsible toggle (Swap)
+  // Point value change collapsible toggle (Swap)
   const swapRewardsToggle = document.getElementById('whatifSwapRewardsToggle');
   if (swapRewardsToggle) {
     swapRewardsToggle.addEventListener('click', () => {
@@ -5663,6 +5669,11 @@ function updateAddCardResult() {
     headlineEl.textContent = `~${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}/yr`;
     headlineEl.className = `whatif-result-amount ${isPositive ? 'positive' : 'negative'}`;
   }
+  const headlineTextEl = document.getElementById('whatifAddHeadlineText');
+  if (headlineTextEl) {
+    const cardName = addCard.shortName || addCard.name;
+    headlineTextEl.textContent = `Adding ${cardName} could ${isPositive ? 'earn you an estimated' : 'cost you an estimated'}`;
+  }
 
   // Update top compact summary
   const creditsLineEl = document.getElementById('whatifAddCreditsLine');
@@ -5698,6 +5709,11 @@ function updateRemoveCardResult() {
   if (headlineEl) {
     headlineEl.textContent = `~${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}/yr`;
     headlineEl.className = `whatif-result-amount ${isPositive ? 'positive' : 'negative'}`;
+  }
+  const headlineTextEl = document.getElementById('whatifRemoveHeadlineText');
+  if (headlineTextEl) {
+    const cardName = removeCard.shortName || removeCard.name;
+    headlineTextEl.textContent = `Removing ${cardName} could ${isPositive ? 'save you an estimated' : 'cost you an estimated'}`;
   }
 
   // Update top compact summary
@@ -5751,6 +5767,12 @@ function updateSwapCardResult() {
   if (headlineEl) {
     headlineEl.textContent = `~${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}/yr`;
     headlineEl.className = `whatif-result-amount ${isPositive ? 'positive' : 'negative'}`;
+  }
+  const headlineTextEl = document.getElementById('whatifSwapHeadlineText');
+  if (headlineTextEl) {
+    const removeName = removeCard.shortName || removeCard.name;
+    const addName = addCard.shortName || addCard.name;
+    headlineTextEl.textContent = `Swapping ${removeName} for ${addName} could ${isPositive ? 'earn you an estimated' : 'cost you an estimated'}`;
   }
 
   // Update top compact summary — credits line

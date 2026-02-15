@@ -4193,15 +4193,15 @@ function renderStep4Add() {
     </div>
   </div>`;
 
-  // Three-line breakdown
+  // Compact summary
   html += `<div style="max-width:360px;margin:0 auto 20px;font-size:14px;line-height:2;">
-    <div style="display:flex;justify-content:space-between;">
-      <span>Additional rewards value</span>
-      <span class="mono" style="font-weight:600;color:#059669;">+${formatCurrencyPrecise(totalGain)}</span>
-    </div>
     <div style="display:flex;justify-content:space-between;">
       <span>Credits</span>
       <span class="mono" style="font-weight:600;color:#059669;" id="whatifAddCreditsLine">+${formatCurrencyPrecise(creditsTotal)}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;">
+      <span>Spend rewards</span>
+      <span class="mono" style="font-weight:600;color:#059669;" id="whatifAddRewardsLine">+${formatCurrencyPrecise(totalGain)}</span>
     </div>
     <div style="display:flex;justify-content:space-between;">
       <span>Annual fee</span>
@@ -4209,7 +4209,7 @@ function renderStep4Add() {
     </div>
     <div style="display:flex;justify-content:space-between;border-top:2px solid #e7e5e4;padding-top:4px;margin-top:4px;">
       <span style="font-weight:600;">Estimated net impact</span>
-      <span class="mono" style="font-weight:700;color:${isPositive ? '#059669' : '#dc2626'};" id="whatifAddNetLine">~${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}</span>
+      <span class="mono" style="font-weight:700;color:${isPositive ? '#059669' : '#dc2626'};" id="whatifAddNetTop">~${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}</span>
     </div>
   </div>`;
 
@@ -4218,18 +4218,21 @@ function renderStep4Add() {
     This estimate assumes you always use the new card when it earns more. The actual value will likely be lower due to a small amount of sub-optimal spend throughout the year.
   </p>`;
 
-  // Credit section
+  // === Ledger section: Credits, Spend Rewards (collapsible), Annual Fee, Total ===
+  html += `<div style="max-width:540px;margin:0 auto;">`;
+
+  // Credits (with toggles)
   html += renderCreditAssumptions(wi.addCardId, wi.creditToggles, wi.creditAmounts, 'add');
 
-  // Annual fee (non-editable fact)
-  html += `<div class="whatif-annual-fee">
-    <span class="whatif-annual-fee-label">Annual Fee</span>
-    <span class="whatif-annual-fee-value">-${formatCurrencyPrecise(annualFee)}</span>
-  </div>`;
-
-  // Expandable spending breakdown
-  html += `<div class="whatif-detail-toggle" id="whatifAddDetailToggle" style="margin-top:20px;">▼ See spending breakdown</div>
-    <div class="whatif-detail-section hidden" id="whatifAddDetailSection">`;
+  // Spend Rewards — collapsible row with value on the right
+  html += `<div style="margin-top:16px;border-top:1px solid #e7e5e4;padding-top:12px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" id="whatifAddRewardsToggle">
+      <span style="font-size:13px;font-weight:600;color:#57534e;">
+        <span class="toggle-arrow" style="font-size:10px;margin-right:4px;">▼</span>Additional Spend Rewards
+      </span>
+      <span class="mono" style="font-weight:600;color:#059669;font-size:14px;" id="whatifAddRewardsValue">+${formatCurrencyPrecise(totalGain)}</span>
+    </div>
+    <div class="hidden" id="whatifAddRewardsDetail" style="margin-top:12px;">`;
 
   if (rows.length > 0) {
     html += `<div class="whatif-shift-table-wrap"><table class="whatif-shift-table">
@@ -4258,7 +4261,7 @@ function renderStep4Add() {
       <td class="text-right whatif-impact positive">+${formatCurrencyPrecise(totalGain)}</td>
     </tr></tbody></table></div>`;
   } else {
-    html += `<div style="padding:20px;text-align:center;color:#78716c;background:#f5f5f4;border-radius:8px;">
+    html += `<div style="padding:16px;text-align:center;color:#78716c;background:#f5f5f4;border-radius:8px;font-size:13px;">
       No spending categories where ${escapeHtml(cardName)} earns more value than your current cards.
     </div>`;
   }
@@ -4267,7 +4270,21 @@ function renderStep4Add() {
     html += `<p style="font-size:11px;color:#a8a29e;margin-top:8px;">Amounts annualized from ${Math.round(12 / annualizationFactor)} months of data.</p>`;
   }
 
-  html += '</div>'; // end detail section
+  html += `</div></div>`; // end rewards detail + rewards section
+
+  // Annual fee
+  html += `<div class="whatif-annual-fee" style="margin-top:12px;">
+    <span class="whatif-annual-fee-label">Annual Fee</span>
+    <span class="whatif-annual-fee-value">-${formatCurrencyPrecise(annualFee)}</span>
+  </div>`;
+
+  // Total line
+  html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:2px solid #1c1917;margin-top:8px;">
+    <span style="font-size:14px;font-weight:700;">Estimated Net Impact</span>
+    <span class="mono" style="font-weight:700;font-size:16px;color:${isPositive ? '#059669' : '#dc2626'};" id="whatifAddNetLine">~${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}</span>
+  </div>`;
+
+  html += `</div>`; // end ledger
 
   html += `<div class="whatif-nav">
     <button class="btn btn-secondary" id="whatifBack4">← Back</button>
@@ -4948,14 +4965,16 @@ function attachWhatIfListeners() {
     });
   }
 
-  const addDetailToggle = document.getElementById('whatifAddDetailToggle');
-  if (addDetailToggle) {
-    addDetailToggle.addEventListener('click', () => {
-      const section = document.getElementById('whatifAddDetailSection');
-      if (section) {
-        const isHidden = section.classList.contains('hidden');
-        section.classList.toggle('hidden');
-        addDetailToggle.textContent = isHidden ? '▲ Hide spending breakdown' : '▼ See spending breakdown';
+  // Spend rewards collapsible toggle
+  const rewardsToggle = document.getElementById('whatifAddRewardsToggle');
+  if (rewardsToggle) {
+    rewardsToggle.addEventListener('click', () => {
+      const detail = document.getElementById('whatifAddRewardsDetail');
+      const arrow = rewardsToggle.querySelector('.toggle-arrow');
+      if (detail) {
+        const isHidden = detail.classList.contains('hidden');
+        detail.classList.toggle('hidden');
+        if (arrow) arrow.textContent = isHidden ? '▲' : '▼';
       }
     });
   }
@@ -4986,15 +5005,24 @@ function updateAddCardResult() {
   const netImpact = totalGain + creditsTotal - annualFee;
   const isPositive = netImpact >= 0;
 
+  // Update headline
   const headlineEl = document.getElementById('whatifAddHeadline');
   if (headlineEl) {
     headlineEl.textContent = `~${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}/yr`;
     headlineEl.className = `whatif-result-amount ${isPositive ? 'positive' : 'negative'}`;
   }
 
+  // Update top compact summary
   const creditsLineEl = document.getElementById('whatifAddCreditsLine');
   if (creditsLineEl) creditsLineEl.textContent = `+${formatCurrencyPrecise(creditsTotal)}`;
 
+  const netTopEl = document.getElementById('whatifAddNetTop');
+  if (netTopEl) {
+    netTopEl.textContent = `~${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}`;
+    netTopEl.style.color = isPositive ? '#059669' : '#dc2626';
+  }
+
+  // Update bottom ledger total
   const netLineEl = document.getElementById('whatifAddNetLine');
   if (netLineEl) {
     netLineEl.textContent = `~${isPositive ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netImpact))}`;

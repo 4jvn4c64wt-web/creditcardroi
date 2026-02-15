@@ -279,6 +279,24 @@ let state = {
   summarySortState: { column: 'cardName', direction: 'asc' }, // For summary table sorting
   txnSortState: { column: 'date', direction: 'desc' }, // For transaction table sorting
 
+  // What If state (session-only)
+  whatif: {
+    step: 1,                // Current wizard step (1-6)
+    scenarioType: null,     // 'add', 'remove', 'swap'
+    addCardId: null,        // Card being added
+    removeCardId: null,     // Card being removed
+    selectedYear: null,     // Year for analysis
+    optimizationRate: null, // Current slider value (0-100), null = auto-detect
+    isCustomMode: false,    // Whether user manually edited amounts (slider inactive)
+    shiftAmounts: {},       // { 'cardId|category': amount } confirmed shift amounts
+    creditToggles: {},      // { creditName: true/false } for new card credits
+    creditAmounts: {},      // { creditName: amount } for new card credit amounts
+    removeCreditToggles: {},  // For removed card's lost credits
+    removeCreditAmounts: {},  // For removed card's lost credit amounts
+    walletMismatch: {},     // Step 3b: { cardId: { estimated: true, ... } }
+    resultCalculated: false // Whether results have been calculated
+  },
+
   // Tour state
   tourComplete: localStorage.getItem('ccTracker_tourComplete') === 'true',
   tourStep: parseInt(localStorage.getItem('ccTracker_tourStep') || '0', 10),
@@ -3355,6 +3373,1485 @@ function showResults(results, isNewUpload = false) {
   }
 }
 
+// =============================================================================
+// WHAT IF CALCULATOR
+// =============================================================================
+
+/**
+ * Reset What If state for a new scenario
+ */
+function resetWhatIfState() {
+  state.whatif = {
+    step: 1,
+    scenarioType: null,
+    addCardId: null,
+    removeCardId: null,
+    selectedYear: null,
+    optimizationRate: null,
+    isCustomMode: false,
+    shiftAmounts: {},
+    creditToggles: {},
+    creditAmounts: {},
+    removeCreditToggles: {},
+    removeCreditAmounts: {},
+    walletMismatch: {},
+    resultCalculated: false
+  };
+}
+
+/**
+ * Calculate user's current optimization rate from actual spending data.
+ * This measures how often users already use the best card for each category.
+ * Returns a percentage 0-100.
+ */
+function calculateOptimizationRate() {
+  if (!state.results || !state.results.processed) return 85;
+  const year = state.whatif.selectedYear || state.selectedYear;
+  const txns = state.results.processed.filter(t => {
+    if (t.isPayment || t.isCredit) return false;
+    if (year) return getYearFromDateString(t.date) === year;
+    return true;
+  });
+  if (txns.length === 0) return 85;
+
+  // Get all active cards from transactions
+  const activeCards = [...new Set(txns.map(t => t.cardId).filter(c => c && c !== 'skip' && CARDS[c]))];
+  if (activeCards.length < 2) return 100; // Only one card, always optimal
+
+  let optimalSpend = 0;
+  let totalSpend = 0;
+
+  // Group transactions by subcategory
+  const byCat = {};
+  txns.forEach(t => {
+    const sub = t.subcategory || t.category || 'other';
+    if (!byCat[sub]) byCat[sub] = [];
+    byCat[sub].push(t);
+  });
+
+  for (const [sub, catTxns] of Object.entries(byCat)) {
+    // Find the best card for this category
+    let bestValue = 0;
+    for (const cardId of activeCards) {
+      const mapped = mapToCardCategory(sub, cardId, catTxns[0]?.date);
+      const mult = getMultiplier(cardId, mapped, catTxns[0]?.date);
+      const pv = getPointValue(cardId);
+      const value = mult.rate * pv;
+      if (value > bestValue) bestValue = value;
+    }
+
+    for (const t of catTxns) {
+      const amt = Math.abs(t.amount);
+      totalSpend += amt;
+      const mapped = mapToCardCategory(sub, t.cardId, t.date);
+      const mult = getMultiplier(t.cardId, mapped, t.date);
+      const pv = getPointValue(t.cardId);
+      const actualValue = mult.rate * pv;
+      if (bestValue > 0 && actualValue >= bestValue) {
+        optimalSpend += amt;
+      }
+    }
+  }
+
+  return totalSpend > 0 ? Math.round((optimalSpend / totalSpend) * 100) : 85;
+}
+
+/**
+ * Get annualized spending data for a card in a given year.
+ * Returns { annualizationFactor, pointsByCategory } where pointsByCategory
+ * has spend amounts scaled to a full year if data is partial.
+ */
+function getAnnualizedCardSpend(cardId, year) {
+  if (!state.results || !state.results.processed) return { factor: 1, categories: {} };
+  const txns = state.results.processed.filter(t =>
+    t.cardId === cardId && !t.isPayment && !t.isCredit &&
+    getYearFromDateString(t.date) === year
+  );
+
+  // Determine annualization factor
+  const months = new Set();
+  txns.forEach(t => {
+    const parsed = parseDateString(t.date);
+    if (parsed) months.add(parsed.month);
+  });
+  const monthCount = months.size;
+  const factor = monthCount > 0 && monthCount < 12 ? 12 / monthCount : 1;
+
+  // Aggregate by effective category for this card
+  const categories = {};
+  txns.forEach(t => {
+    const cat = t.category || 'other';
+    if (!categories[cat]) categories[cat] = { spend: 0, points: 0 };
+    categories[cat].spend += Math.abs(t.amount);
+    categories[cat].points += t.points || 0;
+  });
+
+  // Annualize
+  if (factor > 1) {
+    for (const cat of Object.keys(categories)) {
+      categories[cat].spend *= factor;
+      categories[cat].points *= factor;
+    }
+  }
+
+  return { factor, categories };
+}
+
+/**
+ * Get spending shift rows for "Add a Card" scenario.
+ * Returns array of { sourceCardId, sourceCardName, sourceCategory, sourceRate, sourcePointValue,
+ *   newCategory, newRate, newPointValue, actualSpend, shiftAmount }
+ */
+function getAddCardShiftRows(newCardId, year) {
+  if (!state.results || !state.results.processed) return [];
+  const newCard = CARDS[newCardId];
+  if (!newCard) return [];
+
+  const activeCardIds = getActiveCardIds(year);
+  const newPV = getPointValue(newCardId);
+  const rows = [];
+  const sampleDate = year ? `${year}-06-15` : null;
+
+  for (const cardId of activeCardIds) {
+    if (cardId === newCardId) continue;
+    const card = CARDS[cardId];
+    if (!card) continue;
+    const cardPV = getPointValue(cardId);
+    const { categories } = getAnnualizedCardSpend(cardId, year);
+
+    for (const [cat, data] of Object.entries(categories)) {
+      if (data.spend <= 0) continue;
+
+      // Get current card's value for this category
+      const currentMult = getMultiplier(cardId, cat, sampleDate);
+      const currentValue = currentMult.rate * cardPV;
+
+      // Map this category to the new card's category system
+      // We need to figure out what subcategory maps to on the new card
+      const newCat = mapToCardCategory(cat, newCardId, sampleDate);
+      const newMult = getMultiplier(newCardId, newCat, sampleDate);
+      const newValue = newMult.rate * newPV;
+
+      // Only show row if new card earns MORE value
+      if (newValue > currentValue) {
+        rows.push({
+          sourceCardId: cardId,
+          sourceCardName: card.shortName || card.name,
+          sourceCategory: cat,
+          sourceRate: currentMult.rate,
+          sourcePointValue: cardPV,
+          newCategory: newCat,
+          newRate: newMult.rate,
+          newPointValue: newPV,
+          actualSpend: data.spend
+        });
+      }
+    }
+  }
+
+  return rows;
+}
+
+/**
+ * Get spending shift rows for "Remove a Card" scenario.
+ * Returns array of { sourceCategory, sourceRate, sourcePointValue, actualSpend,
+ *   bestCardId, bestCardName, bestCategory, bestRate, bestPointValue }
+ */
+function getRemoveCardShiftRows(removeCardId, year) {
+  if (!state.results || !state.results.processed) return [];
+  const removeCard = CARDS[removeCardId];
+  if (!removeCard) return [];
+
+  const activeCardIds = getActiveCardIds(year).filter(id => id !== removeCardId);
+  const removePV = getPointValue(removeCardId);
+  const { categories } = getAnnualizedCardSpend(removeCardId, year);
+  const sampleDate = year ? `${year}-06-15` : null;
+  const rows = [];
+
+  for (const [cat, data] of Object.entries(categories)) {
+    if (data.spend <= 0) continue;
+
+    const removeMult = getMultiplier(removeCardId, cat, sampleDate);
+
+    // Find best remaining card for this category
+    let bestCardId = null;
+    let bestValue = 0;
+    let bestCat = 'other';
+    let bestRate = 1;
+    let bestPV = 0.01;
+
+    for (const cardId of activeCardIds) {
+      const cardPV = getPointValue(cardId);
+      const mapped = mapToCardCategory(cat, cardId, sampleDate);
+      const mult = getMultiplier(cardId, mapped, sampleDate);
+      const val = mult.rate * cardPV;
+      if (val > bestValue) {
+        bestValue = val;
+        bestCardId = cardId;
+        bestCat = mapped;
+        bestRate = mult.rate;
+        bestPV = cardPV;
+      }
+    }
+
+    if (bestCardId) {
+      rows.push({
+        sourceCategory: cat,
+        sourceRate: removeMult.rate,
+        sourcePointValue: removePV,
+        actualSpend: data.spend,
+        bestCardId: bestCardId,
+        bestCardName: (CARDS[bestCardId]?.shortName || CARDS[bestCardId]?.name || bestCardId),
+        bestCategory: bestCat,
+        bestRate: bestRate,
+        bestPointValue: bestPV
+      });
+    }
+  }
+
+  return rows;
+}
+
+/**
+ * Get list of active card IDs from transactions for a given year
+ */
+function getActiveCardIds(year) {
+  if (!state.results || !state.results.processed) return [];
+  const txns = state.results.processed.filter(t => {
+    if (t.isPayment || !t.cardId || t.cardId === 'skip') return false;
+    if (year) return getYearFromDateString(t.date) === year;
+    return true;
+  });
+  return [...new Set(txns.map(t => t.cardId))].filter(id => CARDS[id]);
+}
+
+/**
+ * Calculate net impact from the confirmed shift amounts and credit settings.
+ * Returns { spendingImpact, creditsImpact, feeImpact, totalImpact,
+ *   addCreditsTotal, removeFee, addFee, removeCreditsTotal }
+ */
+function calculateWhatIfNetImpact() {
+  const wi = state.whatif;
+  let spendingImpact = 0;
+
+  // Spending shifts
+  for (const [key, amount] of Object.entries(wi.shiftAmounts)) {
+    if (amount <= 0) continue;
+    const parts = key.split('|');
+    // For add scenario: key = 'sourceCardId|sourceCategory'
+    // For remove scenario: key = 'sourceCategory'
+    // The row data is needed to compute values - we re-derive from the rows
+  }
+
+  // Re-derive from rows for accuracy
+  const year = wi.selectedYear;
+  const sampleDate = year ? `${year}-06-15` : null;
+
+  if (wi.scenarioType === 'add' || wi.scenarioType === 'swap') {
+    const addRows = wi.addCardId ? getAddCardShiftRows(wi.addCardId, year) : [];
+    for (const row of addRows) {
+      const key = `${row.sourceCardId}|${row.sourceCategory}`;
+      const amount = wi.shiftAmounts[key] || 0;
+      if (amount <= 0) continue;
+      const oldValue = amount * row.sourceRate * row.sourcePointValue;
+      const newValue = amount * row.newRate * row.newPointValue;
+      spendingImpact += (newValue - oldValue);
+    }
+  }
+
+  if (wi.scenarioType === 'remove' || wi.scenarioType === 'swap') {
+    const removeRows = wi.removeCardId ? getRemoveCardShiftRows(wi.removeCardId, year) : [];
+    for (const row of removeRows) {
+      const key = `remove|${row.sourceCategory}`;
+      const amount = wi.shiftAmounts[key] || 0;
+      if (amount <= 0) continue;
+      // Impact = new card value - old card value (old = removed card, new = best remaining)
+      const oldValue = amount * row.sourceRate * row.sourcePointValue;
+      const newValue = amount * row.bestRate * row.bestPointValue;
+      spendingImpact += (newValue - oldValue);
+    }
+    // Also account for spending that DOESN'T shift (stays at 0 value since card is removed)
+    for (const row of removeRows) {
+      const key = `remove|${row.sourceCategory}`;
+      const shiftedAmount = wi.shiftAmounts[key] || 0;
+      const unshifted = row.actualSpend - shiftedAmount;
+      if (unshifted > 0) {
+        // This spending loses its current value entirely
+        const lostValue = unshifted * row.sourceRate * row.sourcePointValue;
+        spendingImpact -= lostValue;
+        // But goes to 'other' on whatever catch-all card the user has
+        // For simplicity, assume 1x at lowest point value among remaining cards
+        const activeCards = getActiveCardIds(year).filter(id => id !== wi.removeCardId);
+        if (activeCards.length > 0) {
+          // Use the best card's base rate
+          let bestBaseValue = 0;
+          for (const cid of activeCards) {
+            const card = CARDS[cid];
+            if (card) {
+              const pv = getPointValue(cid);
+              const baseVal = (card.baseRate || 1) * pv;
+              if (baseVal > bestBaseValue) bestBaseValue = baseVal;
+            }
+          }
+          spendingImpact += unshifted * bestBaseValue;
+        }
+      }
+    }
+  }
+
+  // Credits for added card
+  let addCreditsTotal = 0;
+  if (wi.addCardId && (wi.scenarioType === 'add' || wi.scenarioType === 'swap')) {
+    const addCard = CARDS[wi.addCardId];
+    if (addCard && addCard.credits) {
+      for (const cr of addCard.credits) {
+        const enabled = wi.creditToggles[cr.name] !== false; // default on
+        if (enabled) {
+          addCreditsTotal += (wi.creditAmounts[cr.name] !== undefined ? wi.creditAmounts[cr.name] : cr.amount);
+        }
+      }
+    }
+  }
+
+  // Credits lost from removed card
+  let removeCreditsTotal = 0;
+  if (wi.removeCardId && (wi.scenarioType === 'remove' || wi.scenarioType === 'swap')) {
+    const removeCard = CARDS[wi.removeCardId];
+    if (removeCard && removeCard.credits) {
+      for (const cr of removeCard.credits) {
+        const enabled = wi.removeCreditToggles[cr.name] !== false;
+        if (enabled) {
+          removeCreditsTotal += (wi.removeCreditAmounts[cr.name] !== undefined ? wi.removeCreditAmounts[cr.name] : cr.amount);
+        }
+      }
+    }
+  }
+
+  // Annual fees
+  let addFee = 0;
+  if (wi.addCardId && (wi.scenarioType === 'add' || wi.scenarioType === 'swap')) {
+    addFee = CARDS[wi.addCardId]?.annualFee || 0;
+  }
+  let removeFee = 0;
+  if (wi.removeCardId && (wi.scenarioType === 'remove' || wi.scenarioType === 'swap')) {
+    removeFee = CARDS[wi.removeCardId]?.annualFee || 0;
+  }
+
+  const creditsImpact = addCreditsTotal - removeCreditsTotal;
+  const feeImpact = removeFee - addFee; // Saved fee is positive, new fee is negative
+  const totalImpact = spendingImpact + creditsImpact + feeImpact;
+
+  return { spendingImpact, creditsImpact, feeImpact, totalImpact, addCreditsTotal, removeFee, addFee, removeCreditsTotal };
+}
+
+/**
+ * Get the current wallet value for the selected year (annualized if needed).
+ */
+function getCurrentWalletValue(year) {
+  if (!state.results || !state.results.processed) return 0;
+  const txns = state.results.processed.filter(t => {
+    if (t.isPayment) return false;
+    if (year) return getYearFromDateString(t.date) === year;
+    return true;
+  });
+
+  let pointsValue = 0;
+  let credits = 0;
+  txns.forEach(t => {
+    if (t.isCredit && !t.isRefund) {
+      credits += Math.abs(t.amount);
+    } else if (!t.isCredit) {
+      pointsValue += t.pointsValue || 0;
+    }
+  });
+
+  // Annual fees for active cards
+  const activeCards = getActiveCardIds(year);
+  let totalFees = 0;
+  for (const cardId of activeCards) {
+    totalFees += CARDS[cardId]?.annualFee || 0;
+  }
+
+  // Annualize if partial year
+  const months = new Set();
+  txns.forEach(t => {
+    const parsed = parseDateString(t.date);
+    if (parsed) months.add(parsed.month);
+  });
+  const monthCount = months.size;
+  const factor = monthCount > 0 && monthCount < 12 ? 12 / monthCount : 1;
+
+  return (pointsValue + credits) * factor - totalFees;
+}
+
+/**
+ * Pre-fill shift amounts based on optimization rate.
+ */
+function prefillShiftAmounts() {
+  const wi = state.whatif;
+  const rate = (wi.optimizationRate !== null ? wi.optimizationRate : calculateOptimizationRate()) / 100;
+
+  if (wi.scenarioType === 'add' || wi.scenarioType === 'swap') {
+    const addRows = wi.addCardId ? getAddCardShiftRows(wi.addCardId, wi.selectedYear) : [];
+    for (const row of addRows) {
+      const key = `${row.sourceCardId}|${row.sourceCategory}`;
+      wi.shiftAmounts[key] = Math.round(row.actualSpend * rate * 100) / 100;
+    }
+  }
+
+  if (wi.scenarioType === 'remove' || wi.scenarioType === 'swap') {
+    const removeRows = wi.removeCardId ? getRemoveCardShiftRows(wi.removeCardId, wi.selectedYear) : [];
+    for (const row of removeRows) {
+      const key = `remove|${row.sourceCategory}`;
+      wi.shiftAmounts[key] = Math.round(row.actualSpend * rate * 100) / 100;
+    }
+  }
+}
+
+/**
+ * Initialize credit toggles/amounts with defaults for a card.
+ */
+function initCreditDefaults(cardId, togglesObj, amountsObj) {
+  const card = CARDS[cardId];
+  if (!card || !card.credits) return;
+  for (const cr of card.credits) {
+    if (togglesObj[cr.name] === undefined) togglesObj[cr.name] = true;
+    if (amountsObj[cr.name] === undefined) amountsObj[cr.name] = cr.amount;
+  }
+}
+
+/**
+ * Build per-row impact value for a shift row.
+ */
+function getRowImpact(amount, oldRate, oldPV, newRate, newPV) {
+  if (amount <= 0) return 0;
+  return (amount * newRate * newPV) - (amount * oldRate * oldPV);
+}
+
+/**
+ * Render the What If view inside viewContainer.
+ */
+function renderWhatIf() {
+  const container = document.getElementById('viewContainer');
+  const wi = state.whatif;
+
+  // Pro gate check
+  if (window.TIER_CONFIG !== 'pro') {
+    container.innerHTML = `
+      <div class="card" style="text-align:center;padding:48px 24px;">
+        <div style="font-size:36px;margin-bottom:12px;">🔮</div>
+        <h2 class="card-title" style="margin:0 0 8px;">What If Calculator</h2>
+        <p style="color:#78716c;margin-bottom:20px;">Model how adding or removing a card would change your wallet's value.</p>
+        <p style="color:#b45309;font-weight:500;">This feature requires Pro access.</p>
+      </div>`;
+    return;
+  }
+
+  if (!state.results || !state.results.processed || state.results.processed.length === 0) {
+    container.innerHTML = `
+      <div class="card" style="text-align:center;padding:48px 24px;">
+        <div style="font-size:36px;margin-bottom:12px;">🔮</div>
+        <h2 class="card-title" style="margin:0 0 8px;">What If Calculator</h2>
+        <p style="color:#78716c;">Upload transaction data first to model scenarios.</p>
+      </div>`;
+    return;
+  }
+
+  // Build breadcrumb
+  const stepLabels = ['Scenario', 'Card', 'Year', 'Assumptions', 'Result'];
+  const breadcrumb = stepLabels.map((label, i) => {
+    const stepNum = i + 1;
+    const cls = stepNum === wi.step ? 'active' : (stepNum < wi.step ? 'done' : '');
+    return `<span class="whatif-breadcrumb-step ${cls}">${stepNum > 1 && stepNum <= wi.step ? '' : ''}${label}</span>`;
+  }).join('<span class="whatif-breadcrumb-sep">›</span>');
+
+  let html = `<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h2 class="card-title" style="margin:0;">What If Calculator</h2>
+      ${wi.step > 1 ? '<button class="btn btn-secondary" onclick="resetWhatIfState(); renderView(\'whatif\');" style="font-size:12px;padding:6px 12px;">Start Over</button>' : ''}
+    </div>
+    <div class="whatif-breadcrumb">${breadcrumb}</div>`;
+
+  if (wi.step === 1) {
+    html += renderWhatIfStep1();
+  } else if (wi.step === 2) {
+    html += renderWhatIfStep2();
+  } else if (wi.step === 3) {
+    html += renderWhatIfStep3();
+  } else if (wi.step === 4) {
+    html += renderWhatIfStep4();
+  } else if (wi.step === 5) {
+    html += renderWhatIfStep5();
+  }
+
+  html += '</div>';
+  container.innerHTML = html;
+  attachWhatIfListeners();
+}
+
+function renderWhatIfStep1() {
+  const wi = state.whatif;
+  return `
+    <div class="whatif-step">
+      <div class="whatif-step-header">Step 1: What scenario do you want to model?</div>
+      <div class="whatif-options">
+        <div class="whatif-option ${wi.scenarioType === 'add' ? 'selected' : ''}" data-scenario="add">
+          <div class="whatif-option-icon">➕</div>
+          <div class="whatif-option-label">Add a Card</div>
+          <div class="whatif-option-desc">See if a new card improves your wallet</div>
+        </div>
+        <div class="whatif-option ${wi.scenarioType === 'remove' ? 'selected' : ''}" data-scenario="remove">
+          <div class="whatif-option-icon">➖</div>
+          <div class="whatif-option-label">Remove a Card</div>
+          <div class="whatif-option-desc">See if dropping a card saves money</div>
+        </div>
+        <div class="whatif-option ${wi.scenarioType === 'swap' ? 'selected' : ''}" data-scenario="swap">
+          <div class="whatif-option-icon">🔄</div>
+          <div class="whatif-option-label">Swap a Card</div>
+          <div class="whatif-option-desc">Replace one card with another</div>
+        </div>
+      </div>
+      <div class="whatif-nav">
+        <div></div>
+        <button class="btn btn-primary" id="whatifNext1" ${!wi.scenarioType ? 'disabled' : ''}>Next →</button>
+      </div>
+    </div>`;
+}
+
+function renderWhatIfStep2() {
+  const wi = state.whatif;
+  const activeCardIds = getActiveCardIds(wi.selectedYear || state.selectedYear);
+
+  // All available cards for adding (not already in wallet)
+  const allCardIds = Object.keys(CARDS).filter(id => id !== 'skip');
+  const addOptions = allCardIds.filter(id => !activeCardIds.includes(id));
+  const removeOptions = activeCardIds;
+
+  let cardSelectors = '';
+
+  if (wi.scenarioType === 'add') {
+    cardSelectors = `
+      <div class="whatif-step-header">Step 2: Which card would you add?</div>
+      <select class="form-select whatif-card-select" id="whatifAddCard">
+        <option value="">Select a card...</option>
+        ${addOptions.map(id => `<option value="${id}" ${wi.addCardId === id ? 'selected' : ''}>${escapeHtml(CARDS[id].name)} (${formatCurrency(CARDS[id].annualFee)}/yr)</option>`).join('')}
+        ${activeCardIds.length > 0 ? `<optgroup label="Already in wallet">${activeCardIds.map(id => `<option value="${id}" ${wi.addCardId === id ? 'selected' : ''}>${escapeHtml(CARDS[id].name)} (already have)</option>`).join('')}</optgroup>` : ''}
+      </select>`;
+  } else if (wi.scenarioType === 'remove') {
+    cardSelectors = `
+      <div class="whatif-step-header">Step 2: Which card would you remove?</div>
+      <select class="form-select whatif-card-select" id="whatifRemoveCard">
+        <option value="">Select a card...</option>
+        ${removeOptions.map(id => `<option value="${id}" ${wi.removeCardId === id ? 'selected' : ''}>${escapeHtml(CARDS[id].name)}</option>`).join('')}
+      </select>`;
+  } else if (wi.scenarioType === 'swap') {
+    cardSelectors = `
+      <div class="whatif-step-header">Step 2: Which cards are you swapping?</div>
+      <div style="margin-bottom:12px;">
+        <label style="font-size:13px;font-weight:500;color:#57534e;display:block;margin-bottom:4px;">Card to remove:</label>
+        <select class="form-select whatif-card-select" id="whatifRemoveCard">
+          <option value="">Select a card...</option>
+          ${removeOptions.map(id => `<option value="${id}" ${wi.removeCardId === id ? 'selected' : ''}>${escapeHtml(CARDS[id].name)}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:13px;font-weight:500;color:#57534e;display:block;margin-bottom:4px;">Card to add:</label>
+        <select class="form-select whatif-card-select" id="whatifAddCard">
+          <option value="">Select a card...</option>
+          ${allCardIds.map(id => `<option value="${id}" ${wi.addCardId === id ? 'selected' : ''}>${escapeHtml(CARDS[id].name)} (${formatCurrency(CARDS[id].annualFee)}/yr)</option>`).join('')}
+        </select>
+      </div>`;
+  }
+
+  const canProceed = (wi.scenarioType === 'add' && wi.addCardId) ||
+                     (wi.scenarioType === 'remove' && wi.removeCardId) ||
+                     (wi.scenarioType === 'swap' && wi.addCardId && wi.removeCardId);
+
+  return `
+    <div class="whatif-step">
+      ${cardSelectors}
+      <div class="whatif-nav">
+        <button class="btn btn-secondary" id="whatifBack2">← Back</button>
+        <button class="btn btn-primary" id="whatifNext2" ${!canProceed ? 'disabled' : ''}>Next →</button>
+      </div>
+    </div>`;
+}
+
+function renderWhatIfStep3() {
+  const wi = state.whatif;
+  const years = state.availableYears.length > 0
+    ? state.availableYears
+    : [...new Set(state.results.processed.map(t => getYearFromDateString(t.date)))].sort((a, b) => b - a);
+
+  return `
+    <div class="whatif-step">
+      <div class="whatif-step-header">Step 3: Which year's spending should we analyze?</div>
+      <select class="form-select whatif-card-select" id="whatifYear">
+        ${years.map(y => `<option value="${y}" ${wi.selectedYear === y ? 'selected' : ''}>${y}</option>`).join('')}
+      </select>
+      <p style="font-size:12px;color:#78716c;margin-top:8px;">We'll use your actual spending from this year to model the scenario.</p>
+      <div class="whatif-nav">
+        <button class="btn btn-secondary" id="whatifBack3">← Back</button>
+        <button class="btn btn-primary" id="whatifNext3">Next →</button>
+      </div>
+    </div>`;
+}
+
+function renderWhatIfStep4() {
+  const wi = state.whatif;
+
+  // Initialize optimization rate if not set
+  if (wi.optimizationRate === null) {
+    wi.optimizationRate = calculateOptimizationRate();
+  }
+
+  // Pre-fill shift amounts if not already done or if slider mode
+  if (!wi.isCustomMode) {
+    prefillShiftAmounts();
+  }
+
+  let html = '';
+
+  if (wi.scenarioType === 'add') {
+    html = renderStep4Add();
+  } else if (wi.scenarioType === 'remove') {
+    html = renderStep4Remove();
+  } else if (wi.scenarioType === 'swap') {
+    html = renderStep4Swap();
+  }
+
+  return html;
+}
+
+function renderStep4Add() {
+  const wi = state.whatif;
+  const addCard = CARDS[wi.addCardId];
+  if (!addCard) return '<p>Card not found.</p>';
+
+  const rows = getAddCardShiftRows(wi.addCardId, wi.selectedYear);
+  const impact = calculateWhatIfNetImpact();
+  const sliderVal = wi.optimizationRate;
+
+  // Initialize credit defaults
+  initCreditDefaults(wi.addCardId, wi.creditToggles, wi.creditAmounts);
+
+  let html = `
+    <div class="whatif-step">
+      <div class="whatif-step-header">Step 4: Review Assumptions — Adding ${escapeHtml(addCard.shortName || addCard.name)}</div>`;
+
+  // Optimization slider
+  html += renderOptimizationSlider(sliderVal, wi.isCustomMode);
+
+  // Spending shift table
+  if (rows.length > 0) {
+    html += `<div class="whatif-shift-table-wrap"><table class="whatif-shift-table">
+      <thead><tr>
+        <th>From Card</th><th>Category</th><th>Rate</th><th>Shift Amount</th>
+        <th></th>
+        <th>To Card</th><th>Category</th><th>Rate</th>
+        <th class="text-right">Impact</th>
+      </tr></thead><tbody>`;
+
+    let totalImpactFromRows = 0;
+    for (const row of rows) {
+      const key = `${row.sourceCardId}|${row.sourceCategory}`;
+      const amount = wi.shiftAmounts[key] || 0;
+      const rowImpact = getRowImpact(amount, row.sourceRate, row.sourcePointValue, row.newRate, row.newPointValue);
+      totalImpactFromRows += rowImpact;
+
+      html += `<tr>
+        <td>${escapeHtml(row.sourceCardName)}</td>
+        <td style="text-transform:capitalize;">${escapeHtml(row.sourceCategory)}</td>
+        <td class="mono">${row.sourceRate}x</td>
+        <td><input type="number" class="whatif-shift-input" data-key="${escapeHtml(key)}" data-max="${row.actualSpend.toFixed(2)}" value="${amount.toFixed(0)}" min="0" max="${row.actualSpend.toFixed(2)}" step="1"></td>
+        <td class="whatif-shift-arrow">→</td>
+        <td>${escapeHtml(addCard.shortName || addCard.name)}</td>
+        <td style="text-transform:capitalize;">${escapeHtml(row.newCategory)}</td>
+        <td class="mono">${row.newRate}x</td>
+        <td class="text-right whatif-impact ${rowImpact >= 0 ? 'positive' : 'negative'}">${rowImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(rowImpact)}</td>
+      </tr>`;
+    }
+
+    html += `<tr style="font-weight:600;border-top:2px solid #e7e5e4;">
+      <td colspan="8" class="text-right">Total spending shift impact:</td>
+      <td class="text-right whatif-impact ${totalImpactFromRows >= 0 ? 'positive' : 'negative'}">${totalImpactFromRows >= 0 ? '+' : ''}${formatCurrencyPrecise(totalImpactFromRows)}</td>
+    </tr>`;
+
+    html += '</tbody></table></div>';
+  } else {
+    html += `<div style="padding:20px;text-align:center;color:#78716c;background:#f5f5f4;border-radius:8px;">
+      No spending categories where ${escapeHtml(addCard.shortName || addCard.name)} earns more value than your current cards.
+    </div>`;
+  }
+
+  // Credits
+  html += renderCreditAssumptions(wi.addCardId, wi.creditToggles, wi.creditAmounts, 'add');
+
+  // Annual fee
+  html += `<div class="whatif-annual-fee">
+    <span class="whatif-annual-fee-label">Annual Fee</span>
+    <span class="whatif-annual-fee-value">-${formatCurrency(addCard.annualFee)}</span>
+  </div>`;
+
+  // Summary line
+  html += renderSummaryLine('add', impact);
+
+  html += `<div class="whatif-nav">
+    <button class="btn btn-secondary" id="whatifBack4">← Back</button>
+    <button class="btn btn-primary" id="whatifCalculate">See Results →</button>
+  </div></div>`;
+
+  return html;
+}
+
+function renderStep4Remove() {
+  const wi = state.whatif;
+  const removeCard = CARDS[wi.removeCardId];
+  if (!removeCard) return '<p>Card not found.</p>';
+
+  const rows = getRemoveCardShiftRows(wi.removeCardId, wi.selectedYear);
+  const sliderVal = wi.optimizationRate;
+
+  // Initialize credit defaults for removed card
+  initCreditDefaults(wi.removeCardId, wi.removeCreditToggles, wi.removeCreditAmounts);
+
+  let html = `
+    <div class="whatif-step">
+      <div class="whatif-step-header">Step 4: Review Assumptions — Removing ${escapeHtml(removeCard.shortName || removeCard.name)}</div>`;
+
+  // Optimization slider
+  html += renderOptimizationSlider(sliderVal, wi.isCustomMode);
+
+  // Spending redistribution table
+  if (rows.length > 0) {
+    html += `<div class="whatif-shift-table-wrap"><table class="whatif-shift-table">
+      <thead><tr>
+        <th>From Card</th><th>Category</th><th>Rate</th><th>Redirect Amount</th>
+        <th></th>
+        <th>To Card</th><th>Category</th><th>Rate</th>
+        <th class="text-right">Impact</th>
+      </tr></thead><tbody>`;
+
+    let totalImpact = 0;
+    for (const row of rows) {
+      const key = `remove|${row.sourceCategory}`;
+      const amount = wi.shiftAmounts[key] || 0;
+      const rowImpact = getRowImpact(amount, row.sourceRate, row.sourcePointValue, row.bestRate, row.bestPointValue);
+      totalImpact += rowImpact;
+
+      html += `<tr>
+        <td>${escapeHtml(removeCard.shortName || removeCard.name)}</td>
+        <td style="text-transform:capitalize;">${escapeHtml(row.sourceCategory)}</td>
+        <td class="mono">${row.sourceRate}x</td>
+        <td><input type="number" class="whatif-shift-input" data-key="${escapeHtml(key)}" data-max="${row.actualSpend.toFixed(2)}" value="${amount.toFixed(0)}" min="0" max="${row.actualSpend.toFixed(2)}" step="1"></td>
+        <td class="whatif-shift-arrow">→</td>
+        <td>${escapeHtml(row.bestCardName)}</td>
+        <td style="text-transform:capitalize;">${escapeHtml(row.bestCategory)}</td>
+        <td class="mono">${row.bestRate}x</td>
+        <td class="text-right whatif-impact ${rowImpact >= 0 ? 'positive' : 'negative'}">${rowImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(rowImpact)}</td>
+      </tr>`;
+    }
+
+    html += `<tr style="font-weight:600;border-top:2px solid #e7e5e4;">
+      <td colspan="8" class="text-right">Total spending shift impact:</td>
+      <td class="text-right whatif-impact ${totalImpact >= 0 ? 'positive' : 'negative'}">${totalImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(totalImpact)}</td>
+    </tr></tbody></table></div>`;
+  } else {
+    html += `<div style="padding:20px;text-align:center;color:#78716c;background:#f5f5f4;border-radius:8px;">
+      No spending found on ${escapeHtml(removeCard.shortName || removeCard.name)} for ${wi.selectedYear}.
+    </div>`;
+  }
+
+  // Lost credits
+  html += renderCreditAssumptions(wi.removeCardId, wi.removeCreditToggles, wi.removeCreditAmounts, 'remove');
+
+  // Saved annual fee
+  html += `<div class="whatif-annual-fee">
+    <span class="whatif-annual-fee-label">Saved Annual Fee</span>
+    <span class="whatif-annual-fee-value" style="color:#059669;">+${formatCurrency(removeCard.annualFee)}</span>
+  </div>`;
+
+  // Summary line
+  const impact = calculateWhatIfNetImpact();
+  html += renderSummaryLine('remove', impact);
+
+  html += `<div class="whatif-nav">
+    <button class="btn btn-secondary" id="whatifBack4">← Back</button>
+    <button class="btn btn-primary" id="whatifCalculate">See Results →</button>
+  </div></div>`;
+
+  return html;
+}
+
+function renderStep4Swap() {
+  const wi = state.whatif;
+  const addCard = CARDS[wi.addCardId];
+  const removeCard = CARDS[wi.removeCardId];
+  if (!addCard || !removeCard) return '<p>Cards not found.</p>';
+
+  const sliderVal = wi.optimizationRate;
+  initCreditDefaults(wi.addCardId, wi.creditToggles, wi.creditAmounts);
+  initCreditDefaults(wi.removeCardId, wi.removeCreditToggles, wi.removeCreditAmounts);
+
+  let html = `
+    <div class="whatif-step">
+      <div class="whatif-step-header">Step 4: Review Assumptions — Swapping ${escapeHtml(removeCard.shortName || removeCard.name)} → ${escapeHtml(addCard.shortName || addCard.name)}</div>`;
+
+  html += renderOptimizationSlider(sliderVal, wi.isCustomMode);
+
+  // Section 1: Spending leaving the removed card
+  html += `<h3 style="font-size:14px;font-weight:600;margin:16px 0 8px;color:#dc2626;">Spending leaving ${escapeHtml(removeCard.shortName || removeCard.name)}</h3>`;
+  const removeRows = getRemoveCardShiftRows(wi.removeCardId, wi.selectedYear);
+  if (removeRows.length > 0) {
+    html += `<div class="whatif-shift-table-wrap"><table class="whatif-shift-table">
+      <thead><tr><th>Category</th><th>Rate</th><th>Redirect Amount</th><th></th><th>To Card</th><th>Category</th><th>Rate</th><th class="text-right">Impact</th></tr></thead><tbody>`;
+    for (const row of removeRows) {
+      const key = `remove|${row.sourceCategory}`;
+      const amount = wi.shiftAmounts[key] || 0;
+      const rowImpact = getRowImpact(amount, row.sourceRate, row.sourcePointValue, row.bestRate, row.bestPointValue);
+      html += `<tr>
+        <td style="text-transform:capitalize;">${escapeHtml(row.sourceCategory)}</td>
+        <td class="mono">${row.sourceRate}x</td>
+        <td><input type="number" class="whatif-shift-input" data-key="${escapeHtml(key)}" data-max="${row.actualSpend.toFixed(2)}" value="${amount.toFixed(0)}" min="0" max="${row.actualSpend.toFixed(2)}" step="1"></td>
+        <td class="whatif-shift-arrow">→</td>
+        <td>${escapeHtml(row.bestCardName)}</td>
+        <td style="text-transform:capitalize;">${escapeHtml(row.bestCategory)}</td>
+        <td class="mono">${row.bestRate}x</td>
+        <td class="text-right whatif-impact ${rowImpact >= 0 ? 'positive' : 'negative'}">${rowImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(rowImpact)}</td>
+      </tr>`;
+    }
+    html += '</tbody></table></div>';
+  }
+
+  // Lost credits from removed card
+  html += renderCreditAssumptions(wi.removeCardId, wi.removeCreditToggles, wi.removeCreditAmounts, 'remove');
+  html += `<div class="whatif-annual-fee">
+    <span class="whatif-annual-fee-label">Saved Annual Fee (${escapeHtml(removeCard.shortName || removeCard.name)})</span>
+    <span class="whatif-annual-fee-value" style="color:#059669;">+${formatCurrency(removeCard.annualFee)}</span>
+  </div>`;
+
+  html += '<hr class="whatif-section-sep">';
+
+  // Section 2: Spending shifting to new card
+  html += `<h3 style="font-size:14px;font-weight:600;margin:16px 0 8px;color:#059669;">Spending shifting to ${escapeHtml(addCard.shortName || addCard.name)}</h3>`;
+  const addRows = getAddCardShiftRows(wi.addCardId, wi.selectedYear);
+  if (addRows.length > 0) {
+    html += `<div class="whatif-shift-table-wrap"><table class="whatif-shift-table">
+      <thead><tr><th>From Card</th><th>Category</th><th>Rate</th><th>Shift Amount</th><th></th><th>Category</th><th>Rate</th><th class="text-right">Impact</th></tr></thead><tbody>`;
+    for (const row of addRows) {
+      const key = `${row.sourceCardId}|${row.sourceCategory}`;
+      const amount = wi.shiftAmounts[key] || 0;
+      const rowImpact = getRowImpact(amount, row.sourceRate, row.sourcePointValue, row.newRate, row.newPointValue);
+      html += `<tr>
+        <td>${escapeHtml(row.sourceCardName)}</td>
+        <td style="text-transform:capitalize;">${escapeHtml(row.sourceCategory)}</td>
+        <td class="mono">${row.sourceRate}x</td>
+        <td><input type="number" class="whatif-shift-input" data-key="${escapeHtml(key)}" data-max="${row.actualSpend.toFixed(2)}" value="${amount.toFixed(0)}" min="0" max="${row.actualSpend.toFixed(2)}" step="1"></td>
+        <td class="whatif-shift-arrow">→</td>
+        <td style="text-transform:capitalize;">${escapeHtml(row.newCategory)}</td>
+        <td class="mono">${row.newRate}x</td>
+        <td class="text-right whatif-impact ${rowImpact >= 0 ? 'positive' : 'negative'}">${rowImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(rowImpact)}</td>
+      </tr>`;
+    }
+    html += '</tbody></table></div>';
+  }
+
+  // New card credits
+  html += renderCreditAssumptions(wi.addCardId, wi.creditToggles, wi.creditAmounts, 'add');
+  html += `<div class="whatif-annual-fee">
+    <span class="whatif-annual-fee-label">Annual Fee (${escapeHtml(addCard.shortName || addCard.name)})</span>
+    <span class="whatif-annual-fee-value">-${formatCurrency(addCard.annualFee)}</span>
+  </div>`;
+
+  // Combined summary
+  const impact = calculateWhatIfNetImpact();
+  html += renderSummaryLine('swap', impact);
+
+  html += `<div class="whatif-nav">
+    <button class="btn btn-secondary" id="whatifBack4">← Back</button>
+    <button class="btn btn-primary" id="whatifCalculate">See Results →</button>
+  </div></div>`;
+
+  return html;
+}
+
+function renderOptimizationSlider(value, isCustom) {
+  return `
+    <div class="whatif-slider-wrap">
+      <div class="whatif-slider-label">
+        <span>How often would you use the best card for each category?</span>
+        <span class="whatif-slider-value ${isCustom ? 'custom' : ''}" id="whatifSliderLabel">${isCustom ? 'Custom' : value + '%'}</span>
+      </div>
+      <input type="range" class="whatif-slider ${isCustom ? 'inactive' : ''}" id="whatifSlider" min="0" max="100" step="5" value="${value}">
+      ${isCustom ? '<span class="whatif-slider-reset" id="whatifSliderReset">Reset to slider</span>' : ''}
+    </div>`;
+}
+
+function renderCreditAssumptions(cardId, toggles, amounts, mode) {
+  const card = CARDS[cardId];
+  if (!card || !card.credits || card.credits.length === 0) return '';
+  const label = mode === 'remove' ? 'Lost Credits' : 'Credit Assumptions';
+  const prefix = mode === 'remove' ? 'remove-' : 'add-';
+
+  let html = `<div class="whatif-credits">
+    <div style="font-size:13px;font-weight:600;color:#57534e;margin-bottom:8px;">${label} — ${escapeHtml(card.shortName || card.name)}</div>`;
+
+  for (const cr of card.credits) {
+    const enabled = toggles[cr.name] !== false;
+    const amount = amounts[cr.name] !== undefined ? amounts[cr.name] : cr.amount;
+    html += `<div class="whatif-credit-row">
+      <div class="whatif-credit-toggle ${enabled ? 'on' : ''}" data-credit="${escapeHtml(cr.name)}" data-prefix="${prefix}"></div>
+      <span class="whatif-credit-name">${escapeHtml(cr.name)}</span>
+      <input type="number" class="whatif-credit-amount" data-credit="${escapeHtml(cr.name)}" data-prefix="${prefix}" value="${amount.toFixed(0)}" min="0" max="${cr.amount}" step="1" ${!enabled ? 'disabled' : ''}>
+    </div>`;
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function renderSummaryLine(scenarioType, impact) {
+  const isPositive = impact.totalImpact >= 0;
+  const wi = state.whatif;
+  let cardName = '';
+  if (scenarioType === 'add') cardName = CARDS[wi.addCardId]?.shortName || CARDS[wi.addCardId]?.name || '';
+  else if (scenarioType === 'remove') cardName = CARDS[wi.removeCardId]?.shortName || CARDS[wi.removeCardId]?.name || '';
+  else cardName = (CARDS[wi.removeCardId]?.shortName || CARDS[wi.removeCardId]?.name || '') + ' → ' + (CARDS[wi.addCardId]?.shortName || CARDS[wi.addCardId]?.name || '');
+
+  const verb = scenarioType === 'add' ? 'adding' : scenarioType === 'remove' ? 'removing' : 'swapping';
+
+  let parts = [];
+  if (impact.spendingImpact !== 0) parts.push(`~${impact.spendingImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(impact.spendingImpact)} from spending shifts`);
+
+  if (scenarioType === 'add' || scenarioType === 'swap') {
+    if (impact.addCreditsTotal > 0) parts.push(`+${formatCurrencyPrecise(impact.addCreditsTotal)} from credits`);
+    if (impact.addFee > 0) parts.push(`-${formatCurrencyPrecise(impact.addFee)} annual fee`);
+  }
+  if (scenarioType === 'remove' || scenarioType === 'swap') {
+    if (impact.removeCreditsTotal > 0) parts.push(`-${formatCurrencyPrecise(impact.removeCreditsTotal)} lost credits`);
+    if (impact.removeFee > 0) parts.push(`+${formatCurrencyPrecise(impact.removeFee)} saved annual fee`);
+  }
+
+  return `
+    <div class="whatif-summary-line ${isPositive ? '' : 'negative'}" id="whatifSummary">
+      Net impact of ${verb} ${escapeHtml(cardName)}: ${parts.join(' + ')} = <strong>${impact.totalImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(impact.totalImpact)} estimated annual change</strong>
+    </div>`;
+}
+
+function renderWhatIfStep5() {
+  const wi = state.whatif;
+  const impact = calculateWhatIfNetImpact();
+  const currentValue = getCurrentWalletValue(wi.selectedYear);
+  const hypotheticalValue = currentValue + impact.totalImpact;
+  const isPositive = impact.totalImpact >= 0;
+
+  let cardName = '';
+  let verb = '';
+  if (wi.scenarioType === 'add') {
+    cardName = CARDS[wi.addCardId]?.shortName || CARDS[wi.addCardId]?.name || '';
+    verb = 'Adding';
+  } else if (wi.scenarioType === 'remove') {
+    cardName = CARDS[wi.removeCardId]?.shortName || CARDS[wi.removeCardId]?.name || '';
+    verb = 'Removing';
+  } else {
+    cardName = (CARDS[wi.removeCardId]?.shortName || '') + ' → ' + (CARDS[wi.addCardId]?.shortName || '');
+    verb = 'Swapping';
+  }
+
+  // Annualization info
+  const txns = state.results.processed.filter(t =>
+    !t.isPayment && wi.selectedYear && getYearFromDateString(t.date) === wi.selectedYear
+  );
+  const monthSet = new Set();
+  txns.forEach(t => { const p = parseDateString(t.date); if (p) monthSet.add(p.month); });
+  const annualized = monthSet.size > 0 && monthSet.size < 12;
+
+  let html = `
+    <div class="whatif-step">
+      <div class="whatif-result-headline">
+        <div style="font-size:16px;color:#57534e;margin-bottom:8px;">${verb} ${escapeHtml(cardName)} could ${isPositive ? 'increase' : 'decrease'} your estimated annual value by</div>
+        <div class="whatif-result-amount ${isPositive ? 'positive' : 'negative'}">~${isPositive ? '+' : ''}${formatCurrencyPrecise(impact.totalImpact)}</div>
+        <div class="whatif-result-compact">
+          <div>Current wallet: <span>${formatCurrencyPrecise(currentValue)}</span></div>
+          <div>→</div>
+          <div>Hypothetical wallet: <span>${formatCurrencyPrecise(hypotheticalValue)}</span></div>
+        </div>
+      </div>
+      <div class="whatif-context">
+        Optimization rate: ${wi.optimizationRate}%${wi.isCustomMode ? ' (custom adjustments)' : ''} • Year: ${wi.selectedYear}${annualized ? ` (annualized from ${monthSet.size} months)` : ''}
+      </div>`;
+
+  // Detail section (collapsed by default)
+  html += `
+    <div class="whatif-detail-toggle" id="whatifDetailToggle">▼ See the details</div>
+    <div class="whatif-detail-section hidden" id="whatifDetailSection">
+      ${renderDetailSection()}
+    </div>`;
+
+  html += `<div class="whatif-nav">
+    <button class="btn btn-secondary" id="whatifBack5">← Edit Assumptions</button>
+    <button class="btn btn-secondary" onclick="resetWhatIfState(); renderView('whatif');">Start New Scenario</button>
+  </div></div>`;
+
+  return html;
+}
+
+/**
+ * Render the detailed per-card breakdown for current vs hypothetical wallets.
+ */
+function renderDetailSection() {
+  const wi = state.whatif;
+  const year = wi.selectedYear;
+  const activeCards = getActiveCardIds(year);
+  const sampleDate = year ? `${year}-06-15` : null;
+
+  // Build current wallet data
+  const currentWallet = [];
+  for (const cardId of activeCards) {
+    const card = CARDS[cardId];
+    if (!card) continue;
+    const { factor, categories } = getAnnualizedCardSpend(cardId, year);
+    let spend = 0, points = 0, pointsValue = 0;
+    for (const [cat, data] of Object.entries(categories)) {
+      spend += data.spend;
+      points += data.points;
+    }
+    const pv = getPointValue(cardId);
+    pointsValue = points * pv;
+    const annualFee = card.annualFee || 0;
+
+    // Calculate credits (simple — use actual detected credits for this year)
+    let credits = 0;
+    const txns = state.results.processed.filter(t =>
+      t.cardId === cardId && t.isCredit && !t.isRefund && !t.isPayment &&
+      getYearFromDateString(t.date) === year
+    );
+    txns.forEach(t => credits += Math.abs(t.amount));
+    if (factor > 1) credits *= factor;
+
+    const netValue = pointsValue + credits - annualFee;
+    currentWallet.push({ cardId, cardName: card.shortName || card.name, spend, points, pointsValue, credits, annualFee, netValue, categories });
+  }
+
+  // Build hypothetical wallet
+  const hypotheticalWallet = currentWallet.map(c => ({
+    ...c,
+    categories: { ...c.categories },
+    hypothetical: false,
+    estimated: !!wi.walletMismatch[c.cardId]
+  }));
+
+  // Apply shifts for "add" scenario
+  if (wi.scenarioType === 'add' || wi.scenarioType === 'swap') {
+    const addRows = wi.addCardId ? getAddCardShiftRows(wi.addCardId, wi.selectedYear) : [];
+    let newCardSpend = 0, newCardPoints = 0, newCardPointsValue = 0;
+    const newCardCategories = {};
+
+    for (const row of addRows) {
+      const key = `${row.sourceCardId}|${row.sourceCategory}`;
+      const amount = wi.shiftAmounts[key] || 0;
+      if (amount <= 0) continue;
+
+      // Deduct from source card in hypothetical
+      const sourceEntry = hypotheticalWallet.find(c => c.cardId === row.sourceCardId);
+      if (sourceEntry) {
+        if (sourceEntry.categories[row.sourceCategory]) {
+          sourceEntry.categories[row.sourceCategory] = {
+            spend: Math.max(0, sourceEntry.categories[row.sourceCategory].spend - amount),
+            points: Math.max(0, sourceEntry.categories[row.sourceCategory].points - (amount * row.sourceRate))
+          };
+        }
+        sourceEntry.spend = Math.max(0, sourceEntry.spend - amount);
+        const reducedPoints = amount * row.sourceRate;
+        sourceEntry.points = Math.max(0, sourceEntry.points - reducedPoints);
+        sourceEntry.pointsValue = sourceEntry.points * getPointValue(row.sourceCardId);
+        sourceEntry.netValue = sourceEntry.pointsValue + sourceEntry.credits - sourceEntry.annualFee;
+      }
+
+      // Add to new card
+      if (!newCardCategories[row.newCategory]) newCardCategories[row.newCategory] = { spend: 0, points: 0 };
+      newCardCategories[row.newCategory].spend += amount;
+      newCardCategories[row.newCategory].points += amount * row.newRate;
+      newCardSpend += amount;
+      newCardPoints += amount * row.newRate;
+    }
+
+    const addCard = CARDS[wi.addCardId];
+    const addPV = getPointValue(wi.addCardId);
+    newCardPointsValue = newCardPoints * addPV;
+
+    // Credits for new card
+    let addCredits = 0;
+    if (addCard && addCard.credits) {
+      for (const cr of addCard.credits) {
+        if (wi.creditToggles[cr.name] !== false) {
+          addCredits += (wi.creditAmounts[cr.name] !== undefined ? wi.creditAmounts[cr.name] : cr.amount);
+        }
+      }
+    }
+
+    const addFee = addCard?.annualFee || 0;
+    const addNetValue = newCardPointsValue + addCredits - addFee;
+
+    hypotheticalWallet.push({
+      cardId: wi.addCardId,
+      cardName: (addCard?.shortName || addCard?.name || wi.addCardId) + ' (new)',
+      spend: newCardSpend,
+      points: newCardPoints,
+      pointsValue: newCardPointsValue,
+      credits: addCredits,
+      annualFee: addFee,
+      netValue: addNetValue,
+      categories: newCardCategories,
+      hypothetical: true
+    });
+  }
+
+  // Apply shifts for "remove" scenario
+  if (wi.scenarioType === 'remove' || wi.scenarioType === 'swap') {
+    // Remove the card from hypothetical wallet
+    const removeIdx = hypotheticalWallet.findIndex(c => c.cardId === wi.removeCardId);
+    if (removeIdx >= 0) {
+      hypotheticalWallet.splice(removeIdx, 1);
+    }
+
+    // Apply spending redistribution
+    const removeRows = getRemoveCardShiftRows(wi.removeCardId, wi.selectedYear);
+    for (const row of removeRows) {
+      const key = `remove|${row.sourceCategory}`;
+      const amount = wi.shiftAmounts[key] || 0;
+      if (amount <= 0) continue;
+
+      const destEntry = hypotheticalWallet.find(c => c.cardId === row.bestCardId);
+      if (destEntry) {
+        if (!destEntry.categories[row.bestCategory]) destEntry.categories[row.bestCategory] = { spend: 0, points: 0 };
+        destEntry.categories[row.bestCategory].spend += amount;
+        destEntry.categories[row.bestCategory].points += amount * row.bestRate;
+        destEntry.spend += amount;
+        destEntry.points += amount * row.bestRate;
+        destEntry.pointsValue = destEntry.points * getPointValue(row.bestCardId);
+        destEntry.netValue = destEntry.pointsValue + destEntry.credits - destEntry.annualFee;
+      }
+    }
+  }
+
+  // Render tables
+  let html = `
+    <div class="whatif-detail-wallet">
+      <div class="whatif-detail-wallet-title">Current Wallet</div>
+      ${renderWalletTable(currentWallet)}
+    </div>
+    <div class="whatif-detail-wallet">
+      <div class="whatif-detail-wallet-title">Hypothetical Wallet</div>
+      ${renderWalletTable(hypotheticalWallet)}
+    </div>`;
+
+  return html;
+}
+
+function renderWalletTable(walletEntries) {
+  if (walletEntries.length === 0) return '<p style="color:#78716c;font-size:13px;">No cards.</p>';
+  let totalSpend = 0, totalPtsVal = 0, totalCredits = 0, totalFees = 0, totalNet = 0;
+
+  let html = `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">
+    <thead><tr>
+      <th style="text-align:left;padding:8px 6px;border-bottom:2px solid #e7e5e4;font-size:11px;text-transform:uppercase;color:#78716c;">Card</th>
+      <th class="text-right" style="padding:8px 6px;border-bottom:2px solid #e7e5e4;font-size:11px;text-transform:uppercase;color:#78716c;">Spend</th>
+      <th class="text-right" style="padding:8px 6px;border-bottom:2px solid #e7e5e4;font-size:11px;text-transform:uppercase;color:#78716c;">Pts Value</th>
+      <th class="text-right" style="padding:8px 6px;border-bottom:2px solid #e7e5e4;font-size:11px;text-transform:uppercase;color:#78716c;">Credits</th>
+      <th class="text-right" style="padding:8px 6px;border-bottom:2px solid #e7e5e4;font-size:11px;text-transform:uppercase;color:#78716c;">Ann. Fee</th>
+      <th class="text-right" style="padding:8px 6px;border-bottom:2px solid #e7e5e4;font-size:11px;text-transform:uppercase;color:#78716c;">Net Value</th>
+    </tr></thead><tbody>`;
+
+  for (const c of walletEntries) {
+    totalSpend += c.spend;
+    totalPtsVal += c.pointsValue;
+    totalCredits += c.credits;
+    totalFees += c.annualFee;
+    totalNet += c.netValue;
+    const nameExtra = c.estimated ? ' <span style="font-size:10px;color:#b45309;">(estimated)</span>' : '';
+    const nameStyle = c.hypothetical ? 'color:#059669;font-weight:600;' : '';
+
+    html += `<tr>
+      <td style="padding:8px 6px;border-bottom:1px solid #f5f5f4;${nameStyle}">${escapeHtml(c.cardName)}${nameExtra}</td>
+      <td class="text-right mono" style="padding:8px 6px;border-bottom:1px solid #f5f5f4;">${formatCurrencyPrecise(c.spend)}</td>
+      <td class="text-right mono" style="padding:8px 6px;border-bottom:1px solid #f5f5f4;">${formatCurrencyPrecise(c.pointsValue)}</td>
+      <td class="text-right mono" style="padding:8px 6px;border-bottom:1px solid #f5f5f4;">${formatCurrencyPrecise(c.credits)}</td>
+      <td class="text-right mono" style="padding:8px 6px;border-bottom:1px solid #f5f5f4;color:#dc2626;">-${formatCurrency(c.annualFee)}</td>
+      <td class="text-right mono" style="padding:8px 6px;border-bottom:1px solid #f5f5f4;font-weight:600;color:${c.netValue >= 0 ? '#166534' : '#dc2626'};">${formatCurrencyPrecise(c.netValue)}</td>
+    </tr>`;
+  }
+
+  html += `<tr style="font-weight:600;border-top:2px solid #e7e5e4;">
+    <td style="padding:8px 6px;">Total</td>
+    <td class="text-right mono" style="padding:8px 6px;">${formatCurrencyPrecise(totalSpend)}</td>
+    <td class="text-right mono" style="padding:8px 6px;">${formatCurrencyPrecise(totalPtsVal)}</td>
+    <td class="text-right mono" style="padding:8px 6px;">${formatCurrencyPrecise(totalCredits)}</td>
+    <td class="text-right mono" style="padding:8px 6px;color:#dc2626;">-${formatCurrency(totalFees)}</td>
+    <td class="text-right mono" style="padding:8px 6px;color:${totalNet >= 0 ? '#166534' : '#dc2626'};">${formatCurrencyPrecise(totalNet)}</td>
+  </tr></tbody></table></div>`;
+
+  return html;
+}
+
+/**
+ * Attach all event listeners for the current What If step.
+ */
+function attachWhatIfListeners() {
+  const wi = state.whatif;
+
+  // Step 1: Scenario selection
+  document.querySelectorAll('.whatif-option[data-scenario]').forEach(opt => {
+    opt.addEventListener('click', () => {
+      wi.scenarioType = opt.dataset.scenario;
+      renderView('whatif');
+    });
+  });
+
+  // Step 1 Next
+  const next1 = document.getElementById('whatifNext1');
+  if (next1) next1.addEventListener('click', () => { wi.step = 2; renderView('whatif'); });
+
+  // Step 2: Card selection
+  const addCardSel = document.getElementById('whatifAddCard');
+  if (addCardSel) addCardSel.addEventListener('change', (e) => {
+    wi.addCardId = e.target.value || null;
+    const next2 = document.getElementById('whatifNext2');
+    if (next2) next2.disabled = !canProceedStep2();
+  });
+
+  const removeCardSel = document.getElementById('whatifRemoveCard');
+  if (removeCardSel) removeCardSel.addEventListener('change', (e) => {
+    wi.removeCardId = e.target.value || null;
+    const next2 = document.getElementById('whatifNext2');
+    if (next2) next2.disabled = !canProceedStep2();
+  });
+
+  // Step 2 navigation
+  const back2 = document.getElementById('whatifBack2');
+  if (back2) back2.addEventListener('click', () => { wi.step = 1; renderView('whatif'); });
+  const next2 = document.getElementById('whatifNext2');
+  if (next2) next2.addEventListener('click', () => {
+    wi.step = 3;
+    // Default year to most recent
+    if (!wi.selectedYear && state.availableYears.length > 0) {
+      wi.selectedYear = state.availableYears[0];
+    }
+    renderView('whatif');
+  });
+
+  // Step 3: Year selection
+  const yearSel = document.getElementById('whatifYear');
+  if (yearSel) yearSel.addEventListener('change', (e) => {
+    wi.selectedYear = parseInt(e.target.value);
+  });
+
+  const back3 = document.getElementById('whatifBack3');
+  if (back3) back3.addEventListener('click', () => { wi.step = 2; renderView('whatif'); });
+  const next3 = document.getElementById('whatifNext3');
+  if (next3) next3.addEventListener('click', () => {
+    if (!wi.selectedYear && state.availableYears.length > 0) {
+      wi.selectedYear = state.availableYears[0];
+    }
+    // Reset shift amounts and custom mode when entering step 4
+    wi.isCustomMode = false;
+    wi.optimizationRate = null;
+    wi.shiftAmounts = {};
+    wi.step = 4;
+    renderView('whatif');
+  });
+
+  // Step 4: Assumption review
+  const back4 = document.getElementById('whatifBack4');
+  if (back4) back4.addEventListener('click', () => { wi.step = 3; renderView('whatif'); });
+
+  // Optimization slider
+  const slider = document.getElementById('whatifSlider');
+  if (slider) {
+    slider.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value);
+      wi.optimizationRate = val;
+      wi.isCustomMode = false;
+      wi.shiftAmounts = {};
+      renderView('whatif');
+    });
+  }
+
+  // Reset to slider button
+  const resetBtn = document.getElementById('whatifSliderReset');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      wi.isCustomMode = false;
+      wi.shiftAmounts = {};
+      renderView('whatif');
+    });
+  }
+
+  // Shift amount inputs
+  document.querySelectorAll('.whatif-shift-input').forEach(input => {
+    input.addEventListener('change', (e) => {
+      const key = e.target.dataset.key;
+      const max = parseFloat(e.target.dataset.max);
+      let val = parseFloat(e.target.value) || 0;
+
+      // Validation: clamp to 0..max
+      if (val < 0) val = 0;
+      if (val > max) val = max;
+      e.target.value = val.toFixed(0);
+
+      if (val < 0 || val > max) {
+        e.target.classList.add('invalid');
+      } else {
+        e.target.classList.remove('invalid');
+      }
+
+      wi.shiftAmounts[key] = val;
+      wi.isCustomMode = true;
+
+      // Update summary and impacts without full re-render
+      updateWhatIfSummary();
+    });
+  });
+
+  // Credit toggles
+  document.querySelectorAll('.whatif-credit-toggle').forEach(toggle => {
+    toggle.addEventListener('click', () => {
+      const creditName = toggle.dataset.credit;
+      const prefix = toggle.dataset.prefix;
+      const togglesObj = prefix === 'remove-' ? wi.removeCreditToggles : wi.creditToggles;
+
+      togglesObj[creditName] = !toggle.classList.contains('on');
+      toggle.classList.toggle('on');
+
+      // Enable/disable amount input
+      const row = toggle.parentElement;
+      const amountInput = row.querySelector('.whatif-credit-amount');
+      if (amountInput) amountInput.disabled = !togglesObj[creditName];
+
+      updateWhatIfSummary();
+    });
+  });
+
+  // Credit amount inputs
+  document.querySelectorAll('.whatif-credit-amount').forEach(input => {
+    input.addEventListener('change', (e) => {
+      const creditName = e.target.dataset.credit;
+      const prefix = e.target.dataset.prefix;
+      const amountsObj = prefix === 'remove-' ? wi.removeCreditAmounts : wi.creditAmounts;
+      let val = parseFloat(e.target.value) || 0;
+      if (val < 0) val = 0;
+      const max = parseFloat(e.target.max) || Infinity;
+      if (val > max) val = max;
+      e.target.value = val.toFixed(0);
+      amountsObj[creditName] = val;
+      updateWhatIfSummary();
+    });
+  });
+
+  // Calculate button
+  const calcBtn = document.getElementById('whatifCalculate');
+  if (calcBtn) calcBtn.addEventListener('click', () => {
+    wi.resultCalculated = true;
+    wi.step = 5;
+    renderView('whatif');
+  });
+
+  // Step 5 navigation
+  const back5 = document.getElementById('whatifBack5');
+  if (back5) back5.addEventListener('click', () => { wi.step = 4; renderView('whatif'); });
+
+  // Detail toggle
+  const detailToggle = document.getElementById('whatifDetailToggle');
+  if (detailToggle) {
+    detailToggle.addEventListener('click', () => {
+      const section = document.getElementById('whatifDetailSection');
+      if (section) {
+        const isHidden = section.classList.contains('hidden');
+        section.classList.toggle('hidden');
+        detailToggle.textContent = isHidden ? '▲ Hide the details' : '▼ See the details';
+      }
+    });
+  }
+}
+
+function canProceedStep2() {
+  const wi = state.whatif;
+  if (wi.scenarioType === 'add') return !!wi.addCardId;
+  if (wi.scenarioType === 'remove') return !!wi.removeCardId;
+  if (wi.scenarioType === 'swap') return !!wi.addCardId && !!wi.removeCardId;
+  return false;
+}
+
+/**
+ * Update the summary line and per-row impacts without a full re-render.
+ */
+function updateWhatIfSummary() {
+  const impact = calculateWhatIfNetImpact();
+  const summaryEl = document.getElementById('whatifSummary');
+  if (summaryEl) {
+    const wi = state.whatif;
+    const isPositive = impact.totalImpact >= 0;
+    summaryEl.className = 'whatif-summary-line' + (isPositive ? '' : ' negative');
+
+    let cardName = '';
+    let verb = '';
+    if (wi.scenarioType === 'add') { cardName = CARDS[wi.addCardId]?.shortName || CARDS[wi.addCardId]?.name || ''; verb = 'adding'; }
+    else if (wi.scenarioType === 'remove') { cardName = CARDS[wi.removeCardId]?.shortName || CARDS[wi.removeCardId]?.name || ''; verb = 'removing'; }
+    else { cardName = (CARDS[wi.removeCardId]?.shortName || '') + ' → ' + (CARDS[wi.addCardId]?.shortName || ''); verb = 'swapping'; }
+
+    let parts = [];
+    if (impact.spendingImpact !== 0) parts.push(`~${impact.spendingImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(impact.spendingImpact)} from spending shifts`);
+    if (wi.scenarioType === 'add' || wi.scenarioType === 'swap') {
+      if (impact.addCreditsTotal > 0) parts.push(`+${formatCurrencyPrecise(impact.addCreditsTotal)} from credits`);
+      if (impact.addFee > 0) parts.push(`-${formatCurrencyPrecise(impact.addFee)} annual fee`);
+    }
+    if (wi.scenarioType === 'remove' || wi.scenarioType === 'swap') {
+      if (impact.removeCreditsTotal > 0) parts.push(`-${formatCurrencyPrecise(impact.removeCreditsTotal)} lost credits`);
+      if (impact.removeFee > 0) parts.push(`+${formatCurrencyPrecise(impact.removeFee)} saved annual fee`);
+    }
+
+    summaryEl.innerHTML = `Net impact of ${verb} ${escapeHtml(cardName)}: ${parts.join(' + ')} = <strong>${impact.totalImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(impact.totalImpact)} estimated annual change</strong>`;
+  }
+
+  // Update per-row impacts
+  document.querySelectorAll('.whatif-shift-input').forEach(input => {
+    const key = input.dataset.key;
+    const amount = parseFloat(input.value) || 0;
+    const row = input.closest('tr');
+    if (!row) return;
+    const impactCell = row.querySelector('.whatif-impact');
+    if (!impactCell) return;
+
+    // Re-derive the rates from the row data
+    // We need to find the matching row in our data
+    const wi = state.whatif;
+    let rowImpact = 0;
+
+    if (key.startsWith('remove|')) {
+      const cat = key.replace('remove|', '');
+      const removeRows = getRemoveCardShiftRows(wi.removeCardId, wi.selectedYear);
+      const matchRow = removeRows.find(r => r.sourceCategory === cat);
+      if (matchRow) {
+        rowImpact = getRowImpact(amount, matchRow.sourceRate, matchRow.sourcePointValue, matchRow.bestRate, matchRow.bestPointValue);
+      }
+    } else {
+      const [srcCard, srcCat] = key.split('|');
+      const addRows = getAddCardShiftRows(wi.addCardId, wi.selectedYear);
+      const matchRow = addRows.find(r => r.sourceCardId === srcCard && r.sourceCategory === srcCat);
+      if (matchRow) {
+        rowImpact = getRowImpact(amount, matchRow.sourceRate, matchRow.sourcePointValue, matchRow.newRate, matchRow.newPointValue);
+      }
+    }
+
+    impactCell.className = 'text-right whatif-impact ' + (rowImpact >= 0 ? 'positive' : 'negative');
+    impactCell.textContent = `${rowImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(rowImpact)}`;
+  });
+}
+
+// =============================================================================
+// END WHAT IF CALCULATOR
+// =============================================================================
+
 function renderView(view) {
   state.activeView = view;
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
@@ -4460,6 +5957,10 @@ function renderView(view) {
         renderView('transactions');
       });
     });
+  }
+
+  if (view === 'whatif') {
+    renderWhatIf();
   }
 }
 

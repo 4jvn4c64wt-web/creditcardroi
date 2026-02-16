@@ -4,4 +4,12 @@
     <loc>https://creditcardvaluetracker.com/</loc>
     <priority>1.0</priority>
   </url>
+  <url>
+    <loc>https://creditcardvaluetracker.com/insights.html</loc>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://creditcardvaluetracker.com/insights/bilt-palladium-year-one.html</loc>
+    <priority>0.7</priority>
+  </url>
 </urlset>

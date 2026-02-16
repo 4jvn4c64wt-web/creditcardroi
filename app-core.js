@@ -4505,11 +4505,29 @@ function calculateCardScenariosNetImpact() {
     if (removeCard?.isBilt) {
       const swapExtrasForBilt = wi.scenarioType === 'swap' && wi.addCardId ? [wi.addCardId] : undefined;
       const removeRows = getRemoveCardShiftRows(wi.removeCardId, year, swapExtrasForBilt) || [];
+
+      console.log('[DEBUG] Remove Bilt card rows:', {
+        cardId: wi.removeCardId,
+        year,
+        rowCount: removeRows.length,
+        rows: removeRows.map(r => ({
+          sourceCategory: r.sourceCategory,
+          actualSpend: r.actualSpend,
+          bestCardName: r.bestCardName
+        }))
+      });
+
       for (const row of removeRows) {
         // Exclude rent - Bilt Cash only applies to non-rent spend
-        if (row.sourceCategory === 'rent') continue;
+        if (row.sourceCategory === 'rent') {
+          console.log('[DEBUG] Skipping rent spend:', row.actualSpend);
+          continue;
+        }
+        console.log('[DEBUG] Adding Bilt spend:', { category: row.sourceCategory, spend: row.actualSpend });
         totalBiltSpendLost += row.actualSpend || 0;
       }
+
+      console.log('[DEBUG] Total Bilt spend lost (non-rent):', totalBiltSpendLost);
     }
   }
 
@@ -5151,13 +5169,35 @@ function renderStep4Remove() {
 
   if (removeCard.isBilt) {
     try {
+      console.log('[DEBUG] Calculating Bilt Cash for remove scenario', {
+        removeCardId: wi.removeCardId,
+        selectedYear: wi.selectedYear,
+        scenarioType: wi.scenarioType
+      });
+
       const impact = calculateCardScenariosNetImpact();
+
+      console.log('[DEBUG] Bilt Cash calculation result:', {
+        biltCashImpact: impact.biltCashImpact,
+        totalBiltSpendLost: impact.totalBiltSpendLost,
+        totalBiltSpendGained: impact.totalBiltSpendGained
+      });
+
       biltCashImpact = impact.biltCashImpact || 0;
       defaultBiltCash = -impact.totalBiltSpendLost * 0.04;
       // Always show Bilt Cash for Bilt cards
       showBiltCash = true;
+
+      console.log('[DEBUG] Bilt Cash display values:', {
+        showBiltCash,
+        biltCashImpact,
+        defaultBiltCash
+      });
     } catch (e) {
-      console.error('Error calculating Bilt Cash:', e);
+      console.error('[ERROR] Failed to calculate Bilt Cash in renderStep4Remove:', e);
+      console.error('[ERROR] Stack trace:', e.stack);
+      // Re-throw to see if this is breaking the page render
+      throw e;
     }
   }
 

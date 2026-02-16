@@ -4899,29 +4899,20 @@ function renderStep4Add() {
   </div>`;
 
   // Compact summary
-  html += `<div style="max-width:360px;margin:0 auto 20px;font-size:14px;line-height:2;">
-    <div style="display:flex;justify-content:space-between;">
-      <span>Credits</span>
-      <span class="mono" style="font-weight:600;color:${creditsTotal > 0 ? '#059669' : '#78716c'};" id="cardscenariosAddCreditsLine">+${formatCurrencyPrecise(creditsTotal)}</span>
-    </div>`;
+  html += `<div style="max-width:360px;margin:0 auto 20px;font-size:14px;line-height:2;">`;
 
+  // Show Net Credits (Credits + Bilt Cash combined)
   if (showBiltCash) {
     const biltCashValue = wi.biltCashOverride ?? defaultBiltCash;
-    html += `<div style="display:flex;justify-content:space-between;align-items:center;">
-      <span>Bilt Cash (4% of spend)</span>
-      <span style="display:inline-flex;align-items:center;gap:4px;">
-        <span style="font-size:12px;color:#78716c;">$</span>
-        <input type="number" id="cardscenariosBiltCashInput" class="cardscenarios-bilt-cash-input"
-          value="${biltCashValue.toFixed(0)}" min="0" step="1"
-          style="width:60px;padding:2px 4px;border:1px solid #d6d3d1;border-radius:4px;font-family:monospace;text-align:right;font-size:13px;font-weight:600;color:${biltCashValue >= 0 ? '#059669' : '#dc2626'};">
-      </span>
-    </div>`;
-
-    // Net Credit (Credits + Bilt Cash)
     const netCredit = creditsTotal + biltCashValue;
-    html += `<div style="display:flex;justify-content:space-between;border-top:1px solid #e7e5e4;padding-top:4px;margin-top:4px;">
-      <span style="font-weight:600;">Net credit</span>
+    html += `<div style="display:flex;justify-content:space-between;">
+      <span>Net credits</span>
       <span class="mono" style="font-weight:600;color:${netCredit > 0 ? '#059669' : '#78716c'};" id="cardscenariosAddNetCreditLine">+${formatCurrencyPrecise(netCredit)}</span>
+    </div>`;
+  } else {
+    html += `<div style="display:flex;justify-content:space-between;">
+      <span>Credits</span>
+      <span class="mono" style="font-weight:600;color:${creditsTotal > 0 ? '#059669' : '#78716c'};" id="cardscenariosAddCreditsLine">+${formatCurrencyPrecise(creditsTotal)}</span>
     </div>`;
   }
 
@@ -4949,6 +4940,22 @@ function renderStep4Add() {
 
   // Credits (with toggles)
   html += renderCreditAssumptions(wi.addCardId, wi.creditToggles, wi.creditAmounts, 'add');
+
+  // Bilt Cash section (if applicable)
+  if (showBiltCash) {
+    const biltCashValue = wi.biltCashOverride ?? defaultBiltCash;
+    html += `<div style="margin-top:16px;border-top:1px solid #e7e5e4;padding-top:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:13px;font-weight:600;color:#57534e;">Bilt Cash (4% of spend)</span>
+        <span style="display:inline-flex;align-items:center;gap:4px;">
+          <span style="font-size:12px;color:#78716c;">$</span>
+          <input type="number" id="cardscenariosBiltCashInput" class="cardscenarios-bilt-cash-input"
+            value="${biltCashValue.toFixed(0)}" min="0" step="1"
+            style="width:60px;padding:2px 4px;border:1px solid #d6d3d1;border-radius:4px;font-family:monospace;text-align:right;font-size:13px;font-weight:600;color:${biltCashValue >= 0 ? '#059669' : '#dc2626'};">
+        </span>
+      </div>
+    </div>`;
+  }
 
   // Spend Rewards — collapsible row with value on the right
   html += `<div style="margin-top:16px;border-top:1px solid #e7e5e4;padding-top:12px;">
@@ -5225,29 +5232,20 @@ function renderStep4Remove() {
   </div>`;
 
   // Compact summary
-  html += `<div style="max-width:360px;margin:0 auto 20px;font-size:14px;line-height:2;">
-    <div style="display:flex;justify-content:space-between;">
-      <span>Lost credits</span>
-      <span class="mono" style="font-weight:600;color:${creditsTotal > 0 ? '#dc2626' : '#78716c'};" id="cardscenariosRemoveCreditsLine">-${formatCurrencyPrecise(creditsTotal)}</span>
-    </div>`;
+  html += `<div style="max-width:360px;margin:0 auto 20px;font-size:14px;line-height:2;">`;
 
+  // Show Net Credits (Credits + Bilt Cash combined)
   if (showBiltCash) {
     const biltCashValue = wi.biltCashOverride ?? defaultBiltCash;
-    html += `<div style="display:flex;justify-content:space-between;align-items:center;">
-      <span>Lost Bilt Cash (4% of spend)</span>
-      <span style="display:inline-flex;align-items:center;gap:4px;">
-        <span style="font-size:12px;color:#78716c;">$</span>
-        <input type="number" id="cardscenariosBiltCashInput" class="cardscenarios-bilt-cash-input"
-          value="${biltCashValue.toFixed(0)}" max="0" step="1"
-          style="width:60px;padding:2px 4px;border:1px solid #d6d3d1;border-radius:4px;font-family:monospace;text-align:right;font-size:13px;font-weight:600;color:${biltCashValue >= 0 ? '#059669' : '#dc2626'};">
-      </span>
-    </div>`;
-
-    // Net Credit (Lost credits + Lost Bilt Cash)
     const netCredit = creditsTotal + Math.abs(biltCashValue);
-    html += `<div style="display:flex;justify-content:space-between;border-top:1px solid #e7e5e4;padding-top:4px;margin-top:4px;">
-      <span style="font-weight:600;">Net credit loss</span>
+    html += `<div style="display:flex;justify-content:space-between;">
+      <span>Net credits</span>
       <span class="mono" style="font-weight:600;color:${netCredit > 0 ? '#dc2626' : '#78716c'};" id="cardscenariosRemoveNetCreditLine">-${formatCurrencyPrecise(netCredit)}</span>
+    </div>`;
+  } else {
+    html += `<div style="display:flex;justify-content:space-between;">
+      <span>Lost credits</span>
+      <span class="mono" style="font-weight:600;color:${creditsTotal > 0 ? '#dc2626' : '#78716c'};" id="cardscenariosRemoveCreditsLine">-${formatCurrencyPrecise(creditsTotal)}</span>
     </div>`;
   }
 
@@ -5275,6 +5273,22 @@ function renderStep4Remove() {
 
   // Lost credits (with toggles)
   html += renderCreditAssumptions(wi.removeCardId, wi.removeCreditToggles, wi.removeCreditAmounts, 'remove');
+
+  // Bilt Cash section (if applicable)
+  if (showBiltCash) {
+    const biltCashValue = wi.biltCashOverride ?? defaultBiltCash;
+    html += `<div style="margin-top:16px;border-top:1px solid #e7e5e4;padding-top:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:13px;font-weight:600;color:#57534e;">Lost Bilt Cash (4% of spend)</span>
+        <span style="display:inline-flex;align-items:center;gap:4px;">
+          <span style="font-size:12px;color:#78716c;">$</span>
+          <input type="number" id="cardscenariosBiltCashInput" class="cardscenarios-bilt-cash-input"
+            value="${biltCashValue.toFixed(0)}" max="0" step="1"
+            style="width:60px;padding:2px 4px;border:1px solid #d6d3d1;border-radius:4px;font-family:monospace;text-align:right;font-size:13px;font-weight:600;color:${biltCashValue >= 0 ? '#059669' : '#dc2626'};">
+        </span>
+      </div>
+    </div>`;
+  }
 
   // Point Value Change — single collapsible section
   html += `<div style="margin-top:16px;border-top:1px solid #e7e5e4;padding-top:12px;">
@@ -5388,29 +5402,20 @@ function renderStep4Swap() {
   </div>`;
 
   // Compact summary
-  html += `<div style="max-width:360px;margin:0 auto 20px;font-size:14px;line-height:2;">
-    <div style="display:flex;justify-content:space-between;">
-      <span>Credits</span>
-      <span class="mono" style="font-weight:600;color:${netCredits >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosSwapCreditsLine">${netCredits >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netCredits))}</span>
-    </div>`;
+  html += `<div style="max-width:360px;margin:0 auto 20px;font-size:14px;line-height:2;">`;
 
+  // Show Net Credits (Credits + Bilt Cash combined)
   if (showBiltCash) {
     const biltCashValue = wi.biltCashOverride ?? defaultBiltCash;
-    html += `<div style="display:flex;justify-content:space-between;align-items:center;">
-      <span>Bilt Cash (4% of spend)</span>
-      <span style="display:inline-flex;align-items:center;gap:4px;">
-        <span style="font-size:12px;color:#78716c;">$</span>
-        <input type="number" id="cardscenariosBiltCashInput" class="cardscenarios-bilt-cash-input"
-          value="${biltCashValue.toFixed(0)}" step="1"
-          style="width:60px;padding:2px 4px;border:1px solid #d6d3d1;border-radius:4px;font-family:monospace;text-align:right;font-size:13px;font-weight:600;color:${biltCashValue >= 0 ? '#059669' : '#dc2626'};">
-      </span>
-    </div>`;
-
-    // Net Credit (Credits + Bilt Cash)
     const netCreditWithBilt = netCredits + biltCashValue;
-    html += `<div style="display:flex;justify-content:space-between;border-top:1px solid #e7e5e4;padding-top:4px;margin-top:4px;">
-      <span style="font-weight:600;">Net credit</span>
+    html += `<div style="display:flex;justify-content:space-between;">
+      <span>Net credits</span>
       <span class="mono" style="font-weight:600;color:${netCreditWithBilt >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosSwapNetCreditLine">${netCreditWithBilt >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netCreditWithBilt))}</span>
+    </div>`;
+  } else {
+    html += `<div style="display:flex;justify-content:space-between;">
+      <span>Credits</span>
+      <span class="mono" style="font-weight:600;color:${netCredits >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosSwapCreditsLine">${netCredits >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netCredits))}</span>
     </div>`;
   }
 
@@ -5438,6 +5443,22 @@ function renderStep4Swap() {
 
   // Credits side-by-side: lost (removed) and gained (new)
   html += renderSwapCredits(wi, removeCard, addCard, removeCredits, addCredits, netCredits);
+
+  // Bilt Cash section (if applicable)
+  if (showBiltCash) {
+    const biltCashValue = wi.biltCashOverride ?? defaultBiltCash;
+    html += `<div style="margin-top:16px;border-top:1px solid #e7e5e4;padding-top:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:13px;font-weight:600;color:#57534e;">Bilt Cash (4% of spend)</span>
+        <span style="display:inline-flex;align-items:center;gap:4px;">
+          <span style="font-size:12px;color:#78716c;">$</span>
+          <input type="number" id="cardscenariosBiltCashInput" class="cardscenarios-bilt-cash-input"
+            value="${biltCashValue.toFixed(0)}" step="1"
+            style="width:60px;padding:2px 4px;border:1px solid #d6d3d1;border-radius:4px;font-family:monospace;text-align:right;font-size:13px;font-weight:600;color:${biltCashValue >= 0 ? '#059669' : '#dc2626'};">
+        </span>
+      </div>
+    </div>`;
+  }
 
   // Point Value Change — single collapsible section
   html += `<div style="margin-top:16px;border-top:1px solid #e7e5e4;padding-top:12px;">

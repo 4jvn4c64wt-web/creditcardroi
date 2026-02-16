@@ -4493,7 +4493,7 @@ function calculateCardScenariosNetImpact() {
       const addRows = getAddCardShiftRows(wi.addCardId, year) || [];
       for (const row of addRows) {
         // Exclude rent - Bilt Cash only applies to non-rent spend
-        if (row.sourceCategory === 'rent' || row.newCategory === 'rent') continue;
+        if (row.newCategory === 'rent') continue;
         totalBiltSpendGained += row.actualSpend || 0;
       }
     }
@@ -4507,7 +4507,7 @@ function calculateCardScenariosNetImpact() {
       const removeRows = getRemoveCardShiftRows(wi.removeCardId, year, swapExtrasForBilt) || [];
       for (const row of removeRows) {
         // Exclude rent - Bilt Cash only applies to non-rent spend
-        if (row.sourceCategory === 'rent' || row.bestCategory === 'rent') continue;
+        if (row.sourceCategory === 'rent') continue;
         totalBiltSpendLost += row.actualSpend || 0;
       }
     }
@@ -4856,8 +4856,9 @@ function renderStep4Add() {
     try {
       const impact = calculateCardScenariosNetImpact();
       biltCashImpact = impact.biltCashImpact || 0;
-      showBiltCash = Math.abs(biltCashImpact) >= 0.01; // Show if there's any meaningful Bilt Cash
       defaultBiltCash = impact.totalBiltSpendGained * 0.04;
+      // Always show Bilt Cash for Bilt cards
+      showBiltCash = true;
     } catch (e) {
       console.error('Error calculating Bilt Cash:', e);
     }
@@ -5152,8 +5153,9 @@ function renderStep4Remove() {
     try {
       const impact = calculateCardScenariosNetImpact();
       biltCashImpact = impact.biltCashImpact || 0;
-      showBiltCash = Math.abs(biltCashImpact) >= 0.01; // Show if there's any meaningful Bilt Cash
       defaultBiltCash = -impact.totalBiltSpendLost * 0.04;
+      // Always show Bilt Cash for Bilt cards
+      showBiltCash = true;
     } catch (e) {
       console.error('Error calculating Bilt Cash:', e);
     }
@@ -5306,8 +5308,9 @@ function renderStep4Swap() {
     try {
       const impact = calculateCardScenariosNetImpact();
       biltCashImpact = impact.biltCashImpact || 0;
-      showBiltCash = Math.abs(biltCashImpact) >= 0.01; // Show if there's any meaningful Bilt Cash
       defaultBiltCash = (impact.totalBiltSpendGained - impact.totalBiltSpendLost) * 0.04;
+      // Always show Bilt Cash when swapping Bilt cards
+      showBiltCash = true;
     } catch (e) {
       console.error('Error calculating Bilt Cash:', e);
     }

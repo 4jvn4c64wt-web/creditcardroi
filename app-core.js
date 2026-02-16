@@ -3472,7 +3472,8 @@ function resetCardScenariosState() {
     walletMismatch: {},
     resultCalculated: false,
     showRentPrompt: false,
-    rentAmount: null
+    rentAmount: null,
+    biltCashOverride: null  // User-specified Bilt Cash value (null = use 4% default)
   };
 }
 
@@ -4480,11 +4481,60 @@ function calculateCardScenariosNetImpact() {
     removeFee = CARDS[wi.removeCardId]?.annualFee || 0;
   }
 
+  // Bilt Cash calculation (4% of spend on Bilt cards, editable by user)
+  let biltCashGained = 0;
+  let biltCashLost = 0;
+  let totalBiltSpendGained = 0;
+  let totalBiltSpendLost = 0;
+
+  // When adding a Bilt card, calculate spend shifting TO it
+  if (wi.addCardId && (wi.scenarioType === 'add' || wi.scenarioType === 'swap')) {
+    const addCard = CARDS[wi.addCardId];
+    if (addCard?.isBilt) {
+      const addRows = getAddCardShiftRows(wi.addCardId, year) || [];
+      for (const row of addRows) {
+        const key = `${row.sourceCardId}|${row.sourceCategory}`;
+        const amount = wi.shiftAmounts[key] || 0;
+        if (amount > 0) {
+          totalBiltSpendGained += amount;
+        }
+      }
+    }
+  }
+
+  // When removing a Bilt card, calculate spend shifting FROM it
+  if (wi.removeCardId && (wi.scenarioType === 'remove' || wi.scenarioType === 'swap')) {
+    const removeCard = CARDS[wi.removeCardId];
+    if (removeCard?.isBilt) {
+      const swapExtrasForBilt = wi.scenarioType === 'swap' && wi.addCardId ? [wi.addCardId] : undefined;
+      const removeRows = getRemoveCardShiftRows(wi.removeCardId, year, swapExtrasForBilt) || [];
+      for (const row of removeRows) {
+        totalBiltSpendLost += row.actualSpend;
+      }
+    }
+  }
+
+  // Use override if set, otherwise calculate 4% of spend
+  const defaultBiltCash = (totalBiltSpendGained - totalBiltSpendLost) * 0.04;
+  const biltCashImpact = wi.biltCashOverride !== null ? wi.biltCashOverride : defaultBiltCash;
+
   const creditsImpact = addCreditsTotal - removeCreditsTotal;
   const feeImpact = removeFee - addFee; // Saved fee is positive, new fee is negative
-  const totalImpact = spendingImpact + creditsImpact + feeImpact;
+  const totalImpact = spendingImpact + creditsImpact + feeImpact + biltCashImpact;
 
-  return { spendingImpact, creditsImpact, feeImpact, totalImpact, addCreditsTotal, removeFee, addFee, removeCreditsTotal };
+  return {
+    spendingImpact,
+    creditsImpact,
+    feeImpact,
+    biltCashImpact,
+    totalBiltSpendGained,
+    totalBiltSpendLost,
+    totalImpact,
+    addCreditsTotal,
+    removeFee,
+    addFee,
+    removeCreditsTotal
+  };
 }
 
 /**
@@ -4797,7 +4847,13 @@ function renderStep4Add() {
   const { totalGain, rows, annualizationFactor } = calculateAddCardValue(wi.addCardId, wi.selectedYear);
   const creditsTotal = getAddCardCreditsTotal();
   const annualFee = addCard.annualFee || 0;
-  const netImpact = totalGain + creditsTotal - annualFee;
+
+  // Calculate Bilt Cash (4% of spend shifting to Bilt card)
+  const impact = calculateCardScenariosNetImpact();
+  const biltCashImpact = impact.biltCashImpact || 0;
+  const showBiltCash = addCard.isBilt && (impact.totalBiltSpendGained > 0 || impact.totalBiltSpendLost > 0);
+
+  const netImpact = totalGain + creditsTotal - annualFee + biltCashImpact;
   const isPositive = netImpact >= 0;
   const cardName = addCard.shortName || addCard.name;
 
@@ -4822,8 +4878,23 @@ function renderStep4Add() {
     <div style="display:flex;justify-content:space-between;">
       <span>Point value change</span>
       <span class="mono" style="font-weight:600;color:${totalGain > 0 ? '#059669' : '#78716c'};" id="cardscenariosAddRewardsLine">+${formatCurrencyPrecise(totalGain)}</span>
-    </div>
-    <div style="display:flex;justify-content:space-between;">
+    </div>`;
+
+  if (showBiltCash) {
+    const defaultBiltCash = impact.totalBiltSpendGained * 0.04;
+    const biltCashValue = wi.biltCashOverride !== null ? wi.biltCashOverride : defaultBiltCash;
+    html += `<div style="display:flex;justify-content:space-between;align-items:center;">
+      <span>Bilt Cash (4% of spend)</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;">
+        <span style="font-size:12px;color:#78716c;">$</span>
+        <input type="number" id="cardscenariosBiltCashInput" class="cardscenarios-bilt-cash-input"
+          value="${biltCashValue.toFixed(0)}" min="0" step="1"
+          style="width:60px;padding:2px 4px;border:1px solid #d6d3d1;border-radius:4px;font-family:monospace;text-align:right;font-size:13px;font-weight:600;color:${biltCashValue >= 0 ? '#059669' : '#dc2626'};">
+      </span>
+    </div>`;
+  }
+
+  html += `<div style="display:flex;justify-content:space-between;">
       <span>Annual fee</span>
       <span class="mono" style="font-weight:600;color:${annualFee > 0 ? '#dc2626' : '#78716c'};">-${formatCurrencyPrecise(annualFee)}</span>
     </div>
@@ -5062,7 +5133,13 @@ function renderStep4Remove() {
   const { totalChange, rows, annualizationFactor } = calculateRemoveCardValue(wi.removeCardId, wi.selectedYear);
   const creditsTotal = getRemoveCardCreditsTotal();
   const annualFee = removeCard.annualFee || 0;
-  const netImpact = totalChange - creditsTotal + annualFee;
+
+  // Calculate Bilt Cash (4% of spend leaving Bilt card)
+  const impact = calculateCardScenariosNetImpact();
+  const biltCashImpact = impact.biltCashImpact || 0;
+  const showBiltCash = removeCard.isBilt && (impact.totalBiltSpendGained > 0 || impact.totalBiltSpendLost > 0);
+
+  const netImpact = totalChange - creditsTotal + annualFee + biltCashImpact;
   const isPositive = netImpact >= 0;
   const cardName = removeCard.shortName || removeCard.name;
 
@@ -5087,8 +5164,23 @@ function renderStep4Remove() {
     <div style="display:flex;justify-content:space-between;">
       <span>Point value change</span>
       <span class="mono" style="font-weight:600;color:${totalChange > 0 ? '#059669' : totalChange < 0 ? '#dc2626' : '#78716c'};" id="cardscenariosRemoveRewardsLine">${totalChange >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(totalChange))}</span>
-    </div>
-    <div style="display:flex;justify-content:space-between;">
+    </div>`;
+
+  if (showBiltCash) {
+    const defaultBiltCash = -impact.totalBiltSpendLost * 0.04;
+    const biltCashValue = wi.biltCashOverride !== null ? wi.biltCashOverride : defaultBiltCash;
+    html += `<div style="display:flex;justify-content:space-between;align-items:center;">
+      <span>Lost Bilt Cash (4% of spend)</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;">
+        <span style="font-size:12px;color:#78716c;">$</span>
+        <input type="number" id="cardscenariosBiltCashInput" class="cardscenarios-bilt-cash-input"
+          value="${biltCashValue.toFixed(0)}" max="0" step="1"
+          style="width:60px;padding:2px 4px;border:1px solid #d6d3d1;border-radius:4px;font-family:monospace;text-align:right;font-size:13px;font-weight:600;color:${biltCashValue >= 0 ? '#059669' : '#dc2626'};">
+      </span>
+    </div>`;
+  }
+
+  html += `<div style="display:flex;justify-content:space-between;">
       <span>Saved annual fee</span>
       <span class="mono" style="font-weight:600;color:${annualFee > 0 ? '#059669' : '#78716c'};">+${formatCurrencyPrecise(annualFee)}</span>
     </div>
@@ -5185,7 +5277,13 @@ function renderStep4Swap() {
   const addFee = addCard.annualFee || 0;
   const removeFee = removeCard.annualFee || 0;
   const netFee = removeFee - addFee;
-  const netImpact = totalSpendChange + netCredits + netFee;
+
+  // Calculate Bilt Cash (net change from swapping cards)
+  const impact = calculateCardScenariosNetImpact();
+  const biltCashImpact = impact.biltCashImpact || 0;
+  const showBiltCash = (addCard.isBilt || removeCard.isBilt) && (impact.totalBiltSpendGained > 0 || impact.totalBiltSpendLost > 0);
+
+  const netImpact = totalSpendChange + netCredits + netFee + biltCashImpact;
   const isPositive = netImpact >= 0;
   const removeName = removeCard.shortName || removeCard.name;
   const addName = addCard.shortName || addCard.name;
@@ -5211,8 +5309,23 @@ function renderStep4Swap() {
     <div style="display:flex;justify-content:space-between;">
       <span>Point value change</span>
       <span class="mono" style="font-weight:600;color:${totalSpendChange >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosSwapRewardsLine">${totalSpendChange >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(totalSpendChange))}</span>
-    </div>
-    <div style="display:flex;justify-content:space-between;">
+    </div>`;
+
+  if (showBiltCash) {
+    const defaultBiltCash = (impact.totalBiltSpendGained - impact.totalBiltSpendLost) * 0.04;
+    const biltCashValue = wi.biltCashOverride !== null ? wi.biltCashOverride : defaultBiltCash;
+    html += `<div style="display:flex;justify-content:space-between;align-items:center;">
+      <span>Bilt Cash (4% of spend)</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;">
+        <span style="font-size:12px;color:#78716c;">$</span>
+        <input type="number" id="cardscenariosBiltCashInput" class="cardscenarios-bilt-cash-input"
+          value="${biltCashValue.toFixed(0)}" step="1"
+          style="width:60px;padding:2px 4px;border:1px solid #d6d3d1;border-radius:4px;font-family:monospace;text-align:right;font-size:13px;font-weight:600;color:${biltCashValue >= 0 ? '#059669' : '#dc2626'};">
+      </span>
+    </div>`;
+  }
+
+  html += `<div style="display:flex;justify-content:space-between;">
       <span>Annual fee</span>
       <span class="mono" style="font-weight:600;color:${netFee >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosSwapFeeLine">${netFee >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netFee))}</span>
     </div>
@@ -5430,10 +5543,16 @@ function renderSummaryLine(scenarioType, impact) {
 
   if (scenarioType === 'add' || scenarioType === 'swap') {
     if (impact.addCreditsTotal > 0) parts.push(`+${formatCurrencyPrecise(impact.addCreditsTotal)} from credits`);
+    if (impact.biltCashImpact !== 0 && (impact.totalBiltSpendGained > 0 || impact.totalBiltSpendLost > 0)) {
+      parts.push(`${impact.biltCashImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(impact.biltCashImpact)} Bilt Cash`);
+    }
     if (impact.addFee > 0) parts.push(`-${formatCurrencyPrecise(impact.addFee)} annual fee`);
   }
   if (scenarioType === 'remove' || scenarioType === 'swap') {
     if (impact.removeCreditsTotal > 0) parts.push(`-${formatCurrencyPrecise(impact.removeCreditsTotal)} lost credits`);
+    if (impact.biltCashImpact !== 0 && (impact.totalBiltSpendGained > 0 || impact.totalBiltSpendLost > 0) && scenarioType === 'remove') {
+      parts.push(`${impact.biltCashImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(impact.biltCashImpact)} lost Bilt Cash`);
+    }
     if (impact.removeFee > 0) parts.push(`+${formatCurrencyPrecise(impact.removeFee)} saved annual fee`);
   }
 
@@ -5883,6 +6002,21 @@ function attachCardScenariosListeners() {
       if (wi.scenarioType === 'add') { updateAddCardResult(); } else if (wi.scenarioType === 'remove') { updateRemoveCardResult(); } else if (wi.scenarioType === 'swap') { updateSwapCardResult(); } else { updateCardScenariosSummary(); }
     });
   });
+
+  // Bilt Cash input
+  const biltCashInput = document.getElementById('cardscenariosBiltCashInput');
+  if (biltCashInput) {
+    biltCashInput.addEventListener('input', (e) => {
+      let val = parseFloat(e.target.value);
+      if (isNaN(val)) {
+        // If user clears the input, reset to default (4% of spend)
+        wi.biltCashOverride = null;
+      } else {
+        wi.biltCashOverride = val;
+      }
+      if (wi.scenarioType === 'add') { updateAddCardResult(); } else if (wi.scenarioType === 'remove') { updateRemoveCardResult(); } else if (wi.scenarioType === 'swap') { updateSwapCardResult(); } else { updateCardScenariosSummary(); }
+    });
+  }
 
   // Calculate button
   const calcBtn = document.getElementById('cardscenariosCalculate');

@@ -234,6 +234,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  // --- Card Scenarios tab → pro gating (must register before initCore adds its tab handler) ---
+  (function() {
+    var csTab = document.getElementById('cardScenariosTab');
+    var csModal = document.getElementById('cardScenariosProModal');
+    if (csTab && csModal) {
+      csTab.addEventListener('click', function(e) {
+        e.stopImmediatePropagation();
+        csModal.classList.remove('hidden');
+      });
+      document.getElementById('closeCardScenariosPro').addEventListener('click', function() {
+        csModal.classList.add('hidden');
+      });
+      document.getElementById('cardScenariosProUpgrade').addEventListener('click', function() {
+        csModal.classList.add('hidden');
+        document.getElementById('comingSoonModal').classList.remove('hidden');
+      });
+      csModal.addEventListener('click', function(e) {
+        if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
+      });
+    }
+  })();
+
   // --- Newsletter popup setup ---
   initNewsletterPopup();
 

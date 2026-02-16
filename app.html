@@ -351,6 +351,7 @@
       <div class="tabs">
         <button class="tab active" data-view="summary">Summary</button>
         <button class="tab" data-view="transactions">All Transactions</button>
+        <button class="tab" id="cardScenariosTab" data-view="cardscenarios">Card Scenarios</button>
       </div>
 
       <div id="viewContainer"></div>
@@ -436,6 +437,19 @@
           New features to help you get even more out of your tracker are coming soon. Expect custom point valuations, editable spending categories, credit tracking, and more. Let me know what features you would like to see at <span id="comingSoonEmail" style="color:#2563eb;cursor:pointer;text-decoration:underline;"></span>.
         </p>
         <button id="closeComingSoon" class="btn btn-secondary" style="width:100%;justify-content:center;">Got it</button>
+      </div>
+    </div>
+
+    <!-- Card Scenarios Pro Gate Modal -->
+    <div id="cardScenariosProModal" class="loading-overlay hidden" style="cursor:pointer;">
+      <div class="loading-modal" style="cursor:default;max-width:420px;text-align:center;">
+        <div style="font-size:40px;margin-bottom:12px;">🔄</div>
+        <h3 style="font-size:20px;font-weight:600;margin:0 0 8px;">Card Scenarios is a Pro Feature</h3>
+        <p style="font-size:14px;color:#57534e;line-height:1.6;margin-bottom:20px;">
+          Card Scenarios lets you model what happens if you add, remove, or swap a card in your wallet — using your actual spending data. Upgrade to Pro to unlock scenario modeling.
+        </p>
+        <button id="cardScenariosProUpgrade" class="btn btn-primary" style="width:100%;justify-content:center;margin-bottom:10px;">Upgrade to Pro</button>
+        <button id="closeCardScenariosPro" class="btn btn-secondary" style="width:100%;justify-content:center;">Got it</button>
       </div>
     </div>
 

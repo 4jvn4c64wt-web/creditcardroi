@@ -7,6 +7,18 @@
   <link rel="canonical" href="https://creditcardvaluetracker.com/insights.html">
   <title>Insights — Credit Card Value Tracker</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💳</text></svg>">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Insights — Credit Card Value Tracker">
+  <meta property="og:description" content="Card decisions, benefit changes, and wallet analysis — grounded in real transaction data, not hypotheticals.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://creditcardvaluetracker.com/insights.html">
+  <meta property="og:site_name" content="Credit Card Value Tracker">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Insights — Credit Card Value Tracker">
+  <meta name="twitter:description" content="Card decisions, benefit changes, and wallet analysis — grounded in real transaction data, not hypotheticals.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -64,6 +76,33 @@
       .nav-links { gap: 16px; }
     }
   </style>
+
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    "name": "Insights — Credit Card Value Tracker",
+    "description": "Card decisions, benefit changes, and wallet analysis — grounded in real transaction data, not hypotheticals.",
+    "url": "https://creditcardvaluetracker.com/insights.html",
+    "isPartOf": {
+      "@type": "WebSite",
+      "name": "Credit Card Value Tracker",
+      "url": "https://creditcardvaluetracker.com/"
+    },
+    "mainEntity": {
+      "@type": "ItemList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "url": "https://creditcardvaluetracker.com/insights/bilt-palladium-year-one.html",
+          "name": "Why I'm Trying Bilt Palladium for a Year"
+        }
+      ]
+    }
+  }
+  </script>
 </head>
 <body>
 
@@ -79,6 +118,7 @@
   </nav>
 
   <!-- Page Header -->
+  <main>
   <section class="page-header">
     <div class="container">
       <h1>Insights</h1>
@@ -91,36 +131,41 @@
     <div class="container">
 
       <!-- Post 1: Bilt Palladium -->
-      <a href="insights/bilt-palladium-year-one.html" class="post-card">
-        <div class="post-meta">
-          <span class="post-tag tag-decision">Card Decision</span>
-          <span class="post-date">February 2026</span>
-        </div>
-        <div class="post-title">Why I'm Trying Bilt Palladium for a Year</div>
-        <p class="post-excerpt">I ran my 2025 transactions through the scenario calculator. The math says I'll lose $83 — but with a $400 travel credit and Bilt Cash on the table, the downside is small enough to try.</p>
-        <span class="post-read">Read more</span>
-      </a>
+      <article>
+        <a href="insights/bilt-palladium-year-one.html" class="post-card">
+          <div class="post-meta">
+            <span class="post-tag tag-decision">Card Decision</span>
+            <time class="post-date" datetime="2026-02">February 2026</time>
+          </div>
+          <h2 class="post-title">Why I'm Trying Bilt Palladium for a Year</h2>
+          <p class="post-excerpt">I ran my 2025 transactions through the scenario calculator. The math says I'll lose $83 — but with a $400 travel credit and Bilt Cash on the table, the downside is small enough to try.</p>
+          <span class="post-read">Read more</span>
+        </a>
+      </article>
 
-      <!-- 
+      <!--
       ============================================================
-      TEMPLATE: Copy this block for new posts. 
-      
+      TEMPLATE: Copy this block for new posts.
+
       Tag classes: tag-decision (green), tag-changes (blue), tag-review (yellow)
-      
-      <a href="insights/your-post-slug.html" class="post-card">
-        <div class="post-meta">
-          <span class="post-tag tag-changes">Card Changes</span>
-          <span class="post-date">Month Year</span>
-        </div>
-        <div class="post-title">Post Title Here</div>
-        <p class="post-excerpt">One or two sentence summary of the post.</p>
-        <span class="post-read">Read more</span>
-      </a>
+
+      <article>
+        <a href="insights/your-post-slug.html" class="post-card">
+          <div class="post-meta">
+            <span class="post-tag tag-changes">Card Changes</span>
+            <time class="post-date" datetime="YYYY-MM">Month Year</time>
+          </div>
+          <h2 class="post-title">Post Title Here</h2>
+          <p class="post-excerpt">One or two sentence summary of the post.</p>
+          <span class="post-read">Read more</span>
+        </a>
+      </article>
       ============================================================
       -->
 
     </div>
   </section>
+  </main>
 
   <!-- Footer -->
   <footer>

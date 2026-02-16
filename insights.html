@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Card decisions, benefit changes, and wallet analysis — grounded in real transaction data, not hypotheticals.">
+  <link rel="canonical" href="https://creditcardvaluetracker.com/insights.html">
+  <title>Insights — Credit Card Value Tracker</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💳</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'IBM Plex Sans', -apple-system, sans-serif; background: #fafaf9; color: #1c1917; line-height: 1.6; }
+
+    /* Layout */
+    .container { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+
+    /* Nav — matches index.html */
+    .site-nav { padding: 16px 0; border-bottom: 1px solid #e7e5e4; }
+    .site-nav .container { display: flex; align-items: center; justify-content: space-between; }
+    .nav-left { display: flex; align-items: center; gap: 24px; }
+    .site-nav-brand { font-size: 15px; font-weight: 600; color: #1c1917; text-decoration: none; }
+    .nav-link-text { font-size: 14px; font-weight: 500; color: #57534e; text-decoration: none; }
+    .nav-link-text:hover { color: #1c1917; }
+    .nav-link-text.active { color: #1c1917; font-weight: 600; }
+    .btn { display: inline-flex; align-items: center; padding: 8px 18px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; border: none; font-family: inherit; text-decoration: none; }
+    .btn-primary { background: #1c1917; color: #fff; }
+    .btn-primary:hover { background: #292524; }
+
+    /* Page header */
+    .page-header { padding: 64px 0 16px; text-align: center; }
+    .page-header h1 { font-size: 36px; font-weight: 700; letter-spacing: -0.03em; margin-bottom: 12px; }
+    .page-header p { font-size: 17px; color: #57534e; max-width: 540px; margin: 0 auto; line-height: 1.6; }
+
+    /* Post list */
+    .post-list { padding: 32px 0 80px; }
+    .post-card { display: block; text-decoration: none; color: inherit; background: #fff; border: 1px solid #e7e5e4; border-radius: 12px; padding: 28px 32px; margin-bottom: 16px; transition: border-color 0.15s, box-shadow 0.15s; }
+    .post-card:hover { border-color: #d6d3d1; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .post-meta { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+    .post-tag { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; padding: 3px 10px; border-radius: 4px; }
+    .tag-decision { background: #ecfdf5; color: #059669; }
+    .tag-changes { background: #eff6ff; color: #2563eb; }
+    .tag-review { background: #fef9c3; color: #854d0e; }
+    .post-date { font-size: 13px; color: #a8a29e; }
+    .post-title { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 6px; line-height: 1.3; }
+    .post-excerpt { font-size: 15px; color: #57534e; line-height: 1.6; }
+    .post-read { display: inline-block; margin-top: 12px; font-size: 14px; font-weight: 600; color: #1c1917; }
+    .post-read::after { content: " →"; }
+
+    /* Empty state for future use */
+    .coming-soon { text-align: center; padding: 48px 0; color: #a8a29e; font-size: 15px; }
+
+    /* Footer — matches index.html */
+    footer { border-top: 1px solid #e7e5e4; padding: 32px 0; text-align: center; }
+    .footer-note { font-size: 14px; color: #78716c; line-height: 1.7; max-width: 520px; margin: 0 auto; }
+
+    @media (max-width: 640px) {
+      .page-header { padding: 48px 0 12px; }
+      .page-header h1 { font-size: 28px; }
+      .post-card { padding: 20px 20px; }
+      .post-title { font-size: 18px; }
+      .nav-links { gap: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav class="site-nav">
+    <div class="container">
+      <div class="nav-left">
+        <a href="index.html" class="site-nav-brand">Credit Card Value Tracker</a>
+        <a href="insights.html" class="nav-link-text active">Insights</a>
+      </div>
+      <a href="app.html" class="btn btn-primary">Go to Tracker</a>
+    </div>
+  </nav>
+
+  <!-- Page Header -->
+  <section class="page-header">
+    <div class="container">
+      <h1>Insights</h1>
+      <p>Card decisions, benefit changes, and wallet analysis.</p>
+    </div>
+  </section>
+
+  <!-- Post List -->
+  <section class="post-list">
+    <div class="container">
+
+      <!-- Post 1: Bilt Palladium -->
+      <a href="insights/bilt-palladium-year-one.html" class="post-card">
+        <div class="post-meta">
+          <span class="post-tag tag-decision">Card Decision</span>
+          <span class="post-date">February 2026</span>
+        </div>
+        <div class="post-title">Why I'm Trying Bilt Palladium for a Year</div>
+        <p class="post-excerpt">I ran my 2025 transactions through the scenario calculator. The math says I'll lose $83 — but with a $400 travel credit and Bilt Cash on the table, the downside is small enough to try.</p>
+        <span class="post-read">Read more</span>
+      </a>
+
+      <!-- 
+      ============================================================
+      TEMPLATE: Copy this block for new posts. 
+      
+      Tag classes: tag-decision (green), tag-changes (blue), tag-review (yellow)
+      
+      <a href="insights/your-post-slug.html" class="post-card">
+        <div class="post-meta">
+          <span class="post-tag tag-changes">Card Changes</span>
+          <span class="post-date">Month Year</span>
+        </div>
+        <div class="post-title">Post Title Here</div>
+        <p class="post-excerpt">One or two sentence summary of the post.</p>
+        <span class="post-read">Read more</span>
+      </a>
+      ============================================================
+      -->
+
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <p class="footer-note"><span id="footerEmail" style="color:#2563eb;cursor:pointer;text-decoration:underline;"></span></p>
+    </div>
+  </footer>
+
+<script>
+(function() {
+  var u = 'creditcardvaluetracker';
+  var d = 'gmail';
+  var t = 'com';
+  var addr = u + '\u0040' + d + '.' + t;
+  var el = document.getElementById('footerEmail');
+  if (el) {
+    el.textContent = addr;
+    el.onclick = function() {
+      window.location.href = 'mai' + 'lto:' + addr;
+    };
+  }
+})();
+</script>
+</body>
+</html>

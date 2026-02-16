@@ -4482,10 +4482,11 @@ function calculateCardScenariosNetImpact() {
   }
 
   // Bilt Cash calculation (4% of spend on Bilt cards, editable by user)
-  let biltCashGained = 0;
-  let biltCashLost = 0;
   let totalBiltSpendGained = 0;
   let totalBiltSpendLost = 0;
+
+  // Calculate optimization rate to determine how much spend shifts
+  const rate = (wi.optimizationRate !== null ? wi.optimizationRate : 0) / 100;
 
   // When adding a Bilt card, calculate spend shifting TO it
   if (wi.addCardId && (wi.scenarioType === 'add' || wi.scenarioType === 'swap')) {
@@ -4494,10 +4495,11 @@ function calculateCardScenariosNetImpact() {
       const addRows = getAddCardShiftRows(wi.addCardId, year) || [];
       for (const row of addRows) {
         const key = `${row.sourceCardId}|${row.sourceCategory}`;
-        const amount = wi.shiftAmounts[key] || 0;
-        if (amount > 0) {
-          totalBiltSpendGained += amount;
-        }
+        // Use manual shift amount if set, otherwise calculate from optimization rate
+        const amount = wi.shiftAmounts[key] !== undefined
+          ? wi.shiftAmounts[key]
+          : (row.actualSpend * rate);
+        totalBiltSpendGained += amount;
       }
     }
   }
@@ -4509,7 +4511,12 @@ function calculateCardScenariosNetImpact() {
       const swapExtrasForBilt = wi.scenarioType === 'swap' && wi.addCardId ? [wi.addCardId] : undefined;
       const removeRows = getRemoveCardShiftRows(wi.removeCardId, year, swapExtrasForBilt) || [];
       for (const row of removeRows) {
-        totalBiltSpendLost += row.actualSpend;
+        const key = `remove|${row.sourceCategory}`;
+        // Use manual shift amount if set, otherwise calculate from optimization rate
+        const amount = wi.shiftAmounts[key] !== undefined
+          ? wi.shiftAmounts[key]
+          : (row.actualSpend * rate);
+        totalBiltSpendLost += amount;
       }
     }
   }
@@ -4858,7 +4865,7 @@ function renderStep4Add() {
     try {
       const impact = calculateCardScenariosNetImpact();
       biltCashImpact = impact.biltCashImpact || 0;
-      showBiltCash = impact.totalBiltSpendGained > 0 || impact.totalBiltSpendLost > 0;
+      showBiltCash = Math.abs(biltCashImpact) >= 0.01; // Show if there's any meaningful Bilt Cash
       defaultBiltCash = impact.totalBiltSpendGained * 0.04;
     } catch (e) {
       console.error('Error calculating Bilt Cash:', e);
@@ -5155,7 +5162,7 @@ function renderStep4Remove() {
     try {
       const impact = calculateCardScenariosNetImpact();
       biltCashImpact = impact.biltCashImpact || 0;
-      showBiltCash = impact.totalBiltSpendGained > 0 || impact.totalBiltSpendLost > 0;
+      showBiltCash = Math.abs(biltCashImpact) >= 0.01; // Show if there's any meaningful Bilt Cash
       defaultBiltCash = -impact.totalBiltSpendLost * 0.04;
     } catch (e) {
       console.error('Error calculating Bilt Cash:', e);
@@ -5310,7 +5317,7 @@ function renderStep4Swap() {
     try {
       const impact = calculateCardScenariosNetImpact();
       biltCashImpact = impact.biltCashImpact || 0;
-      showBiltCash = impact.totalBiltSpendGained > 0 || impact.totalBiltSpendLost > 0;
+      showBiltCash = Math.abs(biltCashImpact) >= 0.01; // Show if there's any meaningful Bilt Cash
       defaultBiltCash = (impact.totalBiltSpendGained - impact.totalBiltSpendLost) * 0.04;
     } catch (e) {
       console.error('Error calculating Bilt Cash:', e);

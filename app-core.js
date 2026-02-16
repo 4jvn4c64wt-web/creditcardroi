@@ -4849,9 +4849,21 @@ function renderStep4Add() {
   const annualFee = addCard.annualFee || 0;
 
   // Calculate Bilt Cash (4% of spend shifting to Bilt card)
-  const impact = calculateCardScenariosNetImpact();
-  const biltCashImpact = impact.biltCashImpact || 0;
-  const showBiltCash = addCard.isBilt && (impact.totalBiltSpendGained > 0 || impact.totalBiltSpendLost > 0);
+  // Only calculate after user has set optimization rate to avoid errors on initial render
+  let biltCashImpact = 0;
+  let showBiltCash = false;
+  let defaultBiltCash = 0;
+
+  if (wi.optimizationRate !== null && addCard.isBilt) {
+    try {
+      const impact = calculateCardScenariosNetImpact();
+      biltCashImpact = impact.biltCashImpact || 0;
+      showBiltCash = impact.totalBiltSpendGained > 0 || impact.totalBiltSpendLost > 0;
+      defaultBiltCash = impact.totalBiltSpendGained * 0.04;
+    } catch (e) {
+      console.error('Error calculating Bilt Cash:', e);
+    }
+  }
 
   const netImpact = totalGain + creditsTotal - annualFee + biltCashImpact;
   const isPositive = netImpact >= 0;
@@ -4881,7 +4893,6 @@ function renderStep4Add() {
     </div>`;
 
   if (showBiltCash) {
-    const defaultBiltCash = impact.totalBiltSpendGained * 0.04;
     const biltCashValue = wi.biltCashOverride !== null ? wi.biltCashOverride : defaultBiltCash;
     html += `<div style="display:flex;justify-content:space-between;align-items:center;">
       <span>Bilt Cash (4% of spend)</span>
@@ -5135,9 +5146,21 @@ function renderStep4Remove() {
   const annualFee = removeCard.annualFee || 0;
 
   // Calculate Bilt Cash (4% of spend leaving Bilt card)
-  const impact = calculateCardScenariosNetImpact();
-  const biltCashImpact = impact.biltCashImpact || 0;
-  const showBiltCash = removeCard.isBilt && (impact.totalBiltSpendGained > 0 || impact.totalBiltSpendLost > 0);
+  // Only calculate after user has set optimization rate to avoid errors on initial render
+  let biltCashImpact = 0;
+  let showBiltCash = false;
+  let defaultBiltCash = 0;
+
+  if (wi.optimizationRate !== null && removeCard.isBilt) {
+    try {
+      const impact = calculateCardScenariosNetImpact();
+      biltCashImpact = impact.biltCashImpact || 0;
+      showBiltCash = impact.totalBiltSpendGained > 0 || impact.totalBiltSpendLost > 0;
+      defaultBiltCash = -impact.totalBiltSpendLost * 0.04;
+    } catch (e) {
+      console.error('Error calculating Bilt Cash:', e);
+    }
+  }
 
   const netImpact = totalChange - creditsTotal + annualFee + biltCashImpact;
   const isPositive = netImpact >= 0;
@@ -5167,7 +5190,6 @@ function renderStep4Remove() {
     </div>`;
 
   if (showBiltCash) {
-    const defaultBiltCash = -impact.totalBiltSpendLost * 0.04;
     const biltCashValue = wi.biltCashOverride !== null ? wi.biltCashOverride : defaultBiltCash;
     html += `<div style="display:flex;justify-content:space-between;align-items:center;">
       <span>Lost Bilt Cash (4% of spend)</span>
@@ -5279,9 +5301,21 @@ function renderStep4Swap() {
   const netFee = removeFee - addFee;
 
   // Calculate Bilt Cash (net change from swapping cards)
-  const impact = calculateCardScenariosNetImpact();
-  const biltCashImpact = impact.biltCashImpact || 0;
-  const showBiltCash = (addCard.isBilt || removeCard.isBilt) && (impact.totalBiltSpendGained > 0 || impact.totalBiltSpendLost > 0);
+  // Only calculate after user has set optimization rate to avoid errors on initial render
+  let biltCashImpact = 0;
+  let showBiltCash = false;
+  let defaultBiltCash = 0;
+
+  if (wi.optimizationRate !== null && (addCard.isBilt || removeCard.isBilt)) {
+    try {
+      const impact = calculateCardScenariosNetImpact();
+      biltCashImpact = impact.biltCashImpact || 0;
+      showBiltCash = impact.totalBiltSpendGained > 0 || impact.totalBiltSpendLost > 0;
+      defaultBiltCash = (impact.totalBiltSpendGained - impact.totalBiltSpendLost) * 0.04;
+    } catch (e) {
+      console.error('Error calculating Bilt Cash:', e);
+    }
+  }
 
   const netImpact = totalSpendChange + netCredits + netFee + biltCashImpact;
   const isPositive = netImpact >= 0;
@@ -5312,7 +5346,6 @@ function renderStep4Swap() {
     </div>`;
 
   if (showBiltCash) {
-    const defaultBiltCash = (impact.totalBiltSpendGained - impact.totalBiltSpendLost) * 0.04;
     const biltCashValue = wi.biltCashOverride !== null ? wi.biltCashOverride : defaultBiltCash;
     html += `<div style="display:flex;justify-content:space-between;align-items:center;">
       <span>Bilt Cash (4% of spend)</span>

@@ -6,7 +6,7 @@ window.CardTracker.cards['bilt-palladium'] = {
   shortName: 'Bilt Palladium',
   annualFee: 495,
   annualFeeStartDate: '2026-02-07', // No annual fee charged before this date
-  pointValue: 0.022,
+  pointValue: 0.018,
   // Bilt 2.0: 2x on ALL everyday spending (flat rate, no categories)
   multipliers: {},
   baseRate: 2,

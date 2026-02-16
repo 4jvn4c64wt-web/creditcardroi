@@ -5,7 +5,7 @@ window.CardTracker.cards['chase-sapphire-reserve'] = {
   name: 'Chase Sapphire Reserve',
   shortName: 'Sapphire Reserve',
   annualFee: 795,
-  pointValue: 0.017,
+  pointValue: 0.018,
   // CSR only has bonuses for specific travel categories - no generic 'travel' bonus
   multipliers: { 'chase-travel': 8, 'flights-direct': 4, 'hotels-direct': 4, 'dining': 3, 'lyft': 5 },
   baseRate: 1,

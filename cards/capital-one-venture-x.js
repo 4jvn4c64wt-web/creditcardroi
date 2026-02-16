@@ -5,9 +5,9 @@ window.CardTracker.cards['capital-one-venture-x'] = {
   name: 'Capital One Venture X',
   shortName: 'Venture X',
   annualFee: 395,
-  // Point value varies by redemption: ~0.01 for statement credit, ~0.015+ for travel transfers/portal.
-  // 0.015 is a reasonable default for "miles" style points.
-  pointValue: 0.015,
+  // Point value varies by redemption: ~0.01 for statement credit, ~0.016+ for travel transfers/portal.
+  // 0.016 is a reasonable default for "miles" style points.
+  pointValue: 0.016,
   // Capital One Travel portal: 10x on hotels & rental cars, 5x on flights & vacation rentals.
   // Default to 5x (conservative); getMultiplier() upgrades to 10x when hotel/rental car keywords detected.
   multipliers: { 'capital-one-travel': 5 },

@@ -5,7 +5,7 @@ window.CardTracker.cards['chase-freedom-flex'] = {
   name: 'Chase Freedom Flex',
   shortName: 'Freedom Flex',
   annualFee: 0,
-  pointValue: 0.017,
+  pointValue: 0.018,
   multipliers: { 'chase-travel': 5, 'dining': 3, 'drugstore': 3 },
   baseRate: 1,
   credits: [],

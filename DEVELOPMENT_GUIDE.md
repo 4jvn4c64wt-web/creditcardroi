@@ -584,16 +584,16 @@ The Bilt Cash scenario calculation (in `calculateCardScenariosNetImpact()`) work
 - `finalBiltSpend` = total non-rent spend that would be on Bilt cards after the scenario
 - `biltCashImpact = (finalBiltSpend - currentBiltSpend) * 0.04`
 
-**Key rule:** If a Bilt card exists in the wallet after the scenario, the user keeps all their non-rent Bilt spending on it (because the 4% rebate incentivizes this regardless of point rates). The routing logic that determines the best card for *points* does not apply to Bilt Cash.
+**Key rule:** Bilt Cash is independent of points, but the point-based routing determines which card each subcategory's spend goes to. Only spend that the routing assigns to a Bilt card earns Bilt Cash. Do NOT add the 4% to point-value comparisons — the routing is purely points-based, and Bilt Cash is computed separately on whatever total lands on Bilt cards.
 
 | Scenario | finalBiltSpend | Impact |
 |----------|---------------|--------|
 | Remove only Bilt card | 0 | Lose all Bilt Cash |
-| Remove Bilt card (another Bilt remains) | currentBiltSpend (unchanged) | $0 |
-| Swap Bilt → Bilt | currentBiltSpend (unchanged) | $0 |
+| Remove Bilt card (another Bilt remains) | Spend routed to remaining Bilt card | Partial loss |
+| Swap Bilt → Bilt | Spend routed to new Bilt card by points routing | Loss proportional to spend leaving Bilt |
 | Swap Bilt → non-Bilt (no other Bilt) | 0 | Lose all Bilt Cash |
-| Swap non-Bilt → Bilt | currentBiltSpend + removed card's spend | Gain Bilt Cash |
-| Add Bilt (first one) | All non-rent spend across wallet | Gain Bilt Cash |
+| Swap non-Bilt → Bilt | currentBiltSpend + spend routed to new Bilt | Gain Bilt Cash |
+| Add Bilt | currentBiltSpend + spend routed to new Bilt | Gain Bilt Cash |
 
 ### Fairness Principle
 

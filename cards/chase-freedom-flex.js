@@ -5,7 +5,8 @@ window.CardTracker.cards['chase-freedom-flex'] = {
   name: 'Chase Freedom Flex',
   shortName: 'Freedom Flex',
   annualFee: 0,
-  pointValue: 0.018,
+  // Cash back card (1 cpp) unless paired with Sapphire Preferred/Reserve, which enables UR transfer (1.8 cpp)
+  pointValue: 0.01,
   multipliers: { 'chase-travel': 5, 'dining': 3, 'drugstore': 3 },
   baseRate: 1,
   credits: [],

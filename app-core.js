@@ -4162,8 +4162,24 @@ function formatSubcategoryName(sub) {
 }
 
 /**
+ * Compute the Bilt Cash benefit per dollar of non-rent spend on a Bilt card.
+ * Used in routing to account for Bilt Cash generation when comparing card values.
+ * Bilt Cash (4%) can be kept as cash or redeemed for rent points ($3 per 100 pts per $100 rent).
+ * Returns the maximum value per dollar from these options.
+ */
+function getBiltBenefitPerDollar(monthlyRent, biltPV, countBiltCashAsValue) {
+  const biltCashPerDollar = 0.04;
+  if (monthlyRent > 0) {
+    const rentRedemptionValuePerDollar = (biltCashPerDollar / 3) * 100 * biltPV;
+    return Math.max(countBiltCashAsValue ? biltCashPerDollar : 0, rentRedemptionValuePerDollar);
+  }
+  return countBiltCashAsValue ? biltCashPerDollar : 0;
+}
+
+/**
  * Get spending shift rows for "Add a Card" scenario.
  * Compares at subcategory level. Only shows rows where new card earns more value.
+ * Uses effective value (points + Bilt Cash benefit) for Bilt cards.
  */
 function getAddCardShiftRows(newCardId, year) {
   if (!state.results || !state.results.processed) return [];
@@ -4177,7 +4193,14 @@ function getAddCardShiftRows(newCardId, year) {
   const today = new Date();
   const sampleDate = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
 
-  // Pre-compute best existing card value for each subcategory across full wallet
+  // Bilt Cash benefit: accounts for 4% rebate value when comparing cards
+  const monthlyRent = state.cardScenarios.rentAmount || 0;
+  const countCash = state.cardScenarios.countBiltCashAsValue !== false;
+  const allBiltIds = [...walletCardIds, newCardId].filter(id => CARDS[id]?.isBilt);
+  const biltPV = allBiltIds.length > 0 ? getPointValue(allBiltIds[0]) : 0;
+  const biltBenefit = allBiltIds.length > 0 ? getBiltBenefitPerDollar(monthlyRent, biltPV, countCash) : 0;
+
+  // Pre-compute best existing card effective value for each subcategory across full wallet
   const bestExistingCache = {};
   function getBestExisting(sub) {
     if (bestExistingCache[sub]) return bestExistingCache[sub];
@@ -4186,7 +4209,8 @@ function getAddCardShiftRows(newCardId, year) {
       const pv = getPointValue(cid);
       const mapped = mapToCardCategory(sub, cid, sampleDate);
       const mult = getCardScenariosMultiplier(cid, mapped);
-      const val = mult.rate * pv;
+      // Effective value includes Bilt Cash benefit for Bilt cards
+      const val = mult.rate * pv + (CARDS[cid]?.isBilt ? biltBenefit : 0);
       if (val > best.value) {
         best = { cardId: cid, rate: mult.rate, value: val, pv, name: CARDS[cid]?.shortName || CARDS[cid]?.name || cid };
       }
@@ -4210,13 +4234,13 @@ function getAddCardShiftRows(newCardId, year) {
       // Best existing card in the full wallet for this subcategory
       const best = getBestExisting(sub);
 
-      // New card's value for this subcategory
+      // New card's effective value for this subcategory (including Bilt Cash benefit)
       const newCat = mapToCardCategory(sub, newCardId, sampleDate);
       const newMult = getCardScenariosMultiplier(newCardId, newCat);
-      const newValue = newMult.rate * newPV;
+      const newValue = newMult.rate * newPV + (newCard.isBilt ? biltBenefit : 0);
 
-      // Only count if the new card beats the BEST existing card in full wallet
-      if (newMult.rate > best.rate && newValue > best.value) {
+      // Only count if the new card beats the BEST existing card in full wallet (effective value)
+      if (newValue > best.value) {
         rows.push({
           sourceCardId: best.cardId || cardId,
           sourceCardName: best.name || (card.shortName || card.name),
@@ -4258,6 +4282,7 @@ function getAddCardShiftRows(newCardId, year) {
 /**
  * Get spending shift rows for "Remove a Card" scenario.
  * Compares at subcategory level. Shows ALL subcategories — every dollar must go somewhere.
+ * Uses effective value (points + Bilt Cash benefit) for Bilt cards.
  * @param {string} removeCardId - Card being removed
  * @param {number} year - Year to analyze
  * @param {string[]} [extraCardIds] - Additional card IDs in the hypothetical wallet (e.g. newly added card in swap)
@@ -4280,6 +4305,13 @@ function getRemoveCardShiftRows(removeCardId, year, extraCardIds) {
   const today = new Date();
   const sampleDate = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
   const rows = [];
+
+  // Bilt Cash benefit: accounts for 4% rebate value when comparing destination cards
+  const monthlyRent = state.cardScenarios.rentAmount || 0;
+  const countCash = state.cardScenarios.countBiltCashAsValue !== false;
+  const walletBiltCard = walletCardIds.find(id => CARDS[id]?.isBilt);
+  const biltPV = walletBiltCard ? getPointValue(walletBiltCard) : 0;
+  const biltBenefit = walletBiltCard ? getBiltBenefitPerDollar(monthlyRent, biltPV, countCash) : 0;
 
   for (const [sub, data] of Object.entries(subcategories)) {
     if (data.spend <= 0) continue;
@@ -4331,7 +4363,8 @@ function getRemoveCardShiftRows(removeCardId, year, extraCardIds) {
       const cardPV = getPointValue(cardId);
       const mapped = mapToCardCategory(sub, cardId, sampleDate);
       const mult = getCardScenariosMultiplier(cardId, mapped);
-      const val = mult.rate * cardPV;
+      // Effective value includes Bilt Cash benefit for Bilt cards
+      const val = mult.rate * cardPV + (CARDS[cardId]?.isBilt ? biltBenefit : 0);
       if (val > bestValue) {
         bestValue = val;
         bestCardId = cardId;
@@ -4517,39 +4550,21 @@ function calculateCardScenariosNetImpact() {
   const hasBiltAfter = !!biltCardAfter;
   const biltPVAfter = biltCardAfter ? getPointValue(biltCardAfter) : 0;
 
-  // --- Collect all non-rent subcategories available for Bilt allocation ---
-  // Each entry: { sub, spend, biltValuePerDollar, bestAltValuePerDollar, costPerDollar }
-  // costPerDollar = what you lose in points by putting this on Bilt instead of the best alt
-  let shiftCandidates = [];
-  let finalBiltSpend = 0; // Spend already routed to Bilt by points alone
+  // --- Track final Bilt spend from routing results ---
+  // Routing already considers Bilt Cash benefit (via getBiltBenefitPerDollar),
+  // so no post-routing optimization is needed.
+  let finalBiltSpend = 0;
 
   if (hasBiltAfter) {
-    // Get Bilt card's rate for a subcategory
-    const getBiltRate = (sub) => {
-      const mapped = mapToCardCategory(sub, biltCardAfter, sampleDate);
-      const mult = getCardScenariosMultiplier(biltCardAfter, mapped);
-      return mult.rate;
-    };
-
     if (wi.scenarioType === 'remove') {
       const removeCard = CARDS[wi.removeCardId];
       if (removeCard?.isBilt) {
-        // Removed Bilt card's spend — check each subcategory
+        // Removed Bilt card's spend — routing determines where it goes
         const removeRows = getRemoveCardShiftRows(wi.removeCardId, year) || [];
         for (const row of removeRows) {
           if (row.sourceCategory === 'rent') continue;
           if (CARDS[row.bestCardId]?.isBilt) {
             finalBiltSpend += row.actualSpend || 0;
-          } else {
-            // This spend leaves Bilt — candidate for shifting back
-            const biltRate = getBiltRate(row.sourceCategory);
-            const biltVal = biltRate * biltPVAfter;
-            const altVal = row.bestRate * row.bestPointValue;
-            shiftCandidates.push({
-              sub: row.sourceCategory, spend: row.actualSpend || 0,
-              biltValuePerDollar: biltVal, bestAltValuePerDollar: altVal,
-              costPerDollar: altVal - biltVal
-            });
           }
         }
         // Add spend from other remaining Bilt cards
@@ -4580,7 +4595,7 @@ function calculateCardScenariosNetImpact() {
         }
       }
 
-      // Removed card's spend — where does it go?
+      // Removed card's spend — routing determines where it goes
       if (removeCard?.isBilt) {
         const swapExtras = wi.addCardId ? [wi.addCardId] : undefined;
         const removeRows = getRemoveCardShiftRows(wi.removeCardId, year, swapExtras) || [];
@@ -4588,15 +4603,6 @@ function calculateCardScenariosNetImpact() {
           if (row.sourceCategory === 'rent') continue;
           if (CARDS[row.bestCardId]?.isBilt) {
             finalBiltSpend += row.actualSpend || 0;
-          } else {
-            const biltRate = getBiltRate(row.sourceCategory);
-            const biltVal = biltRate * biltPVAfter;
-            const altVal = row.bestRate * row.bestPointValue;
-            shiftCandidates.push({
-              sub: row.sourceCategory, spend: row.actualSpend || 0,
-              biltValuePerDollar: biltVal, bestAltValuePerDollar: altVal,
-              costPerDollar: altVal - biltVal
-            });
           }
         }
       }
@@ -4621,43 +4627,6 @@ function calculateCardScenariosNetImpact() {
             finalBiltSpend += row.actualSpend || 0;
           }
         }
-      }
-    }
-
-    // --- Optimization: shift spend to Bilt to fund rent points ---
-    // Only optimize if there's rent to fund and candidates to shift
-    if (monthlyRent > 0 && shiftCandidates.length > 0) {
-      // Sort by cost ascending — shift cheapest categories first
-      shiftCandidates.sort((a, b) => a.costPerDollar - b.costPerDollar);
-
-      // How much annual Bilt Cash do we need for max rent points (1x rent)?
-      // $3 per 100 points on $100 rent → $3 per $100 → 3% of rent amount
-      const maxAnnualBiltCashNeeded = monthlyRent * 0.03 * 12;
-      const currentFinalBiltCash = finalBiltSpend * 0.04;
-      let additionalBiltCashNeeded = Math.max(0, maxAnnualBiltCashNeeded - currentFinalBiltCash);
-
-      for (const candidate of shiftCandidates) {
-        if (additionalBiltCashNeeded <= 0) break;
-
-        // How much of this category's spend should we shift?
-        const biltCashPerDollar = 0.04;
-        const dollarsNeeded = additionalBiltCashNeeded / biltCashPerDollar;
-        const dollarsToShift = Math.min(candidate.spend, dollarsNeeded);
-
-        // Check if shifting is net positive:
-        // Per $1 on Bilt: earn biltPoints + $0.04 Bilt Cash
-        // Bilt Cash can be kept ($0.04) or redeemed for rent points ($0.04/$3 * 100 * PV)
-        // Use whichever is more valuable (they're mutually exclusive — cash is consumed for rent)
-        const rentRedemptionValuePerDollar = (biltCashPerDollar / 3) * 100 * biltPVAfter;
-        const biltCashNetValue = Math.max(biltCashPerDollar, rentRedemptionValuePerDollar);
-        const totalBiltValuePerDollar = candidate.biltValuePerDollar + biltCashNetValue;
-
-        if (totalBiltValuePerDollar >= candidate.bestAltValuePerDollar) {
-          // Net positive — shift this spend to Bilt
-          finalBiltSpend += dollarsToShift;
-          additionalBiltCashNeeded -= dollarsToShift * biltCashPerDollar;
-        }
-        // If not net positive, skip — don't shift spend that costs more than it earns
       }
     }
   } else {

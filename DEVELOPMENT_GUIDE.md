@@ -577,9 +577,9 @@ The Card Scenarios feature is a multi-step wizard in `app-core.js` (~lines 4521�
 
 ### Bilt Cash in Scenarios
 
-Bilt Cash is a **flat 4% rebate on all non-rent spend on any Bilt card**. It is completely separate from points — do not factor it into point-value comparisons or card routing logic. Points and Bilt Cash are independent benefits.
+Bilt Cash is a **flat 4% rebate on all non-rent spend on any Bilt card**. It is independent of points, but it IS factored into routing decisions because the ability to earn Bilt Cash (and thus fund rent points) makes Bilt cards more valuable per dollar of spend.
 
-**Key rule:** Bilt Cash is independent of points, but the point-based routing determines which card each subcategory's spend goes to. Only spend that the routing assigns to a Bilt card earns Bilt Cash. Do NOT add the 4% to point-value comparisons — the routing is purely points-based, and Bilt Cash is computed separately on whatever total lands on Bilt cards.
+**Key rule:** Routing uses **effective value** = `rate × pointValue + biltBenefit` for Bilt cards, where `biltBenefit` is computed by `getBiltBenefitPerDollar()`. This ensures spend routes to Bilt cards when the combined value (points + Bilt Cash benefit) exceeds the alternative. The `spendingImpact` still measures only the points-based change; the Bilt Cash/rent points value is captured separately in `biltRewardsImpact`.
 
 ### Bilt Rewards (Bilt Cash → Rent Points → Remaining)
 
@@ -604,20 +604,27 @@ Formula: `monthlyRentPts = min((monthlyRedeemed / $3) × 100, monthlyRent)`
 
 **Important math:** At PV $0.018, $3 of Bilt Cash buys 100 points worth $1.80. So redeeming costs more than the points are worth at that PV. Break-even PV is $0.03/point. The user controls how much to redeem via the editable input.
 
-#### Optimization Engine
+#### Unified Routing with Bilt Benefit
 
-The optimization engine in `calculateCardScenariosNetImpact()` shifts spend to Bilt when the total value (points + Bilt Cash) exceeds the alternative card. **It does NOT double-count Bilt Cash and rent points** — it uses `max(biltCashPerDollar, rentRedemptionValuePerDollar)` since they are mutually exclusive uses of the same cash.
+The routing functions (`getAddCardShiftRows`, `getRemoveCardShiftRows`) use **effective value** to compare cards, which includes the Bilt Cash benefit for Bilt cards. This eliminates the need for a separate post-routing optimization engine.
 
-**Algorithm:**
-1. Points-based routing runs first (unchanged)
-2. Identify subcategories where spend left Bilt for a better-points card (shift candidates)
-3. Sort candidates by `costPerDollar` ascending (cheapest to shift first)
-4. For each candidate, check if shifting is net positive:
-   - `rentRedemptionValuePerDollar = (0.04 / 3) × 100 × PV` (≈ $0.024 at $0.018 PV)
-   - `biltCashNetValue = max($0.04, rentRedemptionValuePerDollar)` (keeping vs redeeming)
-   - `totalBiltValuePerDollar = biltPointsValue + biltCashNetValue`
-   - If `totalBiltValuePerDollar >= bestAltValuePerDollar`, shift the spend to Bilt
-5. Only shift enough to fund max rent points (cap at `additionalBiltCashNeeded`)
+**`getBiltBenefitPerDollar(monthlyRent, biltPV, countBiltCashAsValue)`** computes the per-dollar benefit:
+- If `monthlyRent > 0`: `max(countCash ? $0.04 : $0, rentRedemptionValuePerDollar)`
+  - `rentRedemptionValuePerDollar = ($0.04 / $3) × 100 × PV` (≈ $0.024 at $0.018 PV)
+  - With `countCash = true`: always $0.04 (cash dominates at PV < $0.03)
+  - With `countCash = false`: $0.024 (rent redemption value only)
+- If `monthlyRent = 0`: `countCash ? $0.04 : $0`
+
+**Effective value formula:**
+- Non-Bilt cards: `effectiveValue = rate × pointValue`
+- Bilt cards: `effectiveValue = rate × pointValue + biltBenefit`
+
+**Example:** Adding Blue (1x, PV=0.018) to a wallet with CFU (1.5x, PV=0.015):
+- Blue effective: 0.018 + 0.04 = **0.058** (with rent and countCash=true)
+- CFU effective: 0.0225
+- Blue wins → spend routes to Blue, generating Bilt Cash for rent points
+
+**Important:** Row data (`bestRate`, `bestPointValue`, `newRate`, `newPointValue`) stores pure points values. The Bilt benefit is NOT embedded in the row — it's captured downstream via `finalBiltSpend` → `biltRewardsImpact`.
 
 #### Step 2b Rent Prompt
 
@@ -654,11 +661,11 @@ The return object includes:
 | Scenario | finalBiltSpend | Impact |
 |----------|---------------|--------|
 | Remove only Bilt card | 0 | Lose all Bilt Cash + Rent Points |
-| Remove Bilt card (another Bilt remains) | Spend routed to remaining Bilt | Partial loss, optimization may shift back |
-| Swap Bilt → Bilt | Routed by points + optimization | Delta based on routing changes |
+| Remove Bilt card (another Bilt remains) | Spend routed to remaining Bilt (via effective value) | Partial loss |
+| Swap Bilt → Bilt | Routed by effective value | Delta based on routing changes |
 | Swap Bilt → non-Bilt (no other Bilt) | 0 | Lose all Bilt Cash + Rent Points |
-| Swap non-Bilt → Bilt | current + routed + optimized | Gain Bilt Cash + Rent Points |
-| Add Bilt | current + routed + optimized | Gain Bilt Cash + Rent Points |
+| Swap non-Bilt → Bilt | current + newly routed | Gain Bilt Cash + Rent Points |
+| Add Bilt | current + newly routed | Gain Bilt Cash + Rent Points |
 
 ### Fairness Principle
 
@@ -859,6 +866,7 @@ Quick lookup for the most commonly needed functions in `app-core.js`:
 | `showCardConfigEditor()` | 2231 | Card config UI |
 | `showResults()` | 3300 | Results page setup |
 | `calculateOptimizationRate()` | 3448 | Wallet optimization measurement |
+| `getBiltBenefitPerDollar()` | 4170 | Bilt Cash benefit per dollar for routing (used by both shift row functions) |
 | `renderCardScenarios()` | 4521 | What-If wizard |
 | `renderView()` | 6154 | Tab switching (summary/transactions/monthly) |
 | `showCategoryModal()` | 7347 | Transaction recategorization |

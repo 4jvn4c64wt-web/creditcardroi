@@ -3675,9 +3675,14 @@ function calculateRemoveCardValue(removeCardId, year) {
     getYearFromDateString(t.date) === year
   );
 
-  // Annualization factor
+  // Annualization factor — use all non-payment transactions for the year (account-wide)
+  // so months where this card wasn't used but other cards were are not treated as missing data
+  const allYearTxns = state.results.processed.filter(t =>
+    !t.isPayment && !t.isCredit && !t.isRefund &&
+    getYearFromDateString(t.date) === year
+  );
   const months = new Set();
-  txns.forEach(t => { const p = parseDateString(t.date); if (p) months.add(p.month); });
+  allYearTxns.forEach(t => { const p = parseDateString(t.date); if (p) months.add(p.month); });
   const monthCount = months.size;
   const annualizationFactor = monthCount > 0 && monthCount < 12 ? 12 / monthCount : 1;
 
@@ -4054,9 +4059,14 @@ function getAnnualizedCardSpend(cardId, year) {
     getYearFromDateString(t.date) === year
   );
 
-  // Determine annualization factor
+  // Determine annualization factor — use all non-payment transactions for the year (account-wide)
+  // so months where this card wasn't used but other cards were are not treated as missing data
+  const allYearTxns = state.results.processed.filter(t =>
+    !t.isPayment && !t.isCredit && !t.isRefund &&
+    getYearFromDateString(t.date) === year
+  );
   const months = new Set();
-  txns.forEach(t => {
+  allYearTxns.forEach(t => {
     const parsed = parseDateString(t.date);
     if (parsed) months.add(parsed.month);
   });

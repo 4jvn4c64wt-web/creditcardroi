@@ -4533,7 +4533,7 @@ function calculateCardScenariosNetImpact() {
 
   // Use override if set, otherwise calculate 4% of spend (matching Card Config logic)
   const defaultBiltCash = (totalBiltSpendGained - totalBiltSpendLost) * 0.04;
-  const biltCashImpact = wi.biltCashOverride !== null ? wi.biltCashOverride : defaultBiltCash;
+  const biltCashImpact = wi.biltCashOverride ?? defaultBiltCash;
 
   const creditsImpact = addCreditsTotal - removeCreditsTotal;
   const feeImpact = removeFee - addFee; // Saved fee is positive, new fee is negative
@@ -4910,7 +4910,7 @@ function renderStep4Add() {
     </div>`;
 
   if (showBiltCash) {
-    const biltCashValue = wi.biltCashOverride !== null ? wi.biltCashOverride : defaultBiltCash;
+    const biltCashValue = wi.biltCashOverride ?? defaultBiltCash;
     html += `<div style="display:flex;justify-content:space-between;align-items:center;">
       <span>Bilt Cash (4% of spend)</span>
       <span style="display:inline-flex;align-items:center;gap:4px;">
@@ -5229,7 +5229,7 @@ function renderStep4Remove() {
     </div>`;
 
   if (showBiltCash) {
-    const biltCashValue = wi.biltCashOverride !== null ? wi.biltCashOverride : defaultBiltCash;
+    const biltCashValue = wi.biltCashOverride ?? defaultBiltCash;
     html += `<div style="display:flex;justify-content:space-between;align-items:center;">
       <span>Lost Bilt Cash (4% of spend)</span>
       <span style="display:inline-flex;align-items:center;gap:4px;">
@@ -5385,7 +5385,7 @@ function renderStep4Swap() {
     </div>`;
 
   if (showBiltCash) {
-    const biltCashValue = wi.biltCashOverride !== null ? wi.biltCashOverride : defaultBiltCash;
+    const biltCashValue = wi.biltCashOverride ?? defaultBiltCash;
     html += `<div style="display:flex;justify-content:space-between;align-items:center;">
       <span>Bilt Cash (4% of spend)</span>
       <span style="display:inline-flex;align-items:center;gap:4px;">

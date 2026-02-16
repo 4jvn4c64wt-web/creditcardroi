@@ -4481,47 +4481,39 @@ function calculateCardScenariosNetImpact() {
     removeFee = CARDS[wi.removeCardId]?.annualFee || 0;
   }
 
-  // Bilt Cash calculation (4% of spend on Bilt cards, editable by user)
+  // Bilt Cash calculation (4% of non-rent spend on Bilt cards, editable by user)
+  // Mirrors the Card Config calculation: 4% of all non-rent Bilt spend
   let totalBiltSpendGained = 0;
   let totalBiltSpendLost = 0;
 
-  // Calculate optimization rate to determine how much spend shifts
-  const rate = (wi.optimizationRate !== null ? wi.optimizationRate : 0) / 100;
-
-  // When adding a Bilt card, calculate spend shifting TO it
+  // When adding a Bilt card, calculate ALL non-rent spend flowing TO it
   if (wi.addCardId && (wi.scenarioType === 'add' || wi.scenarioType === 'swap')) {
     const addCard = CARDS[wi.addCardId];
     if (addCard?.isBilt) {
       const addRows = getAddCardShiftRows(wi.addCardId, year) || [];
       for (const row of addRows) {
-        const key = `${row.sourceCardId}|${row.sourceCategory}`;
-        // Use manual shift amount if set, otherwise calculate from optimization rate
-        const amount = wi.shiftAmounts[key] !== undefined
-          ? wi.shiftAmounts[key]
-          : (row.actualSpend * rate);
-        totalBiltSpendGained += amount;
+        // Exclude rent - Bilt Cash only applies to non-rent spend
+        if (row.sourceCategory === 'rent' || row.newCategory === 'rent') continue;
+        totalBiltSpendGained += row.actualSpend || 0;
       }
     }
   }
 
-  // When removing a Bilt card, calculate spend shifting FROM it
+  // When removing a Bilt card, calculate ALL non-rent spend leaving it
   if (wi.removeCardId && (wi.scenarioType === 'remove' || wi.scenarioType === 'swap')) {
     const removeCard = CARDS[wi.removeCardId];
     if (removeCard?.isBilt) {
       const swapExtrasForBilt = wi.scenarioType === 'swap' && wi.addCardId ? [wi.addCardId] : undefined;
       const removeRows = getRemoveCardShiftRows(wi.removeCardId, year, swapExtrasForBilt) || [];
       for (const row of removeRows) {
-        const key = `remove|${row.sourceCategory}`;
-        // Use manual shift amount if set, otherwise calculate from optimization rate
-        const amount = wi.shiftAmounts[key] !== undefined
-          ? wi.shiftAmounts[key]
-          : (row.actualSpend * rate);
-        totalBiltSpendLost += amount;
+        // Exclude rent - Bilt Cash only applies to non-rent spend
+        if (row.sourceCategory === 'rent' || row.bestCategory === 'rent') continue;
+        totalBiltSpendLost += row.actualSpend || 0;
       }
     }
   }
 
-  // Use override if set, otherwise calculate 4% of spend
+  // Use override if set, otherwise calculate 4% of spend (matching Card Config logic)
   const defaultBiltCash = (totalBiltSpendGained - totalBiltSpendLost) * 0.04;
   const biltCashImpact = wi.biltCashOverride !== null ? wi.biltCashOverride : defaultBiltCash;
 
@@ -4855,13 +4847,12 @@ function renderStep4Add() {
   const creditsTotal = getAddCardCreditsTotal();
   const annualFee = addCard.annualFee || 0;
 
-  // Calculate Bilt Cash (4% of spend shifting to Bilt card)
-  // Only calculate after user has set optimization rate to avoid errors on initial render
+  // Calculate Bilt Cash (4% of non-rent spend on Bilt card)
   let biltCashImpact = 0;
   let showBiltCash = false;
   let defaultBiltCash = 0;
 
-  if (wi.optimizationRate !== null && addCard.isBilt) {
+  if (addCard.isBilt) {
     try {
       const impact = calculateCardScenariosNetImpact();
       biltCashImpact = impact.biltCashImpact || 0;
@@ -5152,13 +5143,12 @@ function renderStep4Remove() {
   const creditsTotal = getRemoveCardCreditsTotal();
   const annualFee = removeCard.annualFee || 0;
 
-  // Calculate Bilt Cash (4% of spend leaving Bilt card)
-  // Only calculate after user has set optimization rate to avoid errors on initial render
+  // Calculate Bilt Cash (4% of non-rent spend leaving Bilt card)
   let biltCashImpact = 0;
   let showBiltCash = false;
   let defaultBiltCash = 0;
 
-  if (wi.optimizationRate !== null && removeCard.isBilt) {
+  if (removeCard.isBilt) {
     try {
       const impact = calculateCardScenariosNetImpact();
       biltCashImpact = impact.biltCashImpact || 0;
@@ -5308,12 +5298,11 @@ function renderStep4Swap() {
   const netFee = removeFee - addFee;
 
   // Calculate Bilt Cash (net change from swapping cards)
-  // Only calculate after user has set optimization rate to avoid errors on initial render
   let biltCashImpact = 0;
   let showBiltCash = false;
   let defaultBiltCash = 0;
 
-  if (wi.optimizationRate !== null && (addCard.isBilt || removeCard.isBilt)) {
+  if (addCard.isBilt || removeCard.isBilt) {
     try {
       const impact = calculateCardScenariosNetImpact();
       biltCashImpact = impact.biltCashImpact || 0;

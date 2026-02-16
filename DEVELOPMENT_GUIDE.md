@@ -122,12 +122,14 @@ The core application makes zero network requests. Fonts are loaded from Google F
 | `app.html` | Free-tier application (loads all scripts) |
 | `app-pro.html` | Pro-tier application (identical HTML, different tier wrapper) |
 | `demo.html` | Interactive demo with synthetic data |
+| `insights.html` | Insights blog index — lists all articles with SEO (Open Graph, Twitter Card, JSON-LD CollectionPage) |
+| `insights/*.html` | Individual insight articles (e.g., `bilt-palladium-year-one.html`) |
 
 ### Core Logic (loaded by app.html and app-pro.html)
 | File | Lines | Purpose |
 |------|-------|---------|
 | `app-core.js` | ~8,735 | **Everything shared**: utilities, state, tier logic, classification wrappers, points calculation, credit detection, CSV parsing wrappers, all UI rendering, export/import, card config editor, card scenarios, data management, initCore() |
-| `app.js` | ~243 | Free-tier wrapper: sets TIER_CONFIG='free', newsletter popup, upgrade modals, calls initCore() |
+| `app.js` | ~264 | Free-tier wrapper: sets TIER_CONFIG='free', newsletter popup, upgrade modals, Card Scenarios pro gate, calls initCore() |
 | `app-pro.js` | ~28 | Pro-tier wrapper: validates license, sets TIER_CONFIG='pro', calls initCore() |
 
 ### Data & Classification
@@ -164,7 +166,7 @@ Each file registers one card into `window.CardTracker.cards[cardId]`. Files are 
 | `tutorial.js` (~905 lines) | Help system, guided tour, feature education tooltips |
 | `test-csv-parser-v2.js` | CSV parser tests (run with Node) |
 | `test-tier-gating.js` | Tier/Decision Pass logic tests (run with Node) |
-| `robots.txt`, `sitemap.xml` | SEO |
+| `robots.txt`, `sitemap.xml` | SEO — sitemap includes index, insights.html, and individual insight articles |
 
 ---
 
@@ -485,6 +487,7 @@ Decision Passes are per-card temporary upgrades stored in `state.decisionPasses`
 - Cash+ quarterly category selection is always editable (even on free tier)
 - Bilt config (rent settings, reward options) is always editable except for credits and point values
 - Export is gated by tier for most cards
+- **Card Scenarios tab** is visible in both free and pro tiers. In the free tier, clicking it shows a pro-gating modal (`#cardScenariosProModal`) instead of rendering the feature. The click is intercepted in `app.js` via `stopImmediatePropagation()` before `initCore()` registers its own tab handler.
 
 ---
 
@@ -527,7 +530,7 @@ The app has several sections that show/hide:
 - `uploadSection` — Initial CSV upload zone
 - `columnMappingSection` — Column confirmation step
 - `mappingSection` — Card number → card mapping
-- `resultsSection` — Main results view (tabs: summary, transactions, monthly)
+- `resultsSection` — Main results view (tabs: summary, transactions, card scenarios)
 - `cardConfigSection` — Per-card configuration editor
 
 ### Main Render Functions
@@ -555,7 +558,7 @@ Logic is in `getCategoryBadgeStyle()` (~line 1688).
 
 ## 13. Card Scenarios (What-If)
 
-The Card Scenarios feature (Pro only) is a multi-step wizard in `app-core.js` (~lines 4521–5700).
+The Card Scenarios feature is a multi-step wizard in `app-core.js` (~lines 4521–5700). The tab is visible in both free and pro tiers, but free users see a pro-gating modal instead of the wizard (handled in `app.js`).
 
 ### Scenario Types
 - **Add a card** — "What if I got card X?"

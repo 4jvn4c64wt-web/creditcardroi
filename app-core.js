@@ -846,6 +846,26 @@ function getAnnualBonusValue(cardId, year = null) {
   return getAnnualBonusPoints(cardId) * getPointValue(cardId);
 }
 
+// Helper to check if a Bilt card is actually configured (not just has empty config object)
+// Returns true if the card is in the wallet OR has meaningful configuration
+function isBiltCardConfigured(cardId) {
+  // Check if card has actual transactions in the wallet
+  if (state.results && state.results.processed) {
+    const hasTransactions = state.results.processed.some(t =>
+      t.cardId === cardId && !t.isPayment
+    );
+    if (hasTransactions) return true;
+  }
+
+  // Check if card has meaningful configuration
+  const cfg = state.biltConfig[cardId];
+  if (!cfg) return false;
+
+  // Considered configured if it has a reward option set OR Bilt Cash redemption > 0
+  return (cfg.rewardOption === 'housing-only' || cfg.rewardOption === 'flexible') ||
+         (cfg.monthlyBiltCashRedemption && cfg.monthlyBiltCashRedemption > 0);
+}
+
 // Calculate Bilt rent points for a billing cycle based on spending ratio or Bilt Cash
 // Returns { points, rate, reason } for the rent payment
 function calculateBiltRentPoints(cardId, rentAmount, everydaySpend, billingMonth, billingYear) {
@@ -892,7 +912,7 @@ function calculateBiltRentPoints(cardId, rentAmount, everydaySpend, billingMonth
     const effectiveRate = rentAmount > 0 ? points / rentAmount : 0;
 
     // For unconfigured cards, use conservative 1x default
-    const isConfigured = state.biltConfig[cardId] !== undefined;
+    const isConfigured = isBiltCardConfigured(cardId);
     if (effectiveRate <= 0 && !isConfigured && rentAmount > 0) {
       return {
         points: Math.round(rentAmount * 1),
@@ -1165,7 +1185,7 @@ function getMultiplier(cardId, category, txnDate = null, merchantDesc = '') {
         const rate = rentAmt > 0 ? Math.min(1, maxPts / rentAmt) : 0;
         if (rate <= 0) {
           // For unconfigured cards (scenarios), use conservative 1x default
-          const isConfigured = state.biltConfig[cardId] !== undefined;
+          const isConfigured = isBiltCardConfigured(cardId);
           if (!isConfigured) {
             return { rate: 1, reason: '1x rent (estimated - configure card for actual rate)' };
           }

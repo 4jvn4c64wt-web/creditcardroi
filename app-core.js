@@ -4903,10 +4903,6 @@ function renderStep4Add() {
     <div style="display:flex;justify-content:space-between;">
       <span>Credits</span>
       <span class="mono" style="font-weight:600;color:${creditsTotal > 0 ? '#059669' : '#78716c'};" id="cardscenariosAddCreditsLine">+${formatCurrencyPrecise(creditsTotal)}</span>
-    </div>
-    <div style="display:flex;justify-content:space-between;">
-      <span>Point value change</span>
-      <span class="mono" style="font-weight:600;color:${totalGain > 0 ? '#059669' : '#78716c'};" id="cardscenariosAddRewardsLine">+${formatCurrencyPrecise(totalGain)}</span>
     </div>`;
 
   if (showBiltCash) {
@@ -4920,9 +4916,20 @@ function renderStep4Add() {
           style="width:60px;padding:2px 4px;border:1px solid #d6d3d1;border-radius:4px;font-family:monospace;text-align:right;font-size:13px;font-weight:600;color:${biltCashValue >= 0 ? '#059669' : '#dc2626'};">
       </span>
     </div>`;
+
+    // Net Credit (Credits + Bilt Cash)
+    const netCredit = creditsTotal + biltCashValue;
+    html += `<div style="display:flex;justify-content:space-between;border-top:1px solid #e7e5e4;padding-top:4px;margin-top:4px;">
+      <span style="font-weight:600;">Net credit</span>
+      <span class="mono" style="font-weight:600;color:${netCredit > 0 ? '#059669' : '#78716c'};" id="cardscenariosAddNetCreditLine">+${formatCurrencyPrecise(netCredit)}</span>
+    </div>`;
   }
 
   html += `<div style="display:flex;justify-content:space-between;">
+      <span>Point value change</span>
+      <span class="mono" style="font-weight:600;color:${totalGain > 0 ? '#059669' : '#78716c'};" id="cardscenariosAddRewardsLine">+${formatCurrencyPrecise(totalGain)}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;">
       <span>Annual fee</span>
       <span class="mono" style="font-weight:600;color:${annualFee > 0 ? '#dc2626' : '#78716c'};">-${formatCurrencyPrecise(annualFee)}</span>
     </div>
@@ -5222,10 +5229,6 @@ function renderStep4Remove() {
     <div style="display:flex;justify-content:space-between;">
       <span>Lost credits</span>
       <span class="mono" style="font-weight:600;color:${creditsTotal > 0 ? '#dc2626' : '#78716c'};" id="cardscenariosRemoveCreditsLine">-${formatCurrencyPrecise(creditsTotal)}</span>
-    </div>
-    <div style="display:flex;justify-content:space-between;">
-      <span>Point value change</span>
-      <span class="mono" style="font-weight:600;color:${totalChange > 0 ? '#059669' : totalChange < 0 ? '#dc2626' : '#78716c'};" id="cardscenariosRemoveRewardsLine">${totalChange >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(totalChange))}</span>
     </div>`;
 
   if (showBiltCash) {
@@ -5239,9 +5242,20 @@ function renderStep4Remove() {
           style="width:60px;padding:2px 4px;border:1px solid #d6d3d1;border-radius:4px;font-family:monospace;text-align:right;font-size:13px;font-weight:600;color:${biltCashValue >= 0 ? '#059669' : '#dc2626'};">
       </span>
     </div>`;
+
+    // Net Credit (Lost credits + Lost Bilt Cash)
+    const netCredit = creditsTotal + Math.abs(biltCashValue);
+    html += `<div style="display:flex;justify-content:space-between;border-top:1px solid #e7e5e4;padding-top:4px;margin-top:4px;">
+      <span style="font-weight:600;">Net credit loss</span>
+      <span class="mono" style="font-weight:600;color:${netCredit > 0 ? '#dc2626' : '#78716c'};" id="cardscenariosRemoveNetCreditLine">-${formatCurrencyPrecise(netCredit)}</span>
+    </div>`;
   }
 
   html += `<div style="display:flex;justify-content:space-between;">
+      <span>Point value change</span>
+      <span class="mono" style="font-weight:600;color:${totalChange > 0 ? '#059669' : totalChange < 0 ? '#dc2626' : '#78716c'};" id="cardscenariosRemoveRewardsLine">${totalChange >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(totalChange))}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;">
       <span>Saved annual fee</span>
       <span class="mono" style="font-weight:600;color:${annualFee > 0 ? '#059669' : '#78716c'};">+${formatCurrencyPrecise(annualFee)}</span>
     </div>
@@ -5378,10 +5392,6 @@ function renderStep4Swap() {
     <div style="display:flex;justify-content:space-between;">
       <span>Credits</span>
       <span class="mono" style="font-weight:600;color:${netCredits >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosSwapCreditsLine">${netCredits >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netCredits))}</span>
-    </div>
-    <div style="display:flex;justify-content:space-between;">
-      <span>Point value change</span>
-      <span class="mono" style="font-weight:600;color:${totalSpendChange >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosSwapRewardsLine">${totalSpendChange >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(totalSpendChange))}</span>
     </div>`;
 
   if (showBiltCash) {
@@ -5395,9 +5405,20 @@ function renderStep4Swap() {
           style="width:60px;padding:2px 4px;border:1px solid #d6d3d1;border-radius:4px;font-family:monospace;text-align:right;font-size:13px;font-weight:600;color:${biltCashValue >= 0 ? '#059669' : '#dc2626'};">
       </span>
     </div>`;
+
+    // Net Credit (Credits + Bilt Cash)
+    const netCreditWithBilt = netCredits + biltCashValue;
+    html += `<div style="display:flex;justify-content:space-between;border-top:1px solid #e7e5e4;padding-top:4px;margin-top:4px;">
+      <span style="font-weight:600;">Net credit</span>
+      <span class="mono" style="font-weight:600;color:${netCreditWithBilt >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosSwapNetCreditLine">${netCreditWithBilt >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netCreditWithBilt))}</span>
+    </div>`;
   }
 
   html += `<div style="display:flex;justify-content:space-between;">
+      <span>Point value change</span>
+      <span class="mono" style="font-weight:600;color:${totalSpendChange >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosSwapRewardsLine">${totalSpendChange >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(totalSpendChange))}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;">
       <span>Annual fee</span>
       <span class="mono" style="font-weight:600;color:${netFee >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosSwapFeeLine">${netFee >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netFee))}</span>
     </div>
@@ -6188,10 +6209,15 @@ function updateAddCardResult() {
   const addCard = CARDS[wi.addCardId];
   if (!addCard) return;
 
-  const { totalGain } = calculateAddCardValue(wi.addCardId, wi.selectedYear);
+  const { totalGain, biltCashImpact: defaultBiltCash } = calculateAddCardValue(wi.addCardId, wi.selectedYear);
   const creditsTotal = getAddCardCreditsTotal();
   const annualFee = addCard.annualFee || 0;
-  const netImpact = totalGain + creditsTotal - annualFee;
+
+  // Get Bilt Cash impact
+  const biltCashValue = wi.biltCashOverride ?? defaultBiltCash;
+  const showBiltCash = addCard.isBilt && Math.abs(biltCashValue) >= 0.01;
+
+  const netImpact = totalGain + creditsTotal - annualFee + (showBiltCash ? biltCashValue : 0);
   const isPositive = netImpact >= 0;
 
   // Update headline
@@ -6209,6 +6235,14 @@ function updateAddCardResult() {
   // Update top compact summary
   const creditsLineEl = document.getElementById('cardscenariosAddCreditsLine');
   if (creditsLineEl) creditsLineEl.textContent = `+${formatCurrencyPrecise(creditsTotal)}`;
+
+  // Update Net Credit line if it exists (when Bilt Cash is shown)
+  const netCreditLineEl = document.getElementById('cardscenariosAddNetCreditLine');
+  if (netCreditLineEl && showBiltCash) {
+    const netCredit = creditsTotal + biltCashValue;
+    netCreditLineEl.textContent = `+${formatCurrencyPrecise(netCredit)}`;
+    netCreditLineEl.style.color = netCredit > 0 ? '#059669' : '#78716c';
+  }
 
   const netTopEl = document.getElementById('cardscenariosAddNetTop');
   if (netTopEl) {
@@ -6229,10 +6263,15 @@ function updateRemoveCardResult() {
   const removeCard = CARDS[wi.removeCardId];
   if (!removeCard) return;
 
-  const { totalChange } = calculateRemoveCardValue(wi.removeCardId, wi.selectedYear);
+  const { totalChange, biltCashImpact: defaultBiltCash } = calculateRemoveCardValue(wi.removeCardId, wi.selectedYear);
   const creditsTotal = getRemoveCardCreditsTotal();
   const annualFee = removeCard.annualFee || 0;
-  const netImpact = totalChange - creditsTotal + annualFee;
+
+  // Get Bilt Cash impact (negative for remove scenario)
+  const biltCashValue = wi.biltCashOverride ?? defaultBiltCash;
+  const showBiltCash = removeCard.isBilt && Math.abs(biltCashValue) >= 0.01;
+
+  const netImpact = totalChange - creditsTotal + annualFee + (showBiltCash ? biltCashValue : 0);
   const isPositive = netImpact >= 0;
 
   // Update headline
@@ -6250,6 +6289,14 @@ function updateRemoveCardResult() {
   // Update top compact summary
   const creditsLineEl = document.getElementById('cardscenariosRemoveCreditsLine');
   if (creditsLineEl) creditsLineEl.textContent = `-${formatCurrencyPrecise(creditsTotal)}`;
+
+  // Update Net Credit line if it exists (when Bilt Cash is shown)
+  const netCreditLineEl = document.getElementById('cardscenariosRemoveNetCreditLine');
+  if (netCreditLineEl && showBiltCash) {
+    const netCredit = creditsTotal + Math.abs(biltCashValue);
+    netCreditLineEl.textContent = `-${formatCurrencyPrecise(netCredit)}`;
+    netCreditLineEl.style.color = netCredit > 0 ? '#dc2626' : '#78716c';
+  }
 
   const rewardsLineEl = document.getElementById('cardscenariosRemoveRewardsLine');
   if (rewardsLineEl) {
@@ -6283,14 +6330,19 @@ function updateSwapCardResult() {
   const removeCard = CARDS[wi.removeCardId];
   if (!addCard || !removeCard) return;
 
-  const { totalSpendChange } = calculateSwapValue(wi.removeCardId, wi.addCardId, wi.selectedYear);
+  const { totalSpendChange, biltCashImpact: defaultBiltCash } = calculateSwapValue(wi.removeCardId, wi.addCardId, wi.selectedYear);
   const addCredits = getAddCardCreditsTotal();
   const removeCredits = getRemoveCardCreditsTotal();
   const netCredits = addCredits - removeCredits;
   const addFee = addCard.annualFee || 0;
   const removeFee = removeCard.annualFee || 0;
   const netFee = removeFee - addFee;
-  const netImpact = totalSpendChange + netCredits + netFee;
+
+  // Get Bilt Cash impact
+  const biltCashValue = wi.biltCashOverride ?? defaultBiltCash;
+  const showBiltCash = (addCard.isBilt || removeCard.isBilt) && Math.abs(biltCashValue) >= 0.01;
+
+  const netImpact = totalSpendChange + netCredits + netFee + (showBiltCash ? biltCashValue : 0);
   const isPositive = netImpact >= 0;
 
   // Update headline
@@ -6311,6 +6363,14 @@ function updateSwapCardResult() {
   if (creditsLineEl) {
     creditsLineEl.textContent = `${netCredits >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netCredits))}`;
     creditsLineEl.style.color = netCredits >= 0 ? '#059669' : '#dc2626';
+  }
+
+  // Update Net Credit line if it exists (when Bilt Cash is shown)
+  const netCreditLineEl = document.getElementById('cardscenariosSwapNetCreditLine');
+  if (netCreditLineEl && showBiltCash) {
+    const netCreditWithBilt = netCredits + biltCashValue;
+    netCreditLineEl.textContent = `${netCreditWithBilt >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netCreditWithBilt))}`;
+    netCreditLineEl.style.color = netCreditWithBilt >= 0 ? '#059669' : '#dc2626';
   }
 
   // Update ledger credits total

@@ -581,9 +581,17 @@ Bilt Cash is a **flat 4% rebate on all non-rent spend on any Bilt card**. It is 
 
 **Key rule:** Bilt Cash is independent of points, but the point-based routing determines which card each subcategory's spend goes to. Only spend that the routing assigns to a Bilt card earns Bilt Cash. Do NOT add the 4% to point-value comparisons — the routing is purely points-based, and Bilt Cash is computed separately on whatever total lands on Bilt cards.
 
-### Bilt Rewards (Bilt Cash + Rent Points)
+### Bilt Rewards (Bilt Cash → Rent Points → Remaining)
 
-Bilt Rewards is the combined value of **Bilt Cash** and **Rent Points**. It is displayed as its own section in the scenario results, separate from the points line and credits.
+Bilt Rewards is displayed as a collapsible section in scenario results, separate from points and credits. **Bilt Cash is CONSUMED to earn rent points — do not double-count them.**
+
+#### How Bilt Cash Works
+
+1. **Earned**: 4% of all non-rent spend on any Bilt card
+2. **Redeemed**: You must SPEND Bilt Cash to buy rent points ($3 per 100 pts per $100 rent)
+3. **Remaining**: Earned − Redeemed = leftover cash (optionally counted as value)
+
+**Total Bilt Rewards = Rent Points Value + Bilt Cash Remaining (if toggled on)**
 
 #### Rent Points (Bilt 2.0 Flexible Mode)
 
@@ -592,45 +600,56 @@ Under Bilt 2.0 (effective Feb 7, 2026), rent points require redeeming Bilt Cash:
 - Rent points are capped at 1x the monthly rent amount
 - If you have no non-rent spend on a Bilt card → no Bilt Cash → no rent points
 
-Formula: `monthlyRentPts = min((monthlyBiltCash / $3) × 100, monthlyRent)`
+Formula: `monthlyRentPts = min((monthlyRedeemed / $3) × 100, monthlyRent)`
+
+**Important math:** At PV $0.018, $3 of Bilt Cash buys 100 points worth $1.80. So redeeming costs more than the points are worth at that PV. Break-even PV is $0.03/point. The user controls how much to redeem via the editable input.
 
 #### Optimization Engine
 
-The optimization engine in `calculateCardScenariosNetImpact()` determines whether to shift spend to the Bilt card (away from a better-points card) in order to fund rent points. This is necessary because some spend categories may earn fewer points on Bilt than on an alternative card, but the Bilt Cash + rent points value can make it net positive.
+The optimization engine in `calculateCardScenariosNetImpact()` shifts spend to Bilt when the total value (points + Bilt Cash) exceeds the alternative card. **It does NOT double-count Bilt Cash and rent points** — it uses `max(biltCashPerDollar, rentRedemptionValuePerDollar)` since they are mutually exclusive uses of the same cash.
 
 **Algorithm:**
-1. Points-based routing runs first (unchanged) — determines where each subcategory goes by points alone
+1. Points-based routing runs first (unchanged)
 2. Identify subcategories where spend left Bilt for a better-points card (shift candidates)
-3. Sort candidates by `costPerDollar` ascending (cheapest categories to shift first)
+3. Sort candidates by `costPerDollar` ascending (cheapest to shift first)
 4. For each candidate, check if shifting is net positive:
-   - `totalBiltValuePerDollar = biltPointsValue + $0.04 (Bilt Cash) + rentPointsValuePerDollar`
-   - `rentPointsValuePerDollar = (0.04 / 3) × 100 × pointValue` (≈ $0.024 at $0.018 PV)
+   - `rentRedemptionValuePerDollar = (0.04 / 3) × 100 × PV` (≈ $0.024 at $0.018 PV)
+   - `biltCashNetValue = max($0.04, rentRedemptionValuePerDollar)` (keeping vs redeeming)
+   - `totalBiltValuePerDollar = biltPointsValue + biltCashNetValue`
    - If `totalBiltValuePerDollar >= bestAltValuePerDollar`, shift the spend to Bilt
-5. Only shift enough to fund max rent points (avoids shifting more than needed)
-
-**Example:** Bilt Blue (1x, PV $0.018) vs CFU (1.5x, PV $0.015):
-- Blue points: $0.018/dollar, CFU points: $0.0225/dollar → Blue loses $0.0045/dollar
-- But Blue gains: $0.04 Bilt Cash + $0.024 rent points = $0.064/dollar
-- Net: $0.018 + $0.04 + $0.024 = $0.082 vs $0.0225 → shift to Blue
+5. Only shift enough to fund max rent points (cap at `additionalBiltCashNeeded`)
 
 #### Step 2b Rent Prompt
 
-The rent amount prompt (step 2b) appears whenever **any Bilt card is involved** in the scenario (add, remove, or swap). This is controlled by `scenarioInvolvesBilt()`. The rent amount is used to calculate how much Bilt Cash is needed to fund rent points.
+The rent amount prompt (step 2b) appears whenever **any Bilt card is involved** in the scenario (add, remove, or swap). Controlled by `scenarioInvolvesBilt()`.
 
 #### Display
 
-Bilt Rewards is shown as a combined section in the scenario results:
-- **Summary header:** Separate "Bilt Rewards" line (not combined with Credits)
-- **Ledger section:** "Bilt Rewards" breakdown showing Bilt Cash delta, Rent Points value delta, and Total
+Bilt Rewards is shown as a collapsible "Bilt Rewards" dropdown in the ledger:
+- **Bilt Cash Earned** (4% of spend) — computed, read-only
+- **Bilt Cash Redeemed for Rent Points** — user-editable input (annual, defaults to max)
+- **Rent Points Earned** — computed from redeemed amount, read-only (shows count + value)
+- **Bilt Cash Remaining** — Earned − Redeemed, with toggle "Count as value"
+- **Total Bilt Rewards** — Rent Points Value + Remaining (if toggled)
+
+In the summary header, a separate "Bilt Rewards" line shows the net delta.
+
+#### State Properties
+
+- `wi.biltRedemptionOverride` — User override for annual Bilt Cash redeemed (null = auto max)
+- `wi.countBiltCashAsValue` — Toggle: count remaining Bilt Cash in total (default: true)
 
 #### Calculation (in `calculateCardScenariosNetImpact()`)
 
 The return object includes:
-- `biltCashImpact` — just the Bilt Cash delta (finalBiltCash − currentBiltCash)
-- `biltRewardsImpact` — combined: biltCashDelta + rentPointsDelta
-- `rentPointsDelta` — change in annual rent points value
-- `currentBiltCash`, `finalBiltCash` — before/after Bilt Cash amounts
-- `currentAnnualRentValue`, `finalAnnualRentValue` — before/after rent points value
+- `biltRewardsImpact` — net delta: rentPointsValueDelta + (countCash ? cashRemainingDelta : 0)
+- `rentPointsValueDelta` — change in annual rent points value
+- `biltCashRemainingDelta` — change in remaining Bilt Cash after redemption
+- `finalBiltCashEarned`, `finalBiltCashRedeemed`, `finalBiltCashRemaining`
+- `finalRentPointsAnnual`, `finalRentPointsValue`
+- `currentBiltCashEarned`, `currentBiltCashRedeemed`, `currentBiltCashRemaining`
+- `currentRentPointsValue`
+- `countBiltCash` — whether remaining cash is counted
 
 | Scenario | finalBiltSpend | Impact |
 |----------|---------------|--------|

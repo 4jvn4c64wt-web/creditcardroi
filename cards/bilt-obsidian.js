@@ -6,7 +6,7 @@ window.CardTracker.cards['bilt-obsidian'] = {
   shortName: 'Bilt Obsidian',
   annualFee: 95,
   annualFeeStartDate: '2026-02-07', // No annual fee charged before this date
-  pointValue: 0.022,
+  pointValue: 0.018,
   // Bilt 2.0: 3x dining OR grocery (user choice), 2x travel, 1x other
   multipliers: { 'dining': 3, 'travel': 2 },
   baseRate: 1,

@@ -5,7 +5,7 @@ window.CardTracker.cards['amex-platinum'] = {
   name: 'American Express Platinum',
   shortName: 'Amex Plat',
   annualFee: 895,
-  pointValue: 0.02,
+  pointValue: 0.016,
   multipliers: { 'flights-direct': 5, 'amex-travel': 5 },
   baseRate: 1,
   credits: [

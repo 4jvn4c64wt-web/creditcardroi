@@ -5,7 +5,7 @@ window.CardTracker.cards['chase-sapphire-preferred'] = {
   name: 'Chase Sapphire Preferred',
   shortName: 'Sapphire Preferred',
   annualFee: 95,
-  pointValue: 0.017,
+  pointValue: 0.018,
   multipliers: { 'chase-travel': 5, 'dining': 3, 'streaming': 3, 'online-grocery': 3, 'travel': 2, 'lyft': 5 },
   baseRate: 1,
   credits: [

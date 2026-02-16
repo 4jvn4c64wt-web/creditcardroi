@@ -5,7 +5,7 @@ window.CardTracker.cards['amex-gold'] = {
   name: 'American Express Gold',
   shortName: 'Amex Gold',
   annualFee: 325,
-  pointValue: 0.02,
+  pointValue: 0.016,
   multipliers: { 'dining': 4, 'grocery': 4, 'flights-direct': 3, 'amex-travel': 3, 'hotels-amex-travel': 2 },
   baseRate: 1,
   credits: [

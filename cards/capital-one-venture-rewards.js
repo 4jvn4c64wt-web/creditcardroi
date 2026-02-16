@@ -5,9 +5,9 @@ window.CardTracker.cards['capital-one-venture-rewards'] = {
   name: 'Capital One Venture Rewards',
   shortName: 'Venture Rewards',
   annualFee: 95,
-  // Point value varies by redemption: ~0.01 for statement credit, ~0.015+ for travel transfers/portal.
-  // 0.015 is a reasonable default for "miles" style points.
-  pointValue: 0.015,
+  // Point value varies by redemption: ~0.01 for statement credit, ~0.016+ for travel transfers/portal.
+  // 0.016 is a reasonable default for "miles" style points.
+  pointValue: 0.016,
   multipliers: { 'capital-one-travel': 5, 'capital-one-entertainment': 5 },
   baseRate: 2,
   credits: [

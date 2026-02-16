@@ -5,7 +5,7 @@ window.CardTracker.cards['bilt-blue'] = {
   name: 'Bilt Blue',
   shortName: 'Bilt Blue',
   annualFee: 0,
-  pointValue: 0.022,
+  pointValue: 0.018,
   // Bilt 2.0 (Feb 7, 2026+): 1x on ALL everyday spending, NO bonus categories
   multipliers: {},
   baseRate: 1,

@@ -799,11 +799,24 @@ function checkPOSPatterns(normalizedMerchant) { return window.CardTracker.classi
 function checkAddressPatterns(normalizedMerchant) { return window.CardTracker.classification.checkAddressPatterns(normalizedMerchant); }
 function classifyTravel(normalizedText, cardId) { return window.CardTracker.classification.classifyTravel(normalizedText, cardId); }
 
+// CFF and CFU are cash back cards (1 cpp) unless paired with a Sapphire card,
+// which allows transferring rewards to Ultimate Rewards points (1.8 cpp).
+function getDefaultPointValue(cardId) {
+  if (cardId === 'chase-freedom-flex' || cardId === 'chase-freedom-unlimited') {
+    const mappedCards = new Set(Object.values(state.cardMappings));
+    if (mappedCards.has('chase-sapphire-preferred') || mappedCards.has('chase-sapphire-reserve')) {
+      return 0.018;
+    }
+    return 0.01;
+  }
+  return CARDS[cardId]?.pointValue || 0.01;
+}
+
 function getPointValue(cardId) {
   if (state.customPointValues[cardId] !== undefined) {
     return state.customPointValues[cardId];
   }
-  return CARDS[cardId]?.pointValue || 0.01;
+  return getDefaultPointValue(cardId);
 }
 
 // Get annual bonus points for a card (user-configurable, falls back to card default)
@@ -2392,7 +2405,7 @@ function showCardConfigEditor(preselectedCardId = null) {
 
 
     const currentPointValue = getPointValue(cardId) * 100;
-    const defaultPointValue = card.pointValue * 100;
+    const defaultPointValue = getDefaultPointValue(cardId) * 100;
     const disabled = state.disabledCredits[cardId] || [];
     
     // Get available years from transactions

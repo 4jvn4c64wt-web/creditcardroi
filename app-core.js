@@ -4525,7 +4525,7 @@ function calculateCardScenariosNetImpact() {
         const destCard = CARDS[row.bestCardId];
         if (destCard?.isBilt) {
           // Spending goes to another Bilt card - counts toward final
-          finalBiltSpend += row.spend || 0;
+          finalBiltSpend += row.actualSpend || 0;
         }
         // If goes to non-Bilt card, don't count it
       }
@@ -4572,7 +4572,7 @@ function calculateCardScenariosNetImpact() {
         if (row.sourceCategory === 'rent') continue;
         const destCard = CARDS[row.bestCardId];
         if (destCard?.isBilt) {
-          finalBiltSpend += row.spend || 0;
+          finalBiltSpend += row.actualSpend || 0;
         }
       }
     }

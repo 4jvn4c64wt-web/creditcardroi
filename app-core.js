@@ -891,10 +891,20 @@ function calculateBiltRentPoints(cardId, rentAmount, everydaySpend, billingMonth
     const points = Math.min(maxPointsUnlocked, rentAmount); // Cap at 1x rent
     const effectiveRate = rentAmount > 0 ? points / rentAmount : 0;
 
+    // For unconfigured cards, use conservative 1x default
+    const isConfigured = state.biltConfig[cardId] !== undefined;
+    if (effectiveRate <= 0 && !isConfigured && rentAmount > 0) {
+      return {
+        points: Math.round(rentAmount * 1),
+        rate: 1,
+        reason: '1x rent (estimated - configure card for actual rate)'
+      };
+    }
+
     const reason = points > 0
       ? `~${(effectiveRate * 100).toFixed(0)}% rent via $${monthlyBiltCash} Bilt Cash`
       : 'No Bilt Cash allocated for rent';
-    
+
     return { points: Math.round(points), rate: effectiveRate, reason };
   }
 }
@@ -1150,10 +1160,15 @@ function getMultiplier(cardId, category, txnDate = null, merchantDesc = '') {
       } else {
         // Flexible Bilt Cash option - use user-specified monthly redemption amount
         const monthlyRedemption = cfg.monthlyBiltCashRedemption || 0;
-        
+
         const maxPts = (monthlyRedemption / 3) * 100; // $3 Bilt Cash = 100 pts on $100 rent
         const rate = rentAmt > 0 ? Math.min(1, maxPts / rentAmt) : 0;
         if (rate <= 0) {
+          // For unconfigured cards (scenarios), use conservative 1x default
+          const isConfigured = state.biltConfig[cardId] !== undefined;
+          if (!isConfigured) {
+            return { rate: 1, reason: '1x rent (estimated - configure card for actual rate)' };
+          }
           return { rate: 0, reason: 'Rent: No Bilt Cash redemption configured' };
         }
         return { rate, reason: `Rent: ${(rate*100).toFixed(0)}% via $${monthlyRedemption.toFixed(0)} Bilt Cash/mo` };

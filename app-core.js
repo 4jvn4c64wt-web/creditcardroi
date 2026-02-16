@@ -4482,10 +4482,10 @@ function calculateCardScenariosNetImpact() {
   }
 
   // Bilt Cash calculation (4% of non-rent spend on Bilt cards, editable by user)
-  // When routing spend for Bilt Cash purposes, include the 4% Bilt Cash bonus in
-  // each Bilt card's effective rate, since users would keep spend on Bilt cards
-  // to earn the 4% cash back even when another card earns more points.
-  const BILT_CASH_RATE = 0.04;
+  // Bilt Cash is a flat 4% rebate on ALL non-rent spend on any Bilt card.
+  // It is completely independent of points/multipliers. The only question is
+  // whether a Bilt card exists in the wallet — if so, the user keeps spending
+  // on it for the 4% rebate regardless of which card earns the best points.
   let currentBiltSpend = 0;
   let finalBiltSpend = 0;
 
@@ -4501,78 +4501,37 @@ function calculateCardScenariosNetImpact() {
     }
   }
 
-  // Helper: For a subcategory + wallet, determine if a Bilt card (with 4% bonus)
-  // beats all non-Bilt cards. Returns true if spend should stay on a Bilt card.
-  function biltWinsSubcategory(sub, walletCardIds) {
-    let bestBiltValue = 0;
-    let bestNonBiltValue = 0;
-    for (const cardId of walletCardIds) {
-      const card = CARDS[cardId];
-      if (!card) continue;
-      const pv = getPointValue(cardId);
-      const mapped = mapToCardCategory(sub, cardId, sampleDate);
-      const mult = getCardScenariosMultiplier(cardId, mapped);
-      const val = mult.rate * pv;
-      if (card.isBilt) {
-        bestBiltValue = Math.max(bestBiltValue, val + BILT_CASH_RATE);
-      } else {
-        bestNonBiltValue = Math.max(bestNonBiltValue, val);
-      }
-    }
-    return bestBiltValue > 0 && bestBiltValue >= bestNonBiltValue;
+  // Determine if a Bilt card exists in the hypothetical wallet after the scenario
+  const walletAfter = currentWallet.filter(id => id !== wi.removeCardId);
+  if (wi.addCardId && CARDS[wi.addCardId] && !walletAfter.includes(wi.addCardId)) {
+    walletAfter.push(wi.addCardId);
   }
+  const hasBiltAfter = walletAfter.some(id => CARDS[id]?.isBilt);
+  const hasBiltBefore = currentWallet.some(id => CARDS[id]?.isBilt);
 
   // Calculate final Bilt spending after the scenario
   if (wi.scenarioType === 'add') {
-    // Final = current + spending moving to new Bilt card (considering 4% bonus)
     finalBiltSpend = currentBiltSpend;
-    if (wi.addCardId && CARDS[wi.addCardId]?.isBilt) {
-      // Build wallet with new card
-      const walletWithNew = [...currentWallet];
-      if (!walletWithNew.includes(wi.addCardId)) walletWithNew.push(wi.addCardId);
-      // Check each non-Bilt card's spend — does the new Bilt card (with 4%) attract it?
+    // If adding a Bilt card to a wallet that had no Bilt card,
+    // all non-rent spend across all cards would move to the Bilt card for the 4%
+    if (CARDS[wi.addCardId]?.isBilt && !hasBiltBefore) {
       for (const cardId of currentWallet) {
-        if (CARDS[cardId]?.isBilt) continue; // Skip existing Bilt cards
         const { subcategories } = getAnnualizedCardSpend(cardId, year);
         for (const [sub, data] of Object.entries(subcategories)) {
           if (sub === 'rent') continue;
-          if ((data.spend || 0) <= 0) continue;
-          // Was this spend already on a non-Bilt card (not counted in currentBiltSpend)?
-          // Check if with the new Bilt card, a Bilt card now wins
-          if (biltWinsSubcategory(sub, walletWithNew) && !biltWinsSubcategory(sub, currentWallet)) {
-            finalBiltSpend += data.spend || 0;
-          }
+          finalBiltSpend += data.spend || 0;
         }
       }
     }
   } else if (wi.scenarioType === 'remove') {
     const removeCard = CARDS[wi.removeCardId];
     if (removeCard?.isBilt) {
-      finalBiltSpend = 0;
-      // Build wallet without removed card
-      const walletAfter = currentWallet.filter(id => id !== wi.removeCardId);
-
-      // For each subcategory of removed card's spend, check if another Bilt card
-      // (with 4% bonus) wins — if so, spend stays on Bilt
-      const { subcategories } = getAnnualizedCardSpend(wi.removeCardId, year);
-      for (const [sub, data] of Object.entries(subcategories)) {
-        if (sub === 'rent') continue;
-        if ((data.spend || 0) <= 0) continue;
-        if (biltWinsSubcategory(sub, walletAfter)) {
-          finalBiltSpend += data.spend || 0;
-        }
-      }
-
-      // Add spending from OTHER Bilt cards that remain in wallet
-      for (const cardId of currentWallet) {
-        if (cardId === wi.removeCardId) continue;
-        const card = CARDS[cardId];
-        if (!card?.isBilt) continue;
-        const { subcategories: otherSubs } = getAnnualizedCardSpend(cardId, year);
-        for (const [sub, data] of Object.entries(otherSubs)) {
-          if (sub === 'rent') continue;
-          finalBiltSpend += data.spend || 0;
-        }
+      if (hasBiltAfter) {
+        // Another Bilt card remains — spend transfers to it
+        finalBiltSpend = currentBiltSpend;
+      } else {
+        // No Bilt card left — all Bilt Cash lost
+        finalBiltSpend = 0;
       }
     } else {
       finalBiltSpend = currentBiltSpend; // No change if removing non-Bilt
@@ -4580,55 +4539,29 @@ function calculateCardScenariosNetImpact() {
   } else if (wi.scenarioType === 'swap') {
     const removeCard = CARDS[wi.removeCardId];
     const addCard = CARDS[wi.addCardId];
-    finalBiltSpend = 0;
 
-    // Build hypothetical wallet: current - removed + added
-    const walletAfter = currentWallet.filter(id => id !== wi.removeCardId);
-    if (wi.addCardId && !walletAfter.includes(wi.addCardId) && CARDS[wi.addCardId]) {
-      walletAfter.push(wi.addCardId);
-    }
-
-    // Step 1: Spend from Bilt cards that remain in wallet (excluding removed card)
-    for (const cardId of currentWallet) {
-      if (cardId === wi.removeCardId) continue;
-      const card = CARDS[cardId];
-      if (!card?.isBilt) continue;
-      const { subcategories } = getAnnualizedCardSpend(cardId, year);
+    if (removeCard?.isBilt && addCard?.isBilt) {
+      // Bilt-to-Bilt swap: user keeps spending on the new Bilt card
+      finalBiltSpend = currentBiltSpend;
+    } else if (removeCard?.isBilt && !addCard?.isBilt) {
+      if (hasBiltAfter) {
+        // Another Bilt card remains — spend transfers to it
+        finalBiltSpend = currentBiltSpend;
+      } else {
+        // Losing only Bilt card, replacing with non-Bilt — all Bilt Cash lost
+        finalBiltSpend = 0;
+      }
+    } else if (!removeCard?.isBilt && addCard?.isBilt) {
+      // Gaining a Bilt card — removed card's non-rent spend goes to Bilt for the 4%
+      finalBiltSpend = currentBiltSpend;
+      const { subcategories } = getAnnualizedCardSpend(wi.removeCardId, year);
       for (const [sub, data] of Object.entries(subcategories)) {
         if (sub === 'rent') continue;
         finalBiltSpend += data.spend || 0;
       }
-    }
-
-    // Step 2: For removed card's spend, check if a Bilt card in the new wallet
-    // (with 4% bonus) wins each subcategory
-    if (removeCard?.isBilt) {
-      const { subcategories } = getAnnualizedCardSpend(wi.removeCardId, year);
-      for (const [sub, data] of Object.entries(subcategories)) {
-        if (sub === 'rent') continue;
-        if ((data.spend || 0) <= 0) continue;
-        if (biltWinsSubcategory(sub, walletAfter)) {
-          finalBiltSpend += data.spend || 0;
-        }
-      }
-    }
-
-    // Step 3: If adding a Bilt card, check non-Bilt card spend that might shift to it
-    if (addCard?.isBilt) {
-      for (const cardId of currentWallet) {
-        if (cardId === wi.removeCardId) continue;
-        if (CARDS[cardId]?.isBilt) continue; // Skip existing Bilt cards (already counted)
-        const { subcategories } = getAnnualizedCardSpend(cardId, year);
-        for (const [sub, data] of Object.entries(subcategories)) {
-          if (sub === 'rent') continue;
-          if ((data.spend || 0) <= 0) continue;
-          // Was this NOT on a Bilt card before, but now a Bilt card wins?
-          const walletBefore = currentWallet;
-          if (biltWinsSubcategory(sub, walletAfter) && !biltWinsSubcategory(sub, walletBefore)) {
-            finalBiltSpend += data.spend || 0;
-          }
-        }
-      }
+    } else {
+      // Neither is Bilt — no change
+      finalBiltSpend = currentBiltSpend;
     }
   }
 

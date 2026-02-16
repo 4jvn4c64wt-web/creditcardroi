@@ -296,7 +296,7 @@ This is the single source of truth for "how many points does this card earn on t
 
 1. **Cash+ quarterly categories** — User-selected 5% and 2% categories per quarter/year. Walks hierarchy to match.
 2. **CFF quarterly rotating categories** — Stored historical data with PayPal December-only handling and merchant-keyword bonuses.
-3. **Bilt cards (legacy vs 2.0)** — Before Feb 7, 2026: flat 3x dining, 2x travel, 1x else. After: card-specific rates with rent ratio calculation (housing-only) or Bilt Cash flexible option.
+3. **Bilt cards (legacy vs 2.0)** — Before Feb 7, 2026: flat 3x dining, 2x travel, 1x else. After: card-specific rates with rent ratio calculation (housing-only) or Bilt Cash flexible option. **Bilt Cash (4%) is a flat rebate on ALL non-rent spend on any Bilt card. It is completely independent of points/multipliers — do not mix or combine them.** See Section 13 for how Bilt Cash is handled in scenarios.
 4. **Chase Lyft partnership** — Date-dependent: CSR had 10x before April 2025, 5x after. CFU had 5x before, 2x after.
 5. **CSR legacy rates** — Before Oct 26, 2025: 10x Chase Travel, 3x dining, 3x all travel. After: new rate structure.
 6. **Capital One Venture X portal sub-types** — Hotels/rental cars get 10x, flights/other get 5x on Capital One Travel portal.
@@ -574,6 +574,26 @@ The Card Scenarios feature is a multi-step wizard in `app-core.js` (~lines 4521�
 | `calculateRemoveCardValue()` | Projects loss from cancelling a card |
 | `calculateSwapValue()` | Net impact of replacing one card with another |
 | `calculateCardScenariosNetImpact()` | Final net impact including credits |
+
+### Bilt Cash in Scenarios
+
+Bilt Cash is a **flat 4% rebate on all non-rent spend on any Bilt card**. It is completely separate from points — do not factor it into point-value comparisons or card routing logic. Points and Bilt Cash are independent benefits displayed as separate line items.
+
+The Bilt Cash scenario calculation (in `calculateCardScenariosNetImpact()`) works as follows:
+- `currentBiltSpend` = total non-rent spend currently on all Bilt cards (from transaction data)
+- `finalBiltSpend` = total non-rent spend that would be on Bilt cards after the scenario
+- `biltCashImpact = (finalBiltSpend - currentBiltSpend) * 0.04`
+
+**Key rule:** If a Bilt card exists in the wallet after the scenario, the user keeps all their non-rent Bilt spending on it (because the 4% rebate incentivizes this regardless of point rates). The routing logic that determines the best card for *points* does not apply to Bilt Cash.
+
+| Scenario | finalBiltSpend | Impact |
+|----------|---------------|--------|
+| Remove only Bilt card | 0 | Lose all Bilt Cash |
+| Remove Bilt card (another Bilt remains) | currentBiltSpend (unchanged) | $0 |
+| Swap Bilt → Bilt | currentBiltSpend (unchanged) | $0 |
+| Swap Bilt → non-Bilt (no other Bilt) | 0 | Lose all Bilt Cash |
+| Swap non-Bilt → Bilt | currentBiltSpend + removed card's spend | Gain Bilt Cash |
+| Add Bilt (first one) | All non-rent spend across wallet | Gain Bilt Cash |
 
 ### Fairness Principle
 

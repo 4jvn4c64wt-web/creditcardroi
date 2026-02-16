@@ -4482,57 +4482,125 @@ function calculateCardScenariosNetImpact() {
   }
 
   // Bilt Cash calculation (4% of non-rent spend on Bilt cards, editable by user)
-  // Mirrors the Card Config calculation: 4% of all non-rent Bilt spend
-  let totalBiltSpendGained = 0;
-  let totalBiltSpendLost = 0;
+  // Calculate based on FINAL spending allocation, not flows
+  let currentBiltSpend = 0;
+  let finalBiltSpend = 0;
 
-  // When adding a Bilt card, calculate ALL non-rent spend flowing TO it
-  if (wi.addCardId && (wi.scenarioType === 'add' || wi.scenarioType === 'swap')) {
+  // Calculate current baseline Bilt spending (all Bilt cards in current wallet)
+  const currentWallet = getActiveCardIds(year);
+  for (const cardId of currentWallet) {
+    const card = CARDS[cardId];
+    if (!card?.isBilt) continue;
+    const { subcategories } = getAnnualizedCardSpend(cardId, year);
+    for (const [sub, data] of Object.entries(subcategories)) {
+      if (sub === 'rent') continue; // Exclude rent
+      currentBiltSpend += data.spend || 0;
+    }
+  }
+
+  // Calculate final Bilt spending after the scenario
+  if (wi.scenarioType === 'add') {
+    // Final = current + spending moving to new Bilt card
+    finalBiltSpend = currentBiltSpend;
+    if (wi.addCardId && CARDS[wi.addCardId]?.isBilt) {
+      const addRows = getAddCardShiftRows(wi.addCardId, year) || [];
+      for (const row of addRows) {
+        if (row.newCategory === 'rent') continue; // Exclude rent
+        finalBiltSpend += row.actualSpend || 0;
+      }
+    }
+  } else if (wi.scenarioType === 'remove') {
+    // Final = current - spending leaving removed Bilt + spending staying on other Bilt cards
+    const removeCard = CARDS[wi.removeCardId];
+    if (removeCard?.isBilt) {
+      // Start with zero (we'll rebuild from scratch)
+      finalBiltSpend = 0;
+
+      const swapExtrasForBilt = undefined;
+      const removeRows = getRemoveCardShiftRows(wi.removeCardId, year, swapExtrasForBilt) || [];
+
+      // For each dollar leaving the removed Bilt card, check if it goes to another Bilt card
+      for (const row of removeRows) {
+        if (row.sourceCategory === 'rent') continue; // Exclude rent
+        const destCard = CARDS[row.bestCardId];
+        if (destCard?.isBilt) {
+          // Spending goes to another Bilt card - counts toward final
+          finalBiltSpend += row.spend || 0;
+        }
+        // If goes to non-Bilt card, don't count it
+      }
+
+      // Add spending from OTHER Bilt cards that remain in wallet
+      for (const cardId of currentWallet) {
+        if (cardId === wi.removeCardId) continue; // Skip the removed card
+        const card = CARDS[cardId];
+        if (!card?.isBilt) continue;
+        const { subcategories } = getAnnualizedCardSpend(cardId, year);
+        for (const [sub, data] of Object.entries(subcategories)) {
+          if (sub === 'rent') continue;
+          finalBiltSpend += data.spend || 0;
+        }
+      }
+    } else {
+      finalBiltSpend = currentBiltSpend; // No change if removing non-Bilt
+    }
+  } else if (wi.scenarioType === 'swap') {
+    // Final = spending on Bilt cards in the hypothetical wallet (current - removed + added)
+    const removeCard = CARDS[wi.removeCardId];
     const addCard = CARDS[wi.addCardId];
+
+    finalBiltSpend = 0;
+
+    // Step 1: Add spending from Bilt cards that remain in wallet (excluding removed card)
+    for (const cardId of currentWallet) {
+      if (cardId === wi.removeCardId) continue;
+      const card = CARDS[cardId];
+      if (!card?.isBilt) continue;
+      const { subcategories } = getAnnualizedCardSpend(cardId, year);
+      for (const [sub, data] of Object.entries(subcategories)) {
+        if (sub === 'rent') continue;
+        finalBiltSpend += data.spend || 0;
+      }
+    }
+
+    // Step 2: Process removed card spending - where does it go?
+    if (removeCard?.isBilt) {
+      const swapExtrasForBilt = wi.addCardId ? [wi.addCardId] : undefined;
+      const removeRows = getRemoveCardShiftRows(wi.removeCardId, year, swapExtrasForBilt) || [];
+
+      for (const row of removeRows) {
+        if (row.sourceCategory === 'rent') continue;
+        const destCard = CARDS[row.bestCardId];
+        if (destCard?.isBilt) {
+          finalBiltSpend += row.spend || 0;
+        }
+      }
+    }
+
+    // Step 3: If adding a Bilt card, add spending that moves to it FROM non-Bilt cards
     if (addCard?.isBilt) {
       const addRows = getAddCardShiftRows(wi.addCardId, year) || [];
       for (const row of addRows) {
-        // Exclude rent - Bilt Cash only applies to non-rent spend
         if (row.newCategory === 'rent') continue;
-        totalBiltSpendGained += row.actualSpend || 0;
-      }
-    }
-  }
-
-  // When removing a Bilt card, calculate ALL non-rent spend leaving it
-  if (wi.removeCardId && (wi.scenarioType === 'remove' || wi.scenarioType === 'swap')) {
-    const removeCard = CARDS[wi.removeCardId];
-    if (removeCard?.isBilt) {
-      const swapExtrasForBilt = wi.scenarioType === 'swap' && wi.addCardId ? [wi.addCardId] : undefined;
-      const removeRows = getRemoveCardShiftRows(wi.removeCardId, year, swapExtrasForBilt) || [];
-
-      console.log('[DEBUG] Remove Bilt card rows:', {
-        cardId: wi.removeCardId,
-        year,
-        rowCount: removeRows.length,
-        rows: removeRows.map(r => ({
-          sourceCategory: r.sourceCategory,
-          actualSpend: r.actualSpend,
-          bestCardName: r.bestCardName
-        }))
-      });
-
-      for (const row of removeRows) {
-        // Exclude rent - Bilt Cash only applies to non-rent spend
-        if (row.sourceCategory === 'rent') {
-          console.log('[DEBUG] Skipping rent spend:', row.actualSpend);
-          continue;
+        const sourceCard = CARDS[row.sourceCardId];
+        // Only count if coming from a non-Bilt card (avoid double-counting)
+        if (!sourceCard?.isBilt && row.sourceCardId !== wi.removeCardId) {
+          finalBiltSpend += row.actualSpend || 0;
         }
-        console.log('[DEBUG] Adding Bilt spend:', { category: row.sourceCategory, spend: row.actualSpend });
-        totalBiltSpendLost += row.actualSpend || 0;
       }
-
-      console.log('[DEBUG] Total Bilt spend lost (non-rent):', totalBiltSpendLost);
     }
   }
 
-  // Use override if set, otherwise calculate 4% of spend (matching Card Config logic)
-  const defaultBiltCash = (totalBiltSpendGained - totalBiltSpendLost) * 0.04;
+  console.log('[DEBUG] Bilt Cash calculation:', {
+    scenarioType: wi.scenarioType,
+    currentBiltSpend,
+    finalBiltSpend,
+    delta: finalBiltSpend - currentBiltSpend,
+    biltCashImpact: (finalBiltSpend - currentBiltSpend) * 0.04
+  });
+
+  // Use override if set, otherwise calculate 4% of delta
+  const defaultBiltCash = (finalBiltSpend - currentBiltSpend) * 0.04;
   const biltCashImpact = wi.biltCashOverride ?? defaultBiltCash;
 
   const creditsImpact = addCreditsTotal - removeCreditsTotal;
@@ -4544,8 +4612,8 @@ function calculateCardScenariosNetImpact() {
     creditsImpact,
     feeImpact,
     biltCashImpact,
-    totalBiltSpendGained,
-    totalBiltSpendLost,
+    currentBiltSpend,
+    finalBiltSpend,
     totalImpact,
     addCreditsTotal,
     removeFee,
@@ -4874,7 +4942,7 @@ function renderStep4Add() {
     try {
       const impact = calculateCardScenariosNetImpact();
       biltCashImpact = impact.biltCashImpact || 0;
-      defaultBiltCash = impact.totalBiltSpendGained * 0.04;
+      defaultBiltCash = impact.biltCashImpact || 0;
       // Always show Bilt Cash for Bilt cards
       showBiltCash = true;
     } catch (e) {
@@ -5193,12 +5261,12 @@ function renderStep4Remove() {
 
       console.log('[DEBUG] Bilt Cash calculation result:', {
         biltCashImpact: impact.biltCashImpact,
-        totalBiltSpendLost: impact.totalBiltSpendLost,
-        totalBiltSpendGained: impact.totalBiltSpendGained
+        currentBiltSpend: impact.currentBiltSpend,
+        finalBiltSpend: impact.finalBiltSpend
       });
 
       biltCashImpact = impact.biltCashImpact || 0;
-      defaultBiltCash = -impact.totalBiltSpendLost * 0.04;
+      defaultBiltCash = impact.biltCashImpact || 0;
       // Always show Bilt Cash for Bilt cards
       showBiltCash = true;
 
@@ -5376,7 +5444,7 @@ function renderStep4Swap() {
     try {
       const impact = calculateCardScenariosNetImpact();
       biltCashImpact = impact.biltCashImpact || 0;
-      defaultBiltCash = (impact.totalBiltSpendGained - impact.totalBiltSpendLost) * 0.04;
+      defaultBiltCash = impact.biltCashImpact || 0;
       // Always show Bilt Cash when swapping Bilt cards
       showBiltCash = true;
     } catch (e) {
@@ -5657,14 +5725,14 @@ function renderSummaryLine(scenarioType, impact) {
 
   if (scenarioType === 'add' || scenarioType === 'swap') {
     if (impact.addCreditsTotal > 0) parts.push(`+${formatCurrencyPrecise(impact.addCreditsTotal)} from credits`);
-    if (impact.biltCashImpact !== 0 && (impact.totalBiltSpendGained > 0 || impact.totalBiltSpendLost > 0)) {
+    if (impact.biltCashImpact !== 0 && (impact.currentBiltSpend > 0 || impact.finalBiltSpend > 0)) {
       parts.push(`${impact.biltCashImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(impact.biltCashImpact)} Bilt Cash`);
     }
     if (impact.addFee > 0) parts.push(`-${formatCurrencyPrecise(impact.addFee)} annual fee`);
   }
   if (scenarioType === 'remove' || scenarioType === 'swap') {
     if (impact.removeCreditsTotal > 0) parts.push(`-${formatCurrencyPrecise(impact.removeCreditsTotal)} lost credits`);
-    if (impact.biltCashImpact !== 0 && (impact.totalBiltSpendGained > 0 || impact.totalBiltSpendLost > 0) && scenarioType === 'remove') {
+    if (impact.biltCashImpact !== 0 && (impact.currentBiltSpend > 0 || impact.finalBiltSpend > 0) && scenarioType === 'remove') {
       parts.push(`${impact.biltCashImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(impact.biltCashImpact)} lost Bilt Cash`);
     }
     if (impact.removeFee > 0) parts.push(`+${formatCurrencyPrecise(impact.removeFee)} saved annual fee`);

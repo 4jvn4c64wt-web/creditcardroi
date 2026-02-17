@@ -637,7 +637,7 @@ The rent/plan prompt (step 2b) appears whenever **any Bilt card is in the curren
 
 Bilt Rewards is shown as a collapsible "Bilt Rewards" dropdown in the ledger:
 - **Plan & rent** — which plan is selected, monthly rent
-- **Everyday spend routed to Bilt** — total annual non-rent Bilt spend
+- **Non-rent spend routed to Bilt** — total annual non-rent Bilt spend
 - **Bilt Cash Earned** (4% of spend) — computed, read-only
 - **Bilt Cash Redeemed for Rent** — computed from plan, read-only
 - **Rent Points Unlocked** — computed, read-only (shows count + value)

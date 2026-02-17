@@ -5066,8 +5066,19 @@ function calculateCardScenariosNetImpact() {
   // Rent points: $3 Bilt Cash = 100 Bilt Points, capped at 1 point per $1 rent
   // Max useful Bilt Cash for rent = monthlyRent × 0.03 × 12
 
+  // Rent cap: max non-rent Bilt spend that generates useful rent points
+  const annualBiltSpendCap = monthlyRent * 0.75 * 12;
+
+  // Defensive: cap Bilt spend at rent cap to prevent overstatement of rent points.
+  // computeBiltRouting biltWins route unconditionally past the cap, so actual routed
+  // spend can exceed the cap. Cap both final and current for consistent deltas.
+  if (annualBiltSpendCap > 0) {
+    finalBiltSpend = Math.min(finalBiltSpend, annualBiltSpendCap);
+    currentBiltSpend = Math.min(currentBiltSpend, annualBiltSpendCap);
+  }
+
   const finalBiltCashEarned = finalBiltSpend * 0.04;
-  const currentBiltCashEarned = currentBiltCash;
+  const currentBiltCashEarned = currentBiltSpend * 0.04;
 
   // Max Bilt Cash that can usefully be redeemed for rent
   const maxBiltCashForRent = monthlyRent > 0 ? monthlyRent * 0.03 * 12 : 0;
@@ -5115,8 +5126,7 @@ function calculateCardScenariosNetImpact() {
   const rentPointsValueDelta = finalRentPointsValue - currentRentPointsValue;
   const biltCashRemainingDelta = finalBiltCashRemaining - currentBiltCashRemaining;
 
-  // Rent cap usage for display
-  const annualBiltSpendCap = monthlyRent * 0.75 * 12;
+  // Rent cap usage for display (annualBiltSpendCap computed earlier, finalBiltSpend already capped)
   const rentCapUsedPct = annualBiltSpendCap > 0 ? Math.min(100, (finalBiltSpend / annualBiltSpendCap) * 100) : 0;
 
   // Combined Bilt Rewards impact
@@ -5538,8 +5548,10 @@ function renderBiltRewardsLedger(impact, biltRewardsImpact, prefix, rentMotivate
   const countCash = impact.countCashAsValue || false;
   const plan = impact.biltCashPlan || 'maximize';
   const biltSpend = impact.finalBiltSpend || 0;
-  const capPct = impact.rentCapUsedPct || 0;
   const annualCap = impact.annualBiltSpendCap || 0;
+  // Display-level cap: show min(actual, cap) for the "Non-rent spend routed to Bilt" line
+  const displayBiltSpend = annualCap > 0 ? Math.min(biltSpend, annualCap) : biltSpend;
+  const capPct = annualCap > 0 ? Math.min(100, (displayBiltSpend / annualCap) * 100) : 0;
   const rmiRows = rentMotivatedRows || [];
   const rmiImpact = rentMotivatedImpact || 0;
 
@@ -5580,8 +5592,8 @@ function renderBiltRewardsLedger(impact, biltRewardsImpact, prefix, rentMotivate
 
   html += `
       <div style="display:flex;justify-content:space-between;padding:6px 0;">
-        <span style="font-size:13px;color:#57534e;">Everyday spend routed to Bilt</span>
-        <span class="mono" style="font-size:13px;font-weight:600;color:#57534e;" id="cardscenarios${prefix}BiltSpend">${formatCurrencyPrecise(biltSpend)}</span>
+        <span style="font-size:13px;color:#57534e;">Non-rent spend routed to Bilt</span>
+        <span class="mono" style="font-size:13px;font-weight:600;color:#57534e;" id="cardscenarios${prefix}BiltSpend">${formatCurrencyPrecise(displayBiltSpend)}</span>
       </div>
 
       <div style="display:flex;justify-content:space-between;padding:6px 0;">
@@ -5605,7 +5617,7 @@ function renderBiltRewardsLedger(impact, biltRewardsImpact, prefix, rentMotivate
       ${annualCap > 0 ? `<div style="padding:6px 0;">
         <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
           <span style="font-size:12px;color:#78716c;">Rent cap usage</span>
-          <span style="font-size:12px;color:#78716c;" id="cardscenarios${prefix}RentCapPct">${Math.round(capPct)}% (${formatCurrencyPrecise(biltSpend)} of ${formatCurrencyPrecise(annualCap)})</span>
+          <span style="font-size:12px;color:#78716c;" id="cardscenarios${prefix}RentCapPct">${Math.round(capPct)}% (${formatCurrencyPrecise(displayBiltSpend)} of ${formatCurrencyPrecise(annualCap)})</span>
         </div>
         <div style="background:#e7e5e4;border-radius:4px;height:6px;overflow:hidden;">
           <div style="background:${capPct >= 100 ? '#059669' : '#f59e0b'};height:100%;width:${Math.min(100, capPct)}%;border-radius:4px;transition:width 0.3s;"></div>
@@ -7000,9 +7012,12 @@ function updateBiltRewardsUI(impact, prefix) {
     biltRewardsValueEl.style.color = biltRewardsImpact >= 0 ? '#059669' : '#dc2626';
   }
 
-  // Bilt Spend
+  // Bilt Spend — display capped at rent cap
+  const biltSpend = impact.finalBiltSpend || 0;
+  const annualCap = impact.annualBiltSpendCap || 0;
+  const displayBiltSpend = annualCap > 0 ? Math.min(biltSpend, annualCap) : biltSpend;
   const biltSpendEl = document.getElementById(`cardscenarios${prefix}BiltSpend`);
-  if (biltSpendEl) biltSpendEl.textContent = formatCurrencyPrecise(impact.finalBiltSpend || 0);
+  if (biltSpendEl) biltSpendEl.textContent = formatCurrencyPrecise(displayBiltSpend);
 
   // Earned
   const earnedEl = document.getElementById(`cardscenarios${prefix}BiltCashEarned`);
@@ -7018,11 +7033,11 @@ function updateBiltRewardsUI(impact, prefix) {
   const rentPtsValueEl = document.getElementById(`cardscenarios${prefix}RentPointsValue`);
   if (rentPtsValueEl) rentPtsValueEl.textContent = formatCurrencyPrecise(impact.finalRentPointsValue || 0);
 
-  // Rent cap progress
+  // Rent cap progress — use display-capped spend value
   const capPctEl = document.getElementById(`cardscenarios${prefix}RentCapPct`);
   if (capPctEl) {
-    const capPct = impact.rentCapUsedPct || 0;
-    capPctEl.textContent = `${Math.round(capPct)}% (${formatCurrencyPrecise(impact.finalBiltSpend || 0)} of ${formatCurrencyPrecise(impact.annualBiltSpendCap || 0)})`;
+    const displayCapPct = annualCap > 0 ? Math.min(100, (displayBiltSpend / annualCap) * 100) : 0;
+    capPctEl.textContent = `${Math.round(displayCapPct)}% (${formatCurrencyPrecise(displayBiltSpend)} of ${formatCurrencyPrecise(annualCap)})`;
   }
 
   // Remaining

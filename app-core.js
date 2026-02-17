@@ -3907,7 +3907,16 @@ function calculateSwapValue(removeCardId, addCardId, year) {
     getYearFromDateString(t.date) === year
   );
 
+  const wi = state.cardScenarios;
+  const monthlyRent = wi.rentAmount || 0;
+  const biltCashPlan = wi.biltCashPlan || 'maximize';
+  const customRedemption = wi.biltCustomMonthlyRedemption || 0;
+  const walletBiltCard = hypotheticalWallet.find(id => CARDS[id]?.isBilt);
+
+  // Phase 1: Accumulate spend per subcategory and find best Bilt/non-Bilt destinations
+  const removeSpendBuckets = {}; // sub → { spend, sourceRate, sourcePV, sourceValue, isCategory, bestBilt, bestNonBilt, _totalPoints, _destValuePerDollar }
   const removeBuckets = {};
+
   for (const t of removeTxns) {
     const sub = t.subcategory || t.category || 'other';
     const amt = Math.abs(t.amount);
@@ -3951,44 +3960,29 @@ function calculateSwapValue(removeCardId, addCardId, year) {
     const removeMult = getCardScenariosMultiplier(removeCardId, removeCat);
     const removeValue = removeMult.rate * removePV;
 
-    // Find best destination in hypothetical wallet (includes new card)
-    let bestCardId = null;
-    let bestValue = 0;
-    let bestRate = 1;
-    let bestPV = 0.01;
-    let bestName = '';
-
-    for (const cardId of hypotheticalWallet) {
-      const cardPV = getPointValue(cardId);
-      const mapped = mapToCardCategory(sub, cardId, todayStr);
-      const mult = getCardScenariosMultiplier(cardId, mapped);
-      const val = mult.rate * cardPV;
-      if (val > bestValue) {
-        bestValue = val;
-        bestCardId = cardId;
-        bestRate = mult.rate;
-        bestPV = cardPV;
-        bestName = CARDS[cardId]?.shortName || CARDS[cardId]?.name || cardId;
+    if (!removeSpendBuckets[sub]) {
+      // Find best Bilt and best non-Bilt destinations
+      let bestBilt = null, bestNonBilt = null;
+      for (const cardId of hypotheticalWallet) {
+        const cardPV = getPointValue(cardId);
+        const mapped = mapToCardCategory(sub, cardId, todayStr);
+        const mult = getCardScenariosMultiplier(cardId, mapped);
+        const val = mult.rate * cardPV;
+        const entry = { cardId, rate: mult.rate, pv: cardPV, cat: mapped, val,
+          name: CARDS[cardId]?.shortName || CARDS[cardId]?.name || cardId };
+        if (CARDS[cardId]?.isBilt) {
+          if (!bestBilt || val > bestBilt.val) bestBilt = entry;
+        } else {
+          if (!bestNonBilt || val > bestNonBilt.val) bestNonBilt = entry;
+        }
       }
-    }
-
-    if (!bestCardId) {
-      bestValue = 0; bestRate = 0; bestPV = 0; bestName = 'No card';
-    }
-
-    const key = sub;
-    if (!removeBuckets[key]) {
-      removeBuckets[key] = {
-        subcategory: sub,
-        sourceRate: removeMult.rate,
-        sourcePointValue: removePV,
-        bestCardId, bestCardName: bestName, bestRate, bestPointValue: bestPV,
-        spend: 0, valueChange: 0,
-        isCategory: removeMult.rate > removeBaseRate
+      removeSpendBuckets[sub] = {
+        spend: 0, sourceRate: removeMult.rate, sourcePV: removePV,
+        sourceValue: removeValue, isCategory: removeMult.rate > removeBaseRate,
+        bestBilt, bestNonBilt
       };
     }
-    removeBuckets[key].spend += amt;
-    removeBuckets[key].valueChange += amt * (bestValue - removeValue);
+    removeSpendBuckets[sub].spend += amt;
   }
 
   // Compute effective source rate for rent from actual processed points
@@ -3996,10 +3990,112 @@ function calculateSwapValue(removeCardId, addCardId, year) {
     removeBuckets['rent'].sourceRate = removeBuckets['rent']._totalPoints / removeBuckets['rent'].spend;
   }
 
-  const removeRows = Object.values(removeBuckets);
-  if (annualizationFactor > 1) {
-    for (const r of removeRows) { r.spend *= annualizationFactor; r.valueChange *= annualizationFactor; }
+  // Phase 2: Apply Bilt-aware routing for non-rent subcategories
+  // Compute existing Bilt spend from other Bilt cards in the hypothetical wallet
+  let existingBiltSpend = 0;
+  if (walletBiltCard) {
+    for (const cid of hypotheticalWallet) {
+      if (!CARDS[cid]?.isBilt || cid === removeCardId) continue;
+      const { subcategories: subs } = getAnnualizedCardSpend(cid, year);
+      for (const [s, d] of Object.entries(subs)) {
+        if (s === 'rent') continue;
+        existingBiltSpend += d.spend || 0;
+      }
+    }
   }
+
+  const biltCandidates = [];
+  for (const [sub, bucket] of Object.entries(removeSpendBuckets)) {
+    const annualizedSpend = bucket.spend * annualizationFactor;
+    if (annualizedSpend <= 0) continue;
+
+    if (!bucket.bestBilt && bucket.bestNonBilt) {
+      // No Bilt destination — route to best non-Bilt directly
+      removeBuckets[sub] = {
+        subcategory: sub, sourceRate: bucket.sourceRate, sourcePointValue: bucket.sourcePV,
+        bestCardId: bucket.bestNonBilt.cardId, bestCardName: bucket.bestNonBilt.name,
+        bestRate: bucket.bestNonBilt.rate, bestPointValue: bucket.bestNonBilt.pv,
+        spend: annualizedSpend, valueChange: annualizedSpend * (bucket.bestNonBilt.val - bucket.sourceValue),
+        isCategory: bucket.isCategory
+      };
+    } else if (bucket.bestBilt && !bucket.bestNonBilt) {
+      // Only Bilt destination
+      removeBuckets[sub] = {
+        subcategory: sub, sourceRate: bucket.sourceRate, sourcePointValue: bucket.sourcePV,
+        bestCardId: bucket.bestBilt.cardId, bestCardName: bucket.bestBilt.name,
+        bestRate: bucket.bestBilt.rate, bestPointValue: bucket.bestBilt.pv,
+        spend: annualizedSpend, valueChange: annualizedSpend * (bucket.bestBilt.val - bucket.sourceValue),
+        isCategory: bucket.isCategory
+      };
+    } else if (bucket.bestBilt && bucket.bestNonBilt) {
+      // Both exist — candidate for Bilt routing optimization
+      biltCandidates.push({
+        sub, spend: annualizedSpend,
+        biltCardId: bucket.bestBilt.cardId, biltRate: bucket.bestBilt.rate, biltPV: bucket.bestBilt.pv,
+        biltCat: bucket.bestBilt.cat, biltName: bucket.bestBilt.name,
+        altCardId: bucket.bestNonBilt.cardId, altRate: bucket.bestNonBilt.rate, altPV: bucket.bestNonBilt.pv,
+        altCat: bucket.bestNonBilt.cat, altName: bucket.bestNonBilt.name,
+        sourceRate: bucket.sourceRate, sourcePV: bucket.sourcePV,
+        sourceValue: bucket.sourceValue, isCategory: bucket.isCategory
+      });
+    }
+  }
+
+  // Track cumulative Bilt spend for Component 2 cap coordination
+  let component1BiltSpend = existingBiltSpend;
+  // Add spend from subs that route directly to Bilt (no non-Bilt option)
+  for (const [sub, bucket] of Object.entries(removeBuckets)) {
+    if (sub === 'rent') continue;
+    if (bucket.bestCardId && CARDS[bucket.bestCardId]?.isBilt) {
+      component1BiltSpend += bucket.spend || 0;
+    }
+  }
+
+  // Apply computeBiltRouting for candidates where both Bilt and non-Bilt destinations exist
+  console.log('[DEBUG calculateSwapValue Comp1] biltCandidates:', biltCandidates.length,
+    'walletBiltCard:', walletBiltCard,
+    biltCandidates.map(c => ({ sub: c.sub, spend: (c.spend * annualizationFactor).toFixed(0), sacrifice: (c.altRate * c.altPV - c.biltRate * c.biltPV).toFixed(4), bilt: c.biltName, alt: c.altName })));
+
+  if (biltCandidates.length > 0 && walletBiltCard) {
+    const result = computeBiltRouting(biltCandidates, walletBiltCard, monthlyRent, biltCashPlan, customRedemption, existingBiltSpend);
+    component1BiltSpend = result.cumulativeBiltSpend;
+    for (const route of result.routes) {
+      const orig = biltCandidates.find(c => c.sub === route.sub);
+      const sourceValue = orig ? orig.sourceValue : 0;
+      const destValue = route.destRate * route.destPV;
+      const key = route.sub;
+      if (!removeBuckets[key]) {
+        removeBuckets[key] = {
+          subcategory: route.sub, sourceRate: route.sourceRate, sourcePointValue: route.sourcePV,
+          bestCardId: route.destCardId, bestCardName: route.destName,
+          bestRate: route.destRate, bestPointValue: route.destPV,
+          spend: route.spend, valueChange: route.spend * (destValue - sourceValue),
+          isCategory: orig?.isCategory || false,
+          routeReason: route.routeReason
+        };
+      } else {
+        // Partial split — same subcategory can appear twice (e.g., cap boundary)
+        // Create a separate entry with a unique key
+        const splitKey = `${key}__split_${Math.random().toString(36).slice(2, 6)}`;
+        removeBuckets[splitKey] = {
+          subcategory: route.sub, sourceRate: route.sourceRate, sourcePointValue: route.sourcePV,
+          bestCardId: route.destCardId, bestCardName: route.destName,
+          bestRate: route.destRate, bestPointValue: route.destPV,
+          spend: route.spend, valueChange: route.spend * (destValue - sourceValue),
+          isCategory: orig?.isCategory || false,
+          routeReason: route.routeReason
+        };
+      }
+    }
+  }
+
+  // Annualize rent bucket (non-rent already annualized above)
+  if (removeBuckets['rent']) {
+    removeBuckets['rent'].spend *= annualizationFactor;
+    removeBuckets['rent'].valueChange *= annualizationFactor;
+  }
+
+  const removeRows = Object.values(removeBuckets);
   removeRows.sort((a, b) => a.valueChange - b.valueChange);
   const removeChange = removeRows.reduce((sum, r) => sum + r.valueChange, 0);
   const removeCategoryChange = removeRows.filter(r => r.isCategory).reduce((sum, r) => sum + r.valueChange, 0);
@@ -4015,61 +4111,130 @@ function calculateSwapValue(removeCardId, addCardId, year) {
 
   // Compare new card against best existing card in hypothetical wallet (excl. new card)
   const existingWallet = hypotheticalWallet.filter(id => id !== addCardId);
+  const newCardIsBilt = !!CARDS[addCardId]?.isBilt;
+  const comp2BiltCard = newCardIsBilt ? addCardId : existingWallet.find(id => CARDS[id]?.isBilt);
 
-  const addBuckets = {};
+  // Phase 1: Accumulate spend per subcategory
+  const addSpendBuckets = {}; // sub → { spend, bestExisting }
   for (const t of addTxns) {
     const sub = t.subcategory || t.category || 'other';
-
-    // Rent is non-transferable — requires Bilt rent payment system setup
     if (sub === 'rent') continue;
+    const amt = Math.abs(t.amount);
+    if (!addSpendBuckets[sub]) addSpendBuckets[sub] = { spend: 0 };
+    addSpendBuckets[sub].spend += amt;
+  }
 
-    // Find the best existing card in the wallet for this subcategory
-    let bestExistingCardId = t.cardId;
-    let bestExistingRate = 0;
-    let bestExistingValue = 0;
-    let bestExistingPV = getPointValue(t.cardId);
+  // Phase 2: For each subcategory, find best existing and new card values, apply Bilt routing
+  const addBiltCandidates = [];
+  const addDirectRows = [];
 
+  for (const [sub, bucket] of Object.entries(addSpendBuckets)) {
+    const annualizedSpend = bucket.spend * annualizationFactor;
+    if (annualizedSpend <= 0) continue;
+
+    // Find best existing card
+    let bestExisting = { cardId: null, rate: 0, pv: 0.01, val: 0, cat: 'other', name: '', isBilt: false };
     for (const cid of existingWallet) {
       const pv = getPointValue(cid);
       const mapped = mapToCardCategory(sub, cid, todayStr);
       const mult = getCardScenariosMultiplier(cid, mapped);
       const val = mult.rate * pv;
-      if (val > bestExistingValue) {
-        bestExistingValue = val;
-        bestExistingCardId = cid;
-        bestExistingRate = mult.rate;
-        bestExistingPV = pv;
+      if (val > bestExisting.val) {
+        bestExisting = { cardId: cid, rate: mult.rate, pv, val, cat: mapped,
+          name: CARDS[cid]?.shortName || CARDS[cid]?.name || cid, isBilt: !!CARDS[cid]?.isBilt };
       }
     }
 
+    // New card value
     const newCat = mapToCardCategory(sub, addCardId, todayStr);
     const newMult = getCardScenariosMultiplier(addCardId, newCat);
     const newValue = newMult.rate * addPV;
 
-    // Only count if the new card beats the BEST existing card in the wallet
-    if (newMult.rate > bestExistingRate && newValue > bestExistingValue) {
-      const key = `${bestExistingCardId}|${sub}`;
-      if (!addBuckets[key]) {
-        addBuckets[key] = {
-          sourceCardId: bestExistingCardId,
-          sourceCardName: CARDS[bestExistingCardId]?.shortName || CARDS[bestExistingCardId]?.name || bestExistingCardId,
-          subcategory: sub,
-          sourceRate: bestExistingRate,
-          sourcePointValue: bestExistingPV,
-          newRate: newMult.rate,
-          newPointValue: addPV,
-          spend: 0, additionalValue: 0
-        };
+    // Determine if Bilt routing optimization applies
+    const hasBiltOption = newCardIsBilt || bestExisting.isBilt;
+    if (!hasBiltOption || !comp2BiltCard) {
+      // No Bilt involved — pure points comparison
+      if (newValue > bestExisting.val) {
+        addDirectRows.push({
+          sourceCardId: bestExisting.cardId, sourceCardName: bestExisting.name,
+          subcategory: sub, sourceRate: bestExisting.rate, sourcePointValue: bestExisting.pv,
+          newRate: newMult.rate, newPointValue: addPV,
+          spend: annualizedSpend, additionalValue: annualizedSpend * (newValue - bestExisting.val)
+        });
       }
-      const amt = Math.abs(t.amount);
-      addBuckets[key].spend += amt;
-      addBuckets[key].additionalValue += amt * (newValue - bestExistingValue);
+      continue;
     }
+
+    // Bilt vs non-Bilt routing
+    let biltOption, altOption;
+    if (newCardIsBilt && !bestExisting.isBilt) {
+      biltOption = { cardId: addCardId, rate: newMult.rate, pv: addPV, cat: newCat,
+        name: CARDS[addCardId]?.shortName || CARDS[addCardId]?.name || addCardId };
+      altOption = bestExisting;
+    } else if (!newCardIsBilt && bestExisting.isBilt) {
+      biltOption = { cardId: bestExisting.cardId, rate: bestExisting.rate, pv: bestExisting.pv,
+        cat: bestExisting.cat, name: bestExisting.name };
+      altOption = { cardId: addCardId, rate: newMult.rate, pv: addPV, cat: newCat,
+        name: CARDS[addCardId]?.shortName || CARDS[addCardId]?.name || addCardId };
+    } else {
+      // Both Bilt — pure comparison
+      if (newValue > bestExisting.val) {
+        addDirectRows.push({
+          sourceCardId: bestExisting.cardId, sourceCardName: bestExisting.name,
+          subcategory: sub, sourceRate: bestExisting.rate, sourcePointValue: bestExisting.pv,
+          newRate: newMult.rate, newPointValue: addPV,
+          spend: annualizedSpend, additionalValue: annualizedSpend * (newValue - bestExisting.val)
+        });
+      }
+      continue;
+    }
+
+    addBiltCandidates.push({
+      sub, spend: annualizedSpend,
+      biltCardId: biltOption.cardId, biltRate: biltOption.rate, biltPV: biltOption.pv,
+      biltCat: biltOption.cat, biltName: biltOption.name,
+      altCardId: altOption.cardId, altRate: altOption.rate, altPV: altOption.pv,
+      altCat: altOption.cat, altName: altOption.name,
+      sourceRate: bestExisting.rate, sourcePV: bestExisting.pv,
+      _newCardIsBilt: newCardIsBilt, _existingIsBilt: bestExisting.isBilt,
+      _bestExisting: bestExisting, _newCat: newCat, _newRate: newMult.rate, _newPV: addPV
+    });
   }
 
-  const addRows = Object.values(addBuckets);
-  if (annualizationFactor > 1) {
-    for (const r of addRows) { r.spend *= annualizationFactor; r.additionalValue *= annualizationFactor; }
+  const addRows = [...addDirectRows];
+
+  // Apply Bilt routing for Component 2 candidates
+  if (addBiltCandidates.length > 0 && comp2BiltCard) {
+    const comp2Result = computeBiltRouting(addBiltCandidates, comp2BiltCard, monthlyRent, biltCashPlan, customRedemption, component1BiltSpend);
+    for (const route of comp2Result.routes) {
+      const orig = addBiltCandidates.find(c => c.sub === route.sub && c.spend >= route.spend - 0.01);
+      if (!orig) continue;
+
+      if (orig._newCardIsBilt && route.destCardId === addCardId) {
+        // New Bilt card won — shift from existing to new card
+        const oldVal = orig._bestExisting.val;
+        const newVal = route.destRate * route.destPV;
+        addRows.push({
+          sourceCardId: orig._bestExisting.cardId, sourceCardName: orig._bestExisting.name,
+          subcategory: route.sub, sourceRate: orig._bestExisting.rate, sourcePointValue: orig._bestExisting.pv,
+          newRate: orig._newRate, newPointValue: orig._newPV,
+          spend: route.spend, additionalValue: route.spend * (newVal - oldVal),
+          routeReason: route.routeReason
+        });
+      } else if (!orig._newCardIsBilt && route.destCardId === addCardId) {
+        // New non-Bilt card won over existing Bilt — shift to new card
+        const oldVal = orig._bestExisting.val;
+        const newVal = orig._newRate * orig._newPV;
+        addRows.push({
+          sourceCardId: orig._bestExisting.cardId, sourceCardName: orig._bestExisting.name,
+          subcategory: route.sub, sourceRate: orig._bestExisting.rate, sourcePointValue: orig._bestExisting.pv,
+          newRate: orig._newRate, newPointValue: orig._newPV,
+          spend: route.spend, additionalValue: route.spend * (newVal - oldVal),
+          routeReason: route.routeReason
+        });
+      }
+      // If Bilt defended (existing Bilt won), no row is added — spend stays on existing card
+    }
   }
 
   // Add synthetic rent row when swapping in first Bilt card with rent amount specified
@@ -4202,6 +4367,11 @@ function computeBiltRouting(candidates, biltCardId, monthlyRent, biltCashPlan, c
   // Pre-load existing Bilt spend toward the cap
   let cumulativeBiltSpend = existingBiltSpend || 0;
 
+  console.log('[DEBUG computeBiltRouting]', {
+    candidateCount: candidates.length, annualBiltSpendCap, rentUpliftPerDollar,
+    existingBiltSpend: existingBiltSpend || 0, biltCashPlan, monthlyRent, biltPV
+  });
+
   // Step C: For each category, calculate sacrifice cost
   const categorized = candidates.map(c => {
     const biltBaseVal = c.biltRate * c.biltPV;
@@ -4215,6 +4385,9 @@ function computeBiltRouting(candidates, biltCardId, monthlyRent, biltCashPlan, c
 
   // Step D: Sort alt-wins by sacrifice cost ascending (cheapest sacrifice first)
   altWins.sort((a, b) => a.sacrificeCost - b.sacrificeCost);
+
+  console.log('[DEBUG computeBiltRouting] biltWins:', biltWins.map(c => ({ sub: c.sub, spend: c.spend, sacrifice: c.sacrificeCost })));
+  console.log('[DEBUG computeBiltRouting] altWins:', altWins.map(c => ({ sub: c.sub, spend: c.spend, sacrifice: c.sacrificeCost, netBenefit: rentUpliftPerDollar - c.sacrificeCost })));
 
   const routes = [];
 
@@ -5843,6 +6016,10 @@ function renderStep4Swap() {
   initCreditDefaults(wi.removeCardId, wi.removeCreditToggles, wi.removeCreditAmounts);
 
   const { removeChange, removeRows, addGain, addRows, totalSpendChange, annualizationFactor } = calculateSwapValue(wi.removeCardId, wi.addCardId, wi.selectedYear);
+
+  console.log('[DEBUG renderStep4Swap] removeRows:', removeRows.map(r => ({ sub: r.subcategory, dest: r.bestCardName, bestCardId: r.bestCardId, spend: r.spend?.toFixed(0), valueChange: r.valueChange?.toFixed(2), routeReason: r.routeReason })));
+  console.log('[DEBUG renderStep4Swap] addRows:', addRows.map(r => ({ sub: r.subcategory, source: r.sourceCardName, rate: r.newRate, spend: r.spend?.toFixed(0), addVal: r.additionalValue?.toFixed(2), routeReason: r.routeReason })));
+
   const addCredits = getAddCardCreditsTotal();
   const removeCredits = getRemoveCardCreditsTotal();
   const netCredits = addCredits - removeCredits;

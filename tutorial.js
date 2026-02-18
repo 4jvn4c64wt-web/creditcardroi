@@ -242,18 +242,19 @@ const TOUR_STEPS = [
     clickRequired: false,
     onShow: 'flip-first-card'
   },
-  // Manage menu in the condensed nav bar
+  // Manage menu in the condensed nav bar — click to open it
   {
     type: 'spotlight',
     phase: 'summary-tour',
     id: 'manage-menu',
     target: '#manageBtn',
     title: 'Manage Menu',
-    content: 'The <strong>Manage</strong> button is your hub for configuration. Inside you\'ll find:<br><br>\u2022 <strong>Card Mapping</strong> \u2014 match account numbers to reward cards<br>\u2022 <strong>Card Config</strong> \u2014 point values, credits, quarterly categories<br>\u2022 <strong>Manage Data</strong> \u2014 export, clear, or reset your data',
+    content: 'The <strong>Manage</strong> button is your hub for configuration. Click it to see Card Mapping, Card Config, and Manage Data.',
     position: 'bottom',
-    clickRequired: false
+    clickRequired: true,
+    clickAction: 'open-manage'
   },
-  // Navigate to Card Config via Manage dropdown
+  // Card Config inside the now-open Manage dropdown
   {
     type: 'spotlight',
     phase: 'summary-tour',
@@ -261,10 +262,9 @@ const TOUR_STEPS = [
     target: '#cardConfigBtn',
     title: 'Card Configuration',
     content: 'Click here to configure each card\'s settings \u2014 point values, credits to track, and quarterly bonus categories.',
-    position: 'bottom',
+    position: 'left',
     clickRequired: true,
-    clickAction: 'navigate-card-config',
-    onShow: 'open-manage-dropdown'
+    clickAction: 'navigate-card-config'
   },
 
   // Phase 3: Card Config Tour
@@ -612,12 +612,6 @@ function showTourModal(step) {
 function showTourSpotlight(step, retryCount = 0) {
   document.getElementById('tourModal').classList.add('hidden');
 
-  // Pre-show actions that must run before target lookup (e.g. opening dropdowns)
-  if (step.onShow === 'open-manage-dropdown' && retryCount === 0) {
-    const manageDropdown = document.getElementById('manageDropdown');
-    if (manageDropdown) manageDropdown.classList.add('open');
-  }
-
   const target = document.querySelector(step.target);
   if (!target) {
     // Element may not be rendered yet (e.g. after navigating to transactions view).
@@ -714,8 +708,6 @@ function showTourSpotlight(step, retryCount = 0) {
     if (firstCard && !firstCard.classList.contains('flipped')) {
       setTimeout(() => firstCard.classList.add('flipped'), 500);
     }
-  } else if (step.onShow === 'open-manage-dropdown') {
-    // Already handled in pre-show above — no additional action needed
   }
 
   // Function to position spotlight and tooltip, then reveal them
@@ -777,9 +769,18 @@ function showTourSpotlight(step, retryCount = 0) {
 
 // Handle spotlight click
 function handleSpotlightClick(step) {
-  if (step.clickAction === 'navigate-card-config') {
+  if (step.clickAction === 'open-manage') {
+    // Open the Manage dropdown, then advance to next step (Card Config spotlight)
+    const manageDropdown = document.getElementById('manageDropdown');
+    if (manageDropdown) manageDropdown.classList.add('open');
     document.getElementById('tourOverlay').classList.add('hidden');
-    // Close the manage dropdown if it was opened for this step
+    setTimeout(() => {
+      state.tourStep++;
+      renderTourStep();
+    }, 300);
+  } else if (step.clickAction === 'navigate-card-config') {
+    document.getElementById('tourOverlay').classList.add('hidden');
+    // Close the manage dropdown before navigating
     const manageDropdown = document.getElementById('manageDropdown');
     if (manageDropdown) manageDropdown.classList.remove('open');
     showCardConfigEditor();

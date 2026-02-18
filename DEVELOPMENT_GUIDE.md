@@ -558,7 +558,7 @@ Logic is in `getCategoryBadgeStyle()` (~line 1688).
 
 ## 13. Card Scenarios (What-If)
 
-The Card Scenarios feature is a multi-step wizard in `app-core.js` (~lines 4521–5700). The tab is visible in both free and pro tiers, but free users see a pro-gating modal instead of the wizard (handled in `app.js`).
+The Card Scenarios feature is a multi-step wizard in `app-core.js` (~lines 4521–7100). The tab is visible in both free and pro tiers, but free users see a pro-gating modal instead of the wizard (handled in `app.js`).
 
 ### Scenario Types
 - **Add a card** — "What if I got card X?"
@@ -633,19 +633,33 @@ The rent/plan prompt (step 2b) appears whenever **any Bilt card is in the curren
 - Bilt Cash plan (maximize / keep as cash / custom)
 - Custom monthly redemption amount (if custom plan)
 
-#### Display
+#### Display — Unified Point Value Change Section
 
-Bilt Rewards is shown as a collapsible "Bilt Rewards" dropdown in the ledger:
-- **Plan & rent** — which plan is selected, monthly rent
-- **Non-rent spend routed to Bilt** — total annual non-rent Bilt spend
-- **Bilt Cash Earned** (4% of spend) — computed, read-only
-- **Bilt Cash Redeemed for Rent** — computed from plan, read-only
-- **Rent Points Unlocked** — computed, read-only (shows count + value)
-- **Rent cap usage** — progress bar showing % of cap used
-- **Bilt Cash Remaining** — Earned − Redeemed (marked "not counted" when plan = maximize)
-- **Total Bilt Rewards** — Rent Points Value + Remaining (if plan ≠ maximize)
+When Bilt is involved, **all spend shifts AND rent points are shown inside a single "Point Value Change" section** — there is no separate "Bilt Rewards" summary line. The top-level breakdown is: `Credits | Point value change (incl. rent pts) | Annual fee | Net`.
 
-In the summary header, a separate "Bilt Rewards" line shows the net delta.
+**Non-Bilt scenarios**: Flat spend-shift table inside Point Value Change, no grouping.
+
+**Bilt scenarios**: Rows are classified into two collapsible sub-groups inside Point Value Change:
+- **Non-category spend** — rows where the source card's rate ≤ its `baseRate`
+- **Category spend** — rows where the source card's rate > its `baseRate`
+
+Each sub-group is a collapsible section (expanded by default) showing a table of per-subcategory rows with source → dest rates and impact amounts. If a sub-group has > 8 rows, its table scrolls with `max-height: 280px`.
+
+Below the sub-groups, summary lines show:
+1. **Base point changes** — subtotal of all spend shifts (= `baseSpendingImpact`)
+2. **Rent points from Bilt Cash (N pts @ $X)** — rent points value delta (hidden when plan = 'cash')
+3. **Bilt Cash remaining** — remaining cash delta (shown only when `countCashAsValue`)
+4. **Net point value change** — sum of the above (= `pointValueChange`)
+
+A collapsible "Rent points breakdown" (collapsed by default) shows Bilt Cash detail: spend, earned, redeemed, rent points count + value, cap usage %, remaining.
+
+An ℹ tooltip appears on "Category spend" when any category row has `destRate < sourceRate` (i.e., moving spend to a lower-rate card for rent benefit).
+
+**Key rendering functions:**
+- `renderPointValueContent(prefix, rows, baseTotal, biltImpact, tableId, annualizationFactor)` — renders the full inner content
+- `_renderSpendGroup(groupId, label, rows, ...)` — renders a single collapsible sub-group
+- `_renderBiltSummaryLines(prefix, baseTotal, biltImpact)` — renders summary math lines
+- `updatePointValueContent(prefix, rows, baseTotal, biltImpact)` — live-updates all values without re-rendering
 
 #### State Properties
 
@@ -656,6 +670,9 @@ In the summary header, a separate "Bilt Rewards" line shows the net delta.
 #### Calculation (in `calculateCardScenariosNetImpact()`)
 
 The return object includes:
+- `pointValueChange` — combined: `spendingImpact + biltRewardsImpact` (used as the single "Point value change" in top-level summary)
+- `baseSpendingImpact` — alias for `spendingImpact` (used for "Base point changes" subtotal in display)
+- `spendingImpact` — net value change from card-to-card spend shifts (kept for backward compat)
 - `biltRewardsImpact` — net delta: `rentPointsValueDelta + (countCashAsValue ? cashRemainingDelta : 0)`
 - `rentPointsValueDelta` — change in annual rent points value
 - `biltCashRemainingDelta` — change in remaining Bilt Cash after redemption

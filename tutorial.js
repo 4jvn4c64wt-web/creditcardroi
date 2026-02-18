@@ -9,13 +9,13 @@ const HELP_CONTENT = {
     sections: [
       {
         icon: '\u{1F4CA}',
-        title: 'Card Performance Table',
-        text: 'Shows points earned, credits used, and net value for each card. Click column headers to sort. Click \u25BC next to Credits to see a breakdown of each credit.'
+        title: 'Card Performance Cards',
+        text: 'Each card shows net value, annual fee, and a performance tag on the front. <strong>Click any card to flip it</strong> and see the full breakdown: spend, points, credits (with dropdown), and net value.'
       },
       {
-        icon: '\u{1F3A8}',
-        title: 'Category Colors',
-        text: 'Colors compare across your cards. <span style="background:#dcfce7;padding:2px 6px;border-radius:4px;">Green</span> = Best card in your wallet for that purchase. <span style="background:#fef9c3;padding:2px 6px;border-radius:4px;">Yellow</span> = Good, but a better option exists. <span style="background:#fee2e2;padding:2px 6px;border-radius:4px;">Red</span> = Another card would have earned more. Use this to optimize which card to use going forward.'
+        icon: '\u{1F4B0}',
+        title: 'Net Value Header',
+        text: 'Your overall Net Value stays visible at the top of every page. Click the <strong>+</strong> button to expand a breakdown: Points Value + Credits \u2212 Annual Fees = Net Value. It stays open until you close it.'
       },
       {
         icon: '\u{1F4C5}',
@@ -25,7 +25,7 @@ const HELP_CONTENT = {
       {
         icon: '\u26A1',
         title: 'Manual Credits',
-        text: 'Credits marked with \u26A1 (like Uber Cash) aren\'t auto-detected. Go to Card Config to mark which months you\'ve claimed them.'
+        text: 'Credits marked with \u26A1 (like Uber Cash) aren\'t auto-detected. Go to Card Config (under Manage) to mark which months you\'ve claimed them.'
       }
     ]
   },
@@ -196,50 +196,78 @@ const TOUR_STEPS = [
     id: 'wait-mapping'
   },
 
-  // Phase 2: Summary Tour (spotlight-based) - steps 4-8
+  // Phase 2: Summary Tour (spotlight-based)
+  // Net Value in the top bar — always visible across all pages
   {
     type: 'spotlight',
     phase: 'summary-tour',
-    id: 'metrics-bar',
-    target: '#topMetrics',
-    title: 'Your Key Metrics \u{1F4CA}',
-    content: 'These are your totals for the selected time period. <strong>Net Value</strong> = Points Value + Credits \u2212 Annual Fees. This is your true ROI.',
+    id: 'net-value-header',
+    target: '.shell-net-block',
+    title: 'Your Net Value',
+    content: 'This is your overall <strong>Net Value</strong> across all cards \u2014 it stays visible at the top of every page so you always know where you stand. Net Value = Points Value + Credits \u2212 Annual Fees.',
     position: 'bottom',
     clickRequired: false
   },
+  // The + button that opens the sticky details strip
   {
     type: 'spotlight',
     phase: 'summary-tour',
-    id: 'card-table',
-    target: '#viewContainer table',
-    title: 'Card Performance Table \u{1F4B3}',
-    content: 'Each row shows one card\'s performance \u2014 spend, points earned, credits used, and net value. Click column headers to sort.',
-    position: 'top',
+    id: 'net-value-expand',
+    target: '#shellExpandBtn',
+    title: 'Expand for Details',
+    content: 'Click the <strong>+</strong> button to open a breakdown showing how your Net Value is calculated: Points Value + Credits \u2212 Annual Fees = Net Value. It stays open until you close it.',
+    position: 'bottom',
     clickRequired: false
   },
+  // Flippable card front — high-level summary
   {
     type: 'spotlight',
     phase: 'summary-tour',
-    id: 'credits-expand',
-    target: '.detail-toggle',
-    title: 'Credit Details \u25BC',
-    content: 'Click the \u25BC arrow to see a breakdown of which credits were detected for each card. Credits marked \u26A1 require manual tracking.',
-    position: 'left',
+    id: 'card-front',
+    target: '.flip-card',
+    title: 'Card Performance Cards',
+    content: 'Each card shows a high-level summary: the card\'s <strong>net value</strong>, <strong>annual fee</strong>, and performance tags (MVP, Workhorse, or Deadweight). Cards with annual fees also have a <strong>CY</strong> toggle to switch between calendar year and card anniversary year \u2014 useful when deciding whether to keep a card at renewal.',
+    position: 'right',
     clickRequired: false
   },
+  // Flippable card back — detailed data
+  {
+    type: 'spotlight',
+    phase: 'summary-tour',
+    id: 'card-back',
+    target: '.flip-card',
+    title: 'Flip for Full Breakdown',
+    content: 'Click any card to <strong>flip it over</strong> and see the full breakdown: total spend, points earned, points value, credits used (with a dropdown for individual credits), annual fee, and net value. This is where all the detailed performance data lives.',
+    position: 'right',
+    clickRequired: false,
+    onShow: 'flip-first-card'
+  },
+  // Manage menu in the condensed nav bar
+  {
+    type: 'spotlight',
+    phase: 'summary-tour',
+    id: 'manage-menu',
+    target: '#manageBtn',
+    title: 'Manage Menu',
+    content: 'The <strong>Manage</strong> button is your hub for configuration. Inside you\'ll find:<br><br>\u2022 <strong>Card Mapping</strong> \u2014 match account numbers to reward cards<br>\u2022 <strong>Card Config</strong> \u2014 point values, credits, quarterly categories<br>\u2022 <strong>Manage Data</strong> \u2014 export, clear, or reset your data',
+    position: 'bottom',
+    clickRequired: false
+  },
+  // Navigate to Card Config via Manage dropdown
   {
     type: 'spotlight',
     phase: 'summary-tour',
     id: 'card-config-btn',
     target: '#cardConfigBtn',
-    title: 'Card Configuration \u2699\uFE0F',
+    title: 'Card Configuration',
     content: 'Click here to configure each card\'s settings \u2014 point values, credits to track, and quarterly bonus categories.',
     position: 'bottom',
     clickRequired: true,
-    clickAction: 'navigate-card-config'
+    clickAction: 'navigate-card-config',
+    onShow: 'open-manage-dropdown'
   },
 
-  // Phase 3: Card Config Tour - steps 9-14
+  // Phase 3: Card Config Tour
   {
     type: 'spotlight',
     phase: 'card-config-tour',
@@ -305,7 +333,7 @@ const TOUR_STEPS = [
     onShow: 'setup-back-listener'
   },
 
-  // Phase 4: Transactions Tour - steps 15-19
+  // Phase 4: Transactions Tour
   {
     type: 'spotlight',
     phase: 'transactions-tour',
@@ -374,34 +402,26 @@ const TOUR_STEPS = [
     clickRequired: false
   },
 
-  // Phase 4b: Export Data - step 20
+  // Phase 4b: Card Scenarios spotlight (after transactions, before nav bar items)
   {
     type: 'spotlight',
     phase: 'transactions-tour',
-    id: 'export-data',
-    target: '#manageDataBtn',
-    title: 'Export & Manage Data \u{1F4BE}',
-    content: 'Click <strong>Manage Data</strong> to find <strong>Export Data</strong> \u2014 download a backup of your transactions and settings as CSV or JSON. You can also clear data by year or start completely fresh from here.',
+    id: 'card-scenarios',
+    target: '#cardScenariosTab',
+    title: 'Card Scenarios',
+    content: '<span style="background:#059669;color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">PRO</span> Card Scenarios lets you model what happens if you <strong>add</strong>, <strong>remove</strong>, or <strong>swap</strong> a card in your wallet \u2014 using your actual spending data. It reroutes every transaction to show the real impact on points, credits, and net value. Powerful for deciding whether a new card is worth it or if it\'s time to cancel one.',
     position: 'bottom',
     clickRequired: false
   },
+
+  // Phase 4c: Nav bar items — Manage and New Upload
   {
     type: 'spotlight',
     phase: 'transactions-tour',
-    id: 'card-mapping',
-    target: '#configBtn',
-    title: 'Card Mapping \u2699\uFE0F',
-    content: 'Opens the page where you matched account numbers to reward cards. Come back here if you need to reassign a card or if you add a new card to your wallet.',
-    position: 'bottom',
-    clickRequired: false
-  },
-  {
-    type: 'spotlight',
-    phase: 'transactions-tour',
-    id: 'new-upload',
-    target: '#newUploadBtn',
-    title: 'New Upload \u{1F4C4}',
-    content: 'Upload additional transaction files here anytime. The app automatically detects and removes duplicates, so it\'s safe to upload overlapping date ranges. Your existing data and rules are preserved.',
+    id: 'manage-nav',
+    target: '#manageBtn',
+    title: 'Manage Your Data',
+    content: 'Remember: <strong>Manage</strong> is where you\'ll find Card Mapping, Card Config, and data management (export, clear, or reset). You can also upload new transaction files anytime using <strong>New Upload</strong> to the right \u2014 duplicates are automatically removed.',
     position: 'bottom',
     clickRequired: false
   },
@@ -415,10 +435,11 @@ const TOUR_STEPS = [
     content: `
       <p><strong>What to do next:</strong></p>
       <ol style="margin:16px 0;line-height:2;text-align:left;">
-        <li>\u{1F4CA} <strong>Card Performance</strong> \u2014 See each card\u2019s ROI, rewards earned vs. annual fee, and whether it\u2019s paying for itself</li>
-        <li>\u{1F4CB} <strong>All Transactions</strong> \u2014 Filter by card, category, or date to see how your spending was classified</li>
+        <li><strong>Summary</strong> \u2014 Flip your cards to see detailed performance, use CY toggle for annual fee decisions</li>
+        <li><strong>All Transactions</strong> \u2014 Review how spending was classified, fix anything flagged for review</li>
+        <li><strong>Card Scenarios</strong> \u2014 Model adding, removing, or swapping cards to optimize your wallet</li>
       </ol>
-      <p style="margin-top:12px;font-size:12px;color:#78716c;">Click the <strong>?</strong> button on any page for help, or to restart this tour.</p>
+      <p style="margin-top:12px;font-size:12px;color:#78716c;">Click <strong>Help</strong> on any page for guidance, or to restart this tour.</p>
     `,
     buttons: [{ text: 'Start Using the App', action: 'finish', primary: true }]
   }
@@ -591,6 +612,12 @@ function showTourModal(step) {
 function showTourSpotlight(step, retryCount = 0) {
   document.getElementById('tourModal').classList.add('hidden');
 
+  // Pre-show actions that must run before target lookup (e.g. opening dropdowns)
+  if (step.onShow === 'open-manage-dropdown' && retryCount === 0) {
+    const manageDropdown = document.getElementById('manageDropdown');
+    if (manageDropdown) manageDropdown.classList.add('open');
+  }
+
   const target = document.querySelector(step.target);
   if (!target) {
     // Element may not be rendered yet (e.g. after navigating to transactions view).
@@ -681,6 +708,14 @@ function showTourSpotlight(step, retryCount = 0) {
       }, 300);
     };
     backBtn.addEventListener('click', backHandler);
+  } else if (step.onShow === 'flip-first-card') {
+    // Flip the first card to show the back side during this step
+    const firstCard = document.querySelector('.flip-card');
+    if (firstCard && !firstCard.classList.contains('flipped')) {
+      setTimeout(() => firstCard.classList.add('flipped'), 500);
+    }
+  } else if (step.onShow === 'open-manage-dropdown') {
+    // Already handled in pre-show above — no additional action needed
   }
 
   // Function to position spotlight and tooltip, then reveal them
@@ -744,6 +779,9 @@ function showTourSpotlight(step, retryCount = 0) {
 function handleSpotlightClick(step) {
   if (step.clickAction === 'navigate-card-config') {
     document.getElementById('tourOverlay').classList.add('hidden');
+    // Close the manage dropdown if it was opened for this step
+    const manageDropdown = document.getElementById('manageDropdown');
+    if (manageDropdown) manageDropdown.classList.remove('open');
     showCardConfigEditor();
     setTimeout(() => {
       state.tourStep++;
@@ -800,6 +838,9 @@ function hideTourOverlay() {
   document.getElementById('tourOverlay').classList.add('hidden');
   document.getElementById('tourSpotlight').classList.add('hidden');
   document.getElementById('tourTooltip').classList.add('hidden');
+  // Clean up any dropdowns opened by the tour
+  const manageDropdown = document.getElementById('manageDropdown');
+  if (manageDropdown) manageDropdown.classList.remove('open');
 }
 
 // Hide all tour UI
@@ -808,6 +849,9 @@ function hideTourUI() {
   document.getElementById('tourSpotlight').classList.add('hidden');
   document.getElementById('tourTooltip').classList.add('hidden');
   document.getElementById('tourModal').classList.add('hidden');
+  // Clean up any dropdowns opened by the tour
+  const manageDropdown = document.getElementById('manageDropdown');
+  if (manageDropdown) manageDropdown.classList.remove('open');
 }
 
 // Show skip confirmation

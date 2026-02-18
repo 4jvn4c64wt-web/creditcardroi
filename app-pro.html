@@ -124,6 +124,28 @@
     .shell-details-strip.open .shell-details-item:nth-child(5) { transition-delay: 200ms; }
     .shell-details-strip.open .shell-details-op:nth-child(6) { transition-delay: 250ms; }
     .shell-details-strip.open .shell-details-item:nth-child(7) { transition-delay: 300ms; }
+
+    /* Sticky shell on transactions view */
+    #resultsSection.shell-sticky .shell-topbar,
+    #resultsSection.shell-sticky .shell-details-strip,
+    #resultsSection.shell-sticky .shell-nav { position: sticky; z-index: 50; }
+    #resultsSection.shell-sticky .shell-topbar { top: 0; }
+    #resultsSection.shell-sticky .shell-details-strip { top: var(--shell-topbar-h, 60px); }
+    #resultsSection.shell-sticky .shell-nav { top: var(--shell-nav-top, 60px); }
+
+    /* Fade out elements when scrolled */
+    .shell-title-block, .shell-divider, .shell-topbar-right, .shell-expand-btn {
+      transition: opacity 0.25s ease, max-width 0.3s ease, margin 0.3s ease, padding 0.3s ease;
+      max-width: 500px; overflow: hidden;
+    }
+    #resultsSection.shell-scrolled .shell-title-block,
+    #resultsSection.shell-scrolled .shell-divider,
+    #resultsSection.shell-scrolled .shell-topbar-right,
+    #resultsSection.shell-scrolled .shell-expand-btn { opacity: 0; max-width: 0; margin: 0; padding: 0; pointer-events: none; }
+    /* No stagger delay on scroll-triggered open */
+    #resultsSection.shell-scrolled .shell-details-strip.open .shell-details-item,
+    #resultsSection.shell-scrolled .shell-details-strip.open .shell-details-op { transition-delay: 0ms !important; }
+
     .shell-nav { background: #fff; border-bottom: 1px solid #e8e5e0; }
     .shell-nav-inner { max-width: 1400px; margin: 0 auto; padding: 0 24px; display: flex; gap: 8px; padding-top: 4px; padding-bottom: 4px; flex-wrap: wrap; }
     .shell-tab { padding: 8px 16px; border-radius: 6px; border: none; background: transparent; font-size: 14px; font-weight: 500; cursor: pointer; color: #78716c; font-family: inherit; }

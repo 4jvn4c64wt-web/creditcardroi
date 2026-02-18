@@ -7565,11 +7565,11 @@ function renderView(view) {
     // CARD GRID RENDERING (replaces old summary table)
     // =============================================
 
-    // Compute tags
+    // Compute tags using display metrics (respects card-year overrides when active)
     const tagMap = {};
-    const positiveCards = cards.filter(c => c.netValue > 0);
-    const sortedByNet = [...cards].sort((a, b) => b.netValue - a.netValue);
-    const sortedByPts = [...cards].sort((a, b) => b.points - a.points);
+    const effectiveCards = cards.map(c => cardDisplayData[c.cardId]?.displayMetrics || c);
+    const sortedByNet = [...effectiveCards].sort((a, b) => b.netValue - a.netValue);
+    const sortedByPts = [...effectiveCards].sort((a, b) => b.points - a.points);
 
     // MVP tag
     if (sortedByNet.length > 0 && sortedByNet[0].netValue > 0) {
@@ -7581,7 +7581,7 @@ function renderView(view) {
     }
 
     // Dead Weight tags
-    cards.forEach(c => {
+    effectiveCards.forEach(c => {
       if (c.netValue < 0 && c.annualFee > 0) {
         tagMap[c.cardId] = { type: 'deadweight', label: 'Dead Weight', cls: 'fc-tag-deadweight', tip: 'This card has an annual fee and is currently losing you money.' };
       }

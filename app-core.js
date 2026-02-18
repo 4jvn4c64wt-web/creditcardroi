@@ -6210,61 +6210,6 @@ function renderView(view) {
   const topMetricsEl = document.getElementById('topMetrics');
   if (topMetricsEl) topMetricsEl.style.display = 'none'; // Always hidden; shell handles display
 
-  // --- Sticky shell scroll behavior for transactions view ---
-  const resultsEl = document.getElementById('resultsSection');
-  const strip = document.getElementById('shellDetailsStrip');
-  const expandBtn = document.getElementById('shellExpandBtn');
-  // Tear down any previous scroll listener
-  if (renderView._scrollCleanup) { renderView._scrollCleanup(); renderView._scrollCleanup = null; }
-  resultsEl.classList.remove('shell-sticky', 'shell-scrolled');
-
-  if (view === 'transactions') {
-    resultsEl.classList.add('shell-sticky');
-    const topbar = resultsEl.querySelector('.shell-topbar');
-
-    // Helper: measure and set all sticky-top CSS vars
-    function measureStickyOffsets() {
-      requestAnimationFrame(() => {
-        const tbH = topbar ? topbar.offsetHeight : 60;
-        resultsEl.style.setProperty('--shell-topbar-h', tbH + 'px');
-        // Nav sits below topbar + details strip (if open)
-        const stripH = strip.classList.contains('open') ? strip.offsetHeight : 0;
-        resultsEl.style.setProperty('--shell-nav-top', (tbH + stripH) + 'px');
-      });
-    }
-    measureStickyOffsets();
-
-    // Track whether user manually opened the strip (before or during scrolling)
-    renderView._userOpenedStrip = strip.classList.contains('open');
-    let scrolledState = false;
-
-    const onScroll = () => {
-      const scrollY = window.scrollY || window.pageYOffset;
-      const threshold = 60;
-      if (scrollY > threshold && !scrolledState) {
-        scrolledState = true;
-        resultsEl.classList.add('shell-scrolled');
-        strip.classList.add('open');
-        if (expandBtn) expandBtn.textContent = '\u2212';
-        // Wait for transitions then re-measure
-        setTimeout(measureStickyOffsets, 320);
-      } else if (scrollY <= threshold && scrolledState) {
-        scrolledState = false;
-        resultsEl.classList.remove('shell-scrolled');
-        // Collapse strip unless user had it open before/during scrolling
-        if (!renderView._userOpenedStrip) {
-          strip.classList.remove('open');
-          if (expandBtn) expandBtn.textContent = '+';
-        }
-        // Wait for transitions then re-measure
-        setTimeout(measureStickyOffsets, 320);
-      }
-    };
-    window.addEventListener('scroll', onScroll, { passive: true });
-    renderView._scrollCleanup = () => { window.removeEventListener('scroll', onScroll); renderView._measureStickyOffsets = null; };
-    renderView._measureStickyOffsets = measureStickyOffsets;
-  }
-
   const container = document.getElementById('viewContainer');
   const r = state.results;
   
@@ -8893,14 +8838,6 @@ async function initCore() {
       if (strip) {
         const isOpen = strip.classList.toggle('open');
         shellExpandBtn.textContent = isOpen ? '\u2212' : '+';
-        // Track user intent so sticky-scroll respects manual toggles
-        if (typeof renderView._userOpenedStrip !== 'undefined') {
-          renderView._userOpenedStrip = isOpen;
-          // Re-measure sticky offsets if on transactions view
-          if (typeof renderView._measureStickyOffsets === 'function') {
-            setTimeout(renderView._measureStickyOffsets, 360);
-          }
-        }
       }
     });
   }

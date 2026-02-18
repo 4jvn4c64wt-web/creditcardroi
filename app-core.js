@@ -7657,7 +7657,7 @@ function renderView(view) {
             }
 
             const showCYToggle = displayYear && canShowCardYearToggle(c.cardId) && isCardEditable(c.cardId, 'config');
-            const isCYActive = showCYToggle && state.cardYearToggles[c.cardId];
+            const isCYActive = showCYToggle && !!(cardDisplayData[c.cardId]?.isCardYearActive);
             return `<div class="flip-card" data-card-id="${escapeHtml(c.cardId)}">
               <div class="flip-card-inner">
                 <div class="flip-card-front ${displayMetrics.netValue >= 0 ? 'positive-border' : 'negative-border'}">

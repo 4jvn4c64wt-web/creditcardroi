@@ -701,7 +701,7 @@ function mapToCardCategory(genericCategory, cardId, txnDate = null) {
     // Food mappings  
     'dining': ['dining', 'fast-food', 'other'],
     'fast-food': ['fast-food', 'dining', 'other'],
-    'grocery': ['grocery', 'whole-foods', 'other'],
+    'grocery': ['grocery', 'other'],
     'whole-foods': ['whole-foods', 'grocery', 'amazon', 'other'],
     'online-grocery': ['online-grocery', 'grocery', 'other'], // CSP earns 3x on online grocery
     

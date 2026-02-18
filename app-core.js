@@ -5621,7 +5621,7 @@ function renderStep4Add() {
         sourceRate: r.sourceRate, destCardName: cardName, destRate: r.newRate,
         spend: r.actualSpend, impact: (newVal - sourceVal) * r.actualSpend, routeReason: r.routeReason
       };
-    }).filter(r => Math.abs(r.impact) >= 0.005);
+    }).filter(r => Math.abs(r.impact) >= 0.005 || (r.routeReason && r.routeReason.includes('Rent uplift')));
     baseTotal = addNormalizedRows.reduce((s, r) => s + r.impact, 0);
   } else {
     addNormalizedRows = rows.map(r => ({
@@ -5991,7 +5991,7 @@ function renderStep4Remove() {
 
   // Normalize rows for grouped rendering
   const removeNormalizedRows = rows
-    .filter(r => Math.abs(r.valueChange) >= 0.005)
+    .filter(r => Math.abs(r.valueChange) >= 0.005 || (r.routeReason && r.routeReason.includes('Rent uplift')))
     .map(r => ({
       subcategory: r.subcategory, sourceCardId: wi.removeCardId, sourceCardName: cardName,
       sourceRate: r.sourceRate, destCardName: r.bestCardName, destRate: r.bestRate,
@@ -6136,7 +6136,7 @@ function renderStep4Swap() {
   // Normalize removeRows + addRows for grouped rendering
   const swapNormalizedRows = [];
   for (const r of removeRows) {
-    if (Math.abs(r.valueChange) < 0.005) continue;
+    if (Math.abs(r.valueChange) < 0.005 && !(r.routeReason && r.routeReason.includes('Rent uplift'))) continue;
     swapNormalizedRows.push({
       subcategory: r.subcategory, sourceCardId: wi.removeCardId, sourceCardName: removeName,
       sourceRate: r.sourceRate, destCardName: r.bestCardName, destRate: r.bestRate,
@@ -6144,7 +6144,7 @@ function renderStep4Swap() {
     });
   }
   for (const r of addRows) {
-    if (Math.abs(r.additionalValue) < 0.005) continue;
+    if (Math.abs(r.additionalValue) < 0.005 && !(r.routeReason && r.routeReason.includes('Rent uplift'))) continue;
     swapNormalizedRows.push({
       subcategory: r.subcategory, sourceCardId: r.sourceCardId, sourceCardName: r.sourceCardName,
       sourceRate: r.sourceRate, destCardName: addName, destRate: r.newRate,

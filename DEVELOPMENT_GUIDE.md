@@ -633,49 +633,46 @@ The rent/plan prompt (step 2b) appears whenever **any Bilt card is in the curren
 - Bilt Cash plan (maximize / keep as cash / custom)
 - Custom monthly redemption amount (if custom plan)
 
-#### Display — Unified Point Value Change Section
+#### Display
 
-When Bilt is involved, **all spend shifts AND rent points are shown inside a single "Point Value Change" section** — there is no separate "Bilt Rewards" summary line. The top-level breakdown is: `Credits | Point value change (incl. rent pts) | Annual fee | Net`.
+Bilt scenario results look nearly identical to non-Bilt scenarios. The only additions are a rent points row inside Point Value Change and a Bilt Cash line in the top-level summary.
 
-**Non-Bilt scenarios**: Flat spend-shift table inside Point Value Change, no grouping.
+**Top-level summary (Bilt scenarios):**
+```
+Credits                                +$XX
+Point value change (incl. rent pts)    +$XX  ← collapsible flat table + rent points row
+Bilt Cash (kept)          [$input]     +$XX  ← editable input, controls rent points
+Annual fee                             -$XX
+─────────────────────────
+Estimated net impact                   +$XX
+```
 
-**Bilt scenarios**: Rows are classified into two collapsible sub-groups inside Point Value Change:
-- **Non-category spend** — rows where the source card's rate ≤ its `baseRate`
-- **Category spend** — rows where the source card's rate > its `baseRate`
+**Non-Bilt scenarios**: Same structure without Bilt Cash line or rent points row.
 
-Each sub-group is a collapsible section (expanded by default) showing a table of per-subcategory rows with source → dest rates and impact amounts. If a sub-group has > 8 rows, its table scrolls with `max-height: 280px`.
+**Point Value Change section**: Uses the same flat `renderUnifiedSpendTable()` for all scenarios. For Bilt, appends a single "Rent points (N pts @ $X.XXX)" summary row below the table showing the rent points value delta.
 
-Below the sub-groups, summary lines show:
-1. **Base point changes** — subtotal of all spend shifts (= `baseSpendingImpact`)
-2. **Rent points from Bilt Cash (N pts @ $X)** — rent points value delta (hidden when plan = 'cash')
-3. **Bilt Cash remaining** — remaining cash delta (shown only when `countCashAsValue`)
-4. **Net point value change** — sum of the above (= `pointValueChange`)
-
-A collapsible "Rent points breakdown" (collapsed by default) shows Bilt Cash detail: spend, earned, redeemed, rent points count + value, cap usage %, remaining.
-
-An ℹ tooltip appears on "Category spend" when any category row has `destRate < sourceRate` (i.e., moving spend to a lower-rate card for rent benefit).
+**Bilt Cash input**: Editable number input controlling how much Bilt Cash to keep (not redeemed). The remainder is redeemed for rent points. Capped at `[0, finalBiltCashEarned]`. Defaults: maximize plan → $0, cash plan → full earned amount. On blur/enter, updates rent points and all dependent values.
 
 **Key rendering functions:**
-- `renderPointValueContent(prefix, rows, baseTotal, biltImpact, tableId, annualizationFactor)` — renders the full inner content
-- `_renderSpendGroup(groupId, label, rows, ...)` — renders a single collapsible sub-group
-- `_renderBiltSummaryLines(prefix, baseTotal, biltImpact)` — renders summary math lines
-- `updatePointValueContent(prefix, rows, baseTotal, biltImpact)` — live-updates all values without re-rendering
+- `renderPointValueContent(prefix, rows, baseTotal, biltImpact, tableId, annualizationFactor)` — flat table + optional rent points row
+- `updatePointValueContent(prefix, biltImpact)` — live-updates rent points display
+- `_updateBiltCashDisplay(prefix, biltImpact)` — updates Bilt Cash input constraints
 
 #### State Properties
 
 - `wi.biltCashPlan` — `'maximize'` | `'cash'` | `'custom'` (default: `'maximize'`)
 - `wi.biltCustomMonthlyRedemption` — Monthly $ of Bilt Cash to redeem (for custom plan)
+- `wi.biltCashKeptOverride` — User-set Bilt Cash to keep (from the editable input). When set, overrides plan-based computation. Cleared when plan changes.
 - `wi.rentAmount` — Monthly rent amount
 
 #### Calculation (in `calculateCardScenariosNetImpact()`)
 
 The return object includes:
-- `pointValueChange` — combined: `spendingImpact + biltRewardsImpact` (used as the single "Point value change" in top-level summary)
-- `baseSpendingImpact` — alias for `spendingImpact` (used for "Base point changes" subtotal in display)
-- `spendingImpact` — net value change from card-to-card spend shifts (kept for backward compat)
-- `biltRewardsImpact` — net delta: `rentPointsValueDelta + (countCashAsValue ? cashRemainingDelta : 0)`
+- `pointValueChange` — `spendingImpact + rentPointsValueDelta` (Point Value Change line, includes rent points, excludes Bilt Cash)
+- `biltCashKeptDelta` — `finalBiltCashRemaining - currentBiltCashRemaining` (Bilt Cash line, separate from points)
+- `spendingImpact` — net value change from card-to-card spend shifts only
 - `rentPointsValueDelta` — change in annual rent points value
-- `biltCashRemainingDelta` — change in remaining Bilt Cash after redemption
+- `totalImpact` — `pointValueChange + creditsImpact + biltCashKeptDelta + feeImpact`
 - `finalBiltCashEarned`, `finalBiltCashRedeemed`, `finalBiltCashRemaining`
 - `finalRentPointsAnnual`, `finalRentPointsValue`
 - `finalBiltSpend`, `currentBiltSpend`

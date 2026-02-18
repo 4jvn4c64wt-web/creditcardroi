@@ -5040,10 +5040,6 @@ function calculateCardScenariosNetImpact() {
         }
       }
 
-      console.log('[DEBUG calculateCardScenariosNetImpact swap] finalBiltSpend:', finalBiltSpend,
-        'from removeRows:', swapResult.removeRows.filter(r => r.subcategory !== 'rent' && CARDS[r.bestCardId]?.isBilt).map(r => ({ sub: r.subcategory, spend: r.spend, dest: r.bestCardName })),
-        'from addRows:', swapResult.addRows.filter(r => r.subcategory !== 'rent' && !CARDS[r.sourceCardId]?.isBilt).map(r => ({ sub: r.subcategory, spend: r.spend })));
-
       // Extract rent-motivated impact for display reallocation
       rentMotivatedImpact = swapResult.rentMotivatedImpact || 0;
       rentMotivatedRows = swapResult.rentMotivatedRows || [];
@@ -5083,9 +5079,14 @@ function calculateCardScenariosNetImpact() {
   // Max Bilt Cash that can usefully be redeemed for rent
   const maxBiltCashForRent = monthlyRent > 0 ? monthlyRent * 0.03 * 12 : 0;
 
-  // Determine how much Bilt Cash is redeemed based on the plan
+  // Determine how much Bilt Cash is redeemed.
+  // If user has manually set biltCashKeptOverride via the input, use it directly.
+  // Otherwise, derive from the plan selection.
   let finalBiltCashRedeemed;
-  if (biltCashPlan === 'cash') {
+  if (wi.biltCashKeptOverride !== undefined) {
+    const kept = Math.max(0, Math.min(wi.biltCashKeptOverride, finalBiltCashEarned));
+    finalBiltCashRedeemed = Math.min(finalBiltCashEarned - kept, maxBiltCashForRent);
+  } else if (biltCashPlan === 'cash') {
     finalBiltCashRedeemed = 0;
   } else if (biltCashPlan === 'custom') {
     const customAnnual = (wi.biltCustomMonthlyRedemption || 0) * 12;
@@ -5129,35 +5130,32 @@ function calculateCardScenariosNetImpact() {
   // Rent cap usage for display (annualBiltSpendCap computed earlier, finalBiltSpend already capped)
   const rentCapUsedPct = annualBiltSpendCap > 0 ? Math.min(100, (finalBiltSpend / annualBiltSpendCap) * 100) : 0;
 
-  // Combined Bilt Rewards impact (rent points + optional Bilt Cash remaining)
-  // Note: rentMotivatedImpact is NOT reallocated here — it stays in spendingImpact.
-  // The render functions fold rent points into Point Value Change directly.
-  const biltRewardsImpact = rentPointsValueDelta + (countCashAsValue ? biltCashRemainingDelta : 0);
-
-  console.log('[DEBUG] Bilt Rewards:', {
+  console.log('[DEBUG] Bilt:', {
     biltCashPlan, currentBiltSpend, finalBiltSpend,
     finalBiltCashEarned, finalBiltCashRedeemed,
     finalRentPointsAnnual, finalRentPointsValue,
-    finalBiltCashRemaining, rentCapUsedPct,
-    biltRewardsImpact, rentMotivatedImpact
+    finalBiltCashRemaining, rentCapUsedPct, rentMotivatedImpact
   });
 
   const creditsImpact = addCreditsTotal - removeCreditsTotal;
   const feeImpact = removeFee - addFee;
-  // pointValueChange = all spend shifts + rent points + optional Bilt Cash remaining
-  const baseSpendingImpact = spendingImpact;
-  const pointValueChange = spendingImpact + biltRewardsImpact;
-  const totalImpact = pointValueChange + creditsImpact + feeImpact;
+
+  // pointValueChange = spend shifts + rent points (NO Bilt Cash — that's a separate line)
+  const pointValueChange = spendingImpact + rentPointsValueDelta;
+
+  // Bilt Cash kept as a separate value line (delta for display)
+  const biltCashKeptDelta = finalBiltCashRemaining - currentBiltCashRemaining;
+
+  // Total = points + credits + Bilt Cash kept + fee
+  const totalImpact = pointValueChange + creditsImpact + biltCashKeptDelta + feeImpact;
 
   return {
     pointValueChange,
-    baseSpendingImpact,
     spendingImpact,
     creditsImpact,
     feeImpact,
-    biltRewardsImpact,
     rentPointsValueDelta,
-    biltCashRemainingDelta,
+    biltCashKeptDelta,
     finalBiltCashEarned,
     finalBiltCashRedeemed,
     finalMaxRedemption: maxBiltCashForRent,
@@ -5549,7 +5547,8 @@ function renderStep4Add() {
   }
 
   const combinedPointValue = biltImpact ? biltImpact.pointValueChange : totalGain;
-  const netImpact = combinedPointValue + creditsTotal - annualFee;
+  const biltCashDelta = biltImpact ? biltImpact.biltCashKeptDelta : 0;
+  const netImpact = combinedPointValue + creditsTotal + biltCashDelta - annualFee;
   const isPositive = netImpact >= 0;
   const cardName = addCard.shortName || addCard.name;
   const showRentPtsHint = biltImpact && (biltImpact.rentPointsValueDelta || 0) !== 0;
@@ -5575,8 +5574,21 @@ function renderStep4Add() {
   html += `<div style="display:flex;justify-content:space-between;">
       <span>Point value change${showRentPtsHint ? ' <span style="font-size:11px;color:#78716c;font-weight:400;">(incl. rent pts)</span>' : ''}</span>
       <span class="mono" style="font-weight:600;color:${combinedPointValue >= 0 ? '#059669' : combinedPointValue < 0 ? '#dc2626' : '#78716c'};" id="cardscenariosAddRewardsLine">${combinedPointValue >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(combinedPointValue))}</span>
-    </div>
-    <div style="display:flex;justify-content:space-between;">
+    </div>`;
+  if (biltImpact) {
+    const biltCashEarned = biltImpact.finalBiltCashEarned || 0;
+    const biltCashKept = biltImpact.finalBiltCashRemaining || 0;
+    html += `<div style="display:flex;justify-content:space-between;align-items:center;">
+      <span>Bilt Cash <span style="font-size:11px;color:#78716c;font-weight:400;">(kept)</span></span>
+      <span style="display:flex;align-items:center;gap:4px;">
+        <span class="mono" style="font-size:12px;color:#78716c;">$</span>
+        <input type="number" id="cardscenariosAddBiltCashInput" min="0" max="${biltCashEarned.toFixed(2)}" step="0.01" value="${biltCashKept.toFixed(2)}"
+          style="width:72px;padding:2px 4px;border:1px solid #d6d3d1;border-radius:4px;font-size:13px;text-align:right;font-family:monospace;" />
+        <span style="font-size:11px;color:#a8a29e;">of ${formatCurrencyPrecise(biltCashEarned)}</span>
+      </span>
+    </div>`;
+  }
+  html += `<div style="display:flex;justify-content:space-between;">
       <span>Annual fee</span>
       <span class="mono" style="font-weight:600;color:${annualFee > 0 ? '#dc2626' : '#78716c'};">-${formatCurrencyPrecise(annualFee)}</span>
     </div>
@@ -5707,12 +5719,11 @@ function cardscenariosSortTable(tableId, sortKey) {
 
 /**
  * Render the full Point Value Change section content (inside the collapsible).
- * For non-Bilt scenarios: flat table (same as before).
- * For Bilt scenarios: grouped into Non-category / Category spend with summary lines.
+ * Uses a flat table for all scenarios. For Bilt, adds a rent points summary row.
  *
  * @param {string} prefix - 'Add', 'Remove', or 'Swap'
- * @param {Array} normalizedRows - Rows with { subcategory, sourceCardId, sourceCardName, sourceRate, destCardName, destRate, spend, impact, routeReason }
- * @param {number} baseTotal - Sum of all row impacts (base point changes)
+ * @param {Array} normalizedRows - Rows with { subcategory, sourceCardId, sourceCardName, sourceRate, destCardName, destRate, spend, impact }
+ * @param {number} baseTotal - Sum of all row impacts (spend shift total)
  * @param {object|null} biltImpact - From calculateCardScenariosNetImpact(), or null for non-Bilt
  * @param {string} tableId - Unique table ID prefix for this section
  * @param {number} annualizationFactor - For annualization note
@@ -5726,248 +5737,50 @@ function renderPointValueContent(prefix, normalizedRows, baseTotal, biltImpact, 
     html += `<div style="padding:16px;text-align:center;color:#78716c;background:#f5f5f4;border-radius:8px;font-size:13px;">
       No spending categories where point value changes.
     </div>`;
-    if (annualizationFactor > 1) {
-      html += `<p style="font-size:11px;color:#a8a29e;margin-top:8px;">Amounts annualized from ${Math.round(12 / annualizationFactor)} months of data.</p>`;
-    }
-    if (isBilt) html += _renderBiltSummaryLines(prefix, baseTotal, biltImpact);
-    return html;
-  }
-
-  if (!isBilt) {
-    // Non-Bilt: flat table (use existing renderUnifiedSpendTable)
+  } else {
+    // Flat table for ALL scenarios (Bilt and non-Bilt)
     const unifiedRows = normalizedRows.map(r => ({
       subcategory: r.subcategory, currentCard: r.sourceCardName, currentRate: r.sourceRate,
       afterCard: r.destCardName, afterRate: r.destRate, spend: r.spend, impact: r.impact
     })).sort((a, b) => a.impact - b.impact);
     html += renderUnifiedSpendTable(unifiedRows, baseTotal, tableId);
-    if (annualizationFactor > 1) {
-      html += `<p style="font-size:11px;color:#a8a29e;margin-top:8px;">Amounts annualized from ${Math.round(12 / annualizationFactor)} months of data.</p>`;
-    }
-    return html;
-  }
-
-  // === Bilt: grouped into Non-category / Category spend ===
-  const nonCatRows = [];
-  const catRows = [];
-  for (const r of normalizedRows) {
-    const card = CARDS[r.sourceCardId];
-    const baseRate = card ? (card.baseRate || 1) : 1;
-    if (r.sourceRate > baseRate) {
-      catRows.push(r);
-    } else {
-      nonCatRows.push(r);
-    }
-  }
-  nonCatRows.sort((a, b) => a.impact - b.impact);
-  catRows.sort((a, b) => a.impact - b.impact);
-
-  const nonCatTotal = nonCatRows.reduce((s, r) => s + r.impact, 0);
-  const catTotal = catRows.reduce((s, r) => s + r.impact, 0);
-
-  // Check if ℹ tooltip needed: any category row where dest rate < source rate
-  const needsCatTooltip = catRows.some(r => r.destRate < r.sourceRate);
-
-  // Render sub-groups
-  if (nonCatRows.length > 0) {
-    html += _renderSpendGroup(prefix + 'NonCat', 'Non-category spend', nonCatRows, nonCatTotal, false);
-  }
-  if (catRows.length > 0) {
-    html += _renderSpendGroup(prefix + 'Cat', 'Category spend', catRows, catTotal, needsCatTooltip);
   }
 
   if (annualizationFactor > 1) {
     html += `<p style="font-size:11px;color:#a8a29e;margin-top:8px;">Amounts annualized from ${Math.round(12 / annualizationFactor)} months of data.</p>`;
   }
 
-  // Summary lines: Base point changes, Rent points, Net total
-  html += _renderBiltSummaryLines(prefix, baseTotal, biltImpact);
-
-  return html;
-}
-
-/**
- * Render a collapsible sub-group of spend shift rows (Non-category or Category).
- */
-function _renderSpendGroup(groupId, label, rows, total, showTooltip) {
-  const totalColor = total >= 0 ? '#059669' : '#dc2626';
-  const needsScroll = rows.length > 8;
-  const tooltipHtml = showTooltip ? ` <span class="pvc-tooltip-icon" style="display:inline-block;width:16px;height:16px;background:#e7e5e4;color:#78716c;border-radius:50%;text-align:center;line-height:16px;font-size:11px;cursor:help;position:relative;" title="Some category spend shifts to your Bilt card at a lower base rate because the Bilt Cash it generates can be redeemed for rent points, making the effective value higher. See rent points below.">i</span>` : '';
-
-  let html = `<div style="margin-top:12px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:6px 0;" id="cardscenarios${groupId}Toggle">
-      <span style="font-size:12px;font-weight:600;color:#78716c;">
-        <span class="toggle-arrow" style="font-size:10px;margin-right:4px;">▼</span>${label}${tooltipHtml}
-      </span>
-      <span class="mono" style="font-size:12px;font-weight:600;color:${totalColor};" id="cardscenarios${groupId}Total">${total >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(total))}</span>
-    </div>
-    <div id="cardscenarios${groupId}Rows" style="margin-top:4px;">`;
-
-  // Rows container — scrollable if many rows
-  if (needsScroll) {
-    html += `<div style="max-height:280px;overflow-y:auto;border:1px solid #e7e5e4;border-radius:6px;">`;
-  }
-
-  html += `<table style="width:100%;font-size:12px;border-collapse:collapse;">`;
-  for (const r of rows) {
-    const impactColor = r.impact >= 0 ? '#059669' : '#dc2626';
-    const subName = formatSubcategoryName(r.subcategory);
-    html += `<tr style="border-bottom:1px solid #f5f5f4;">
-      <td style="padding:3px 6px;color:#57534e;white-space:nowrap;">${escapeHtml(subName)}</td>
-      <td style="padding:3px 4px;color:#78716c;white-space:nowrap;font-size:11px;">${escapeHtml(r.sourceCardName)} ${r.sourceRate}x → ${escapeHtml(r.destCardName)} ${r.destRate}x</td>
-      <td style="padding:3px 6px;text-align:right;color:#78716c;" class="mono">${formatCurrencyPrecise(r.spend)}</td>
-      <td style="padding:3px 6px;text-align:right;font-weight:500;color:${impactColor};white-space:nowrap;" class="mono">${r.impact >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(r.impact))}</td>
-    </tr>`;
-  }
-  html += `</table>`;
-
-  if (needsScroll) html += `</div>`;
-
-  html += `</div></div>`;
-  return html;
-}
-
-/**
- * Render summary lines below the grouped tables: Base point changes, Rent points, Net total.
- */
-function _renderBiltSummaryLines(prefix, baseTotal, biltImpact) {
-  const rentPtsDelta = biltImpact.rentPointsValueDelta || 0;
-  const biltCashDelta = biltImpact.countCashAsValue ? (biltImpact.biltCashRemainingDelta || 0) : 0;
-  const pointValueChange = biltImpact.pointValueChange;
-  const finalRentPts = biltImpact.finalRentPointsAnnual || 0;
-  const biltPV = finalRentPts > 0 ? (biltImpact.finalRentPointsValue || 0) / finalRentPts : 0.018;
-  const biltSpend = biltImpact.finalBiltSpend || 0;
-  const annualCap = biltImpact.annualBiltSpendCap || 0;
-  const displayBiltSpend = annualCap > 0 ? Math.min(biltSpend, annualCap) : biltSpend;
-  const countCashAsValue = biltImpact.countCashAsValue;
-
-  let html = `<div style="margin-top:16px;border-top:1px solid #d6d3d1;padding-top:10px;">`;
-
-  // Base point changes subtotal
-  const baseColor = baseTotal >= 0 ? '#059669' : '#dc2626';
-  html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:13px;">
-    <span style="color:#57534e;">Base point changes</span>
-    <span class="mono" style="font-weight:600;color:${baseColor};" id="cardscenarios${prefix}BasePointChanges">${baseTotal >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(baseTotal))}</span>
-  </div>`;
-
-  // Rent points line (if any)
-  if (rentPtsDelta !== 0 || finalRentPts > 0) {
+  // For Bilt: add rent points row below the table
+  if (isBilt) {
+    const rentPtsDelta = biltImpact.rentPointsValueDelta || 0;
+    const finalRentPts = biltImpact.finalRentPointsAnnual || 0;
+    const biltPV = finalRentPts > 0 ? (biltImpact.finalRentPointsValue || 0) / finalRentPts : 0.018;
     const rentColor = rentPtsDelta >= 0 ? '#059669' : '#dc2626';
-    html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:13px;" id="cardscenarios${prefix}RentPointsLine">
-      <span style="color:#57534e;" id="cardscenarios${prefix}RentPointsLabel">Rent points from Bilt Cash (${Math.round(finalRentPts).toLocaleString()} pts @ $${biltPV.toFixed(3)})</span>
-      <span class="mono" style="font-weight:600;color:${rentColor};" id="cardscenarios${prefix}RentPointsDelta">${rentPtsDelta >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(rentPtsDelta))}</span>
-    </div>`;
-  }
 
-  // Bilt Cash remaining (if countCashAsValue and non-zero)
-  if (countCashAsValue && Math.abs(biltCashDelta) >= 0.005) {
-    const cashColor = biltCashDelta >= 0 ? '#059669' : '#dc2626';
-    html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:13px;" id="cardscenarios${prefix}BiltCashRemainingLine">
-      <span style="color:#57534e;">Bilt Cash remaining</span>
-      <span class="mono" style="font-weight:600;color:${cashColor};" id="cardscenarios${prefix}BiltCashRemainingDelta">${biltCashDelta >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(biltCashDelta))}</span>
-    </div>`;
-  }
-
-  // Net point value change
-  if (rentPtsDelta !== 0 || (countCashAsValue && Math.abs(biltCashDelta) >= 0.005)) {
-    const netColor = pointValueChange >= 0 ? '#059669' : '#dc2626';
-    html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-top:1px solid #d6d3d1;margin-top:4px;font-size:13px;font-weight:600;">
-      <span style="color:#1c1917;">Net point value change</span>
-      <span class="mono" style="color:${netColor};" id="cardscenarios${prefix}NetPointValue">${pointValueChange >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(pointValueChange))}</span>
-    </div>`;
-  }
-
-  // Collapsible rent points breakdown
-  const biltCashEarned = biltImpact.finalBiltCashEarned || 0;
-  const biltCashRedeemed = biltImpact.finalBiltCashRedeemed || 0;
-  const remaining = biltImpact.finalBiltCashRemaining || 0;
-  const capPct = biltImpact.rentCapUsedPct || 0;
-  const monthlyRent = biltImpact.monthlyRent || 0;
-  const plan = biltImpact.biltCashPlan || 'maximize';
-  const planLabel = plan === 'maximize' ? 'Maximize rent points' : plan === 'cash' ? 'Keep as cash' : 'Custom';
-
-  if (finalRentPts > 0 || biltCashEarned > 0.005) {
-    html += `<div style="margin-top:10px;">
-      <div style="display:flex;align-items:center;cursor:pointer;padding:4px 0;" id="cardscenarios${prefix}BiltDetailToggle">
-        <span class="toggle-arrow" style="font-size:10px;margin-right:4px;color:#78716c;">▶</span>
-        <span style="font-size:12px;color:#78716c;">Rent points breakdown</span>
-      </div>
-      <div class="hidden" id="cardscenarios${prefix}BiltDetail" style="margin-top:4px;padding:10px;background:#fafaf9;border-radius:6px;font-size:12px;color:#57534e;line-height:2;">
-        <div style="display:flex;justify-content:space-between;"><span>Plan</span><span>${planLabel}</span></div>
-        <div style="display:flex;justify-content:space-between;"><span>Monthly rent</span><span class="mono">$${monthlyRent.toLocaleString()}</span></div>
-        <div style="display:flex;justify-content:space-between;border-top:1px solid #e7e5e4;padding-top:4px;margin-top:2px;">
-          <span>Non-rent spend on Bilt</span>
-          <span class="mono" id="cardscenarios${prefix}BiltSpend">${formatCurrencyPrecise(displayBiltSpend)}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;"><span>Bilt Cash earned (4%)</span><span class="mono" id="cardscenarios${prefix}BiltCashEarned">${formatCurrencyPrecise(biltCashEarned)}</span></div>
-        <div style="display:flex;justify-content:space-between;"><span>Bilt Cash redeemed</span><span class="mono" id="cardscenarios${prefix}BiltCashRedeemed">-${formatCurrencyPrecise(biltCashRedeemed)}</span></div>
-        <div style="display:flex;justify-content:space-between;"><span>Rent points unlocked</span><span class="mono"><span id="cardscenarios${prefix}RentPointsCount">${Math.round(finalRentPts).toLocaleString()}</span> pts (<span id="cardscenarios${prefix}RentPointsValue">${formatCurrencyPrecise(biltImpact.finalRentPointsValue || 0)}</span>)</span></div>`;
-
-    if (annualCap > 0) {
-      html += `<div style="display:flex;justify-content:space-between;"><span>Rent cap usage</span><span class="mono" id="cardscenarios${prefix}RentCapPct">${capPct.toFixed(0)}%</span></div>`;
+    if (rentPtsDelta !== 0 || finalRentPts > 0) {
+      html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;margin-top:8px;border-top:1px solid #e7e5e4;font-size:13px;" id="cardscenarios${prefix}RentPointsLine">
+        <span style="color:#57534e;" id="cardscenarios${prefix}RentPointsLabel">Rent points (${Math.round(finalRentPts).toLocaleString()} pts @ $${biltPV.toFixed(3)})</span>
+        <span class="mono" style="font-weight:600;color:${rentColor};" id="cardscenarios${prefix}RentPointsDelta">${rentPtsDelta >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(rentPtsDelta))}</span>
+      </div>`;
     }
-    if (remaining > 0.005) {
-      html += `<div style="display:flex;justify-content:space-between;"><span>Bilt Cash remaining</span><span class="mono" id="cardscenarios${prefix}BiltCashRemaining">${formatCurrencyPrecise(remaining)}${!countCashAsValue ? ' (not counted)' : ''}</span></div>`;
-    }
-
-    html += `<div style="font-size:10px;color:#a8a29e;margin-top:6px;border-top:1px solid #e7e5e4;padding-top:4px;">$3 Bilt Cash = 100 rent points, capped at 1 pt per $1 rent/mo.</div>
-      </div>
-    </div>`;
   }
 
-  html += `</div>`;
   return html;
 }
+
 
 /**
  * Live-update the Point Value Content section DOM elements without re-rendering.
  * Called when credits/toggles change.
  */
-function updatePointValueContent(prefix, normalizedRows, baseTotal, biltImpact) {
+function updatePointValueContent(prefix, biltImpact) {
   if (!biltImpact) return;
 
   const rentPtsDelta = biltImpact.rentPointsValueDelta || 0;
-  const biltCashDelta = biltImpact.countCashAsValue ? (biltImpact.biltCashRemainingDelta || 0) : 0;
-  const pointValueChange = biltImpact.pointValueChange;
   const finalRentPts = biltImpact.finalRentPointsAnnual || 0;
   const biltPV = finalRentPts > 0 ? (biltImpact.finalRentPointsValue || 0) / finalRentPts : 0.018;
-  const biltSpend = biltImpact.finalBiltSpend || 0;
-  const annualCap = biltImpact.annualBiltSpendCap || 0;
-  const displayBiltSpend = annualCap > 0 ? Math.min(biltSpend, annualCap) : biltSpend;
-  const countCashAsValue = biltImpact.countCashAsValue;
 
-  // Update sub-group totals
-  if (normalizedRows) {
-    const nonCatRows = [];
-    const catRows = [];
-    for (const r of normalizedRows) {
-      const card = CARDS[r.sourceCardId];
-      const cardBaseRate = card ? (card.baseRate || 1) : 1;
-      if (r.sourceRate > cardBaseRate) catRows.push(r);
-      else nonCatRows.push(r);
-    }
-    const nonCatTotal = nonCatRows.reduce((s, r) => s + r.impact, 0);
-    const catTotal = catRows.reduce((s, r) => s + r.impact, 0);
-
-    const nonCatEl = document.getElementById(`cardscenarios${prefix}NonCatTotal`);
-    if (nonCatEl) {
-      nonCatEl.textContent = `${nonCatTotal >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(nonCatTotal))}`;
-      nonCatEl.style.color = nonCatTotal >= 0 ? '#059669' : '#dc2626';
-    }
-    const catEl = document.getElementById(`cardscenarios${prefix}CatTotal`);
-    if (catEl) {
-      catEl.textContent = `${catTotal >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(catTotal))}`;
-      catEl.style.color = catTotal >= 0 ? '#059669' : '#dc2626';
-    }
-  }
-
-  // Base point changes
-  const baseEl = document.getElementById(`cardscenarios${prefix}BasePointChanges`);
-  if (baseEl) {
-    baseEl.textContent = `${baseTotal >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(baseTotal))}`;
-    baseEl.style.color = baseTotal >= 0 ? '#059669' : '#dc2626';
-  }
-
-  // Rent points delta
+  // Update rent points row
   const rentDeltaEl = document.getElementById(`cardscenarios${prefix}RentPointsDelta`);
   if (rentDeltaEl) {
     rentDeltaEl.textContent = `${rentPtsDelta >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(rentPtsDelta))}`;
@@ -5975,40 +5788,7 @@ function updatePointValueContent(prefix, normalizedRows, baseTotal, biltImpact) 
   }
   const rentLabelEl = document.getElementById(`cardscenarios${prefix}RentPointsLabel`);
   if (rentLabelEl) {
-    rentLabelEl.textContent = `Rent points from Bilt Cash (${Math.round(finalRentPts).toLocaleString()} pts @ $${biltPV.toFixed(3)})`;
-  }
-
-  // Bilt Cash remaining delta
-  const cashDeltaEl = document.getElementById(`cardscenarios${prefix}BiltCashRemainingDelta`);
-  if (cashDeltaEl) {
-    cashDeltaEl.textContent = `${biltCashDelta >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(biltCashDelta))}`;
-    cashDeltaEl.style.color = biltCashDelta >= 0 ? '#059669' : '#dc2626';
-  }
-
-  // Net point value change
-  const netEl = document.getElementById(`cardscenarios${prefix}NetPointValue`);
-  if (netEl) {
-    netEl.textContent = `${pointValueChange >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(pointValueChange))}`;
-    netEl.style.color = pointValueChange >= 0 ? '#059669' : '#dc2626';
-  }
-
-  // Bilt detail elements
-  const biltSpendEl = document.getElementById(`cardscenarios${prefix}BiltSpend`);
-  if (biltSpendEl) biltSpendEl.textContent = formatCurrencyPrecise(displayBiltSpend);
-  const biltCashEarnedEl = document.getElementById(`cardscenarios${prefix}BiltCashEarned`);
-  if (biltCashEarnedEl) biltCashEarnedEl.textContent = formatCurrencyPrecise(biltImpact.finalBiltCashEarned || 0);
-  const biltCashRedeemedEl = document.getElementById(`cardscenarios${prefix}BiltCashRedeemed`);
-  if (biltCashRedeemedEl) biltCashRedeemedEl.textContent = `-${formatCurrencyPrecise(biltImpact.finalBiltCashRedeemed || 0)}`;
-  const rentCountEl = document.getElementById(`cardscenarios${prefix}RentPointsCount`);
-  if (rentCountEl) rentCountEl.textContent = Math.round(finalRentPts).toLocaleString();
-  const rentValueEl = document.getElementById(`cardscenarios${prefix}RentPointsValue`);
-  if (rentValueEl) rentValueEl.textContent = formatCurrencyPrecise(biltImpact.finalRentPointsValue || 0);
-  const capEl = document.getElementById(`cardscenarios${prefix}RentCapPct`);
-  if (capEl) capEl.textContent = `${(biltImpact.rentCapUsedPct || 0).toFixed(0)}%`;
-  const remainEl = document.getElementById(`cardscenarios${prefix}BiltCashRemaining`);
-  if (remainEl) {
-    const remaining = biltImpact.finalBiltCashRemaining || 0;
-    remainEl.textContent = `${formatCurrencyPrecise(remaining)}${!countCashAsValue ? ' (not counted)' : ''}`;
+    rentLabelEl.textContent = `Rent points (${Math.round(finalRentPts).toLocaleString()} pts @ $${biltPV.toFixed(3)})`;
   }
 }
 
@@ -6139,7 +5919,8 @@ function renderStep4Remove() {
   }
 
   const combinedPointValue = biltImpact ? biltImpact.pointValueChange : totalChange;
-  const netImpact = combinedPointValue - creditsTotal + annualFee;
+  const biltCashDelta = biltImpact ? biltImpact.biltCashKeptDelta : 0;
+  const netImpact = combinedPointValue - creditsTotal + biltCashDelta + annualFee;
   const isPositive = netImpact >= 0;
   const cardName = removeCard.shortName || removeCard.name;
   const showRentPtsHint = biltImpact && (biltImpact.rentPointsValueDelta || 0) !== 0;
@@ -6165,8 +5946,21 @@ function renderStep4Remove() {
   html += `<div style="display:flex;justify-content:space-between;">
       <span>Point value change${showRentPtsHint ? ' <span style="font-size:11px;color:#78716c;font-weight:400;">(incl. rent pts)</span>' : ''}</span>
       <span class="mono" style="font-weight:600;color:${combinedPointValue >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosRemoveRewardsLine">${combinedPointValue >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(combinedPointValue))}</span>
-    </div>
-    <div style="display:flex;justify-content:space-between;">
+    </div>`;
+  if (biltImpact) {
+    const biltCashEarned = biltImpact.finalBiltCashEarned || 0;
+    const biltCashKept = biltImpact.finalBiltCashRemaining || 0;
+    html += `<div style="display:flex;justify-content:space-between;align-items:center;">
+      <span>Bilt Cash <span style="font-size:11px;color:#78716c;font-weight:400;">(kept)</span></span>
+      <span style="display:flex;align-items:center;gap:4px;">
+        <span class="mono" style="font-size:12px;color:#78716c;">$</span>
+        <input type="number" id="cardscenariosRemoveBiltCashInput" min="0" max="${biltCashEarned.toFixed(2)}" step="0.01" value="${biltCashKept.toFixed(2)}"
+          style="width:72px;padding:2px 4px;border:1px solid #d6d3d1;border-radius:4px;font-size:13px;text-align:right;font-family:monospace;" />
+        <span style="font-size:11px;color:#a8a29e;">of ${formatCurrencyPrecise(biltCashEarned)}</span>
+      </span>
+    </div>`;
+  }
+  html += `<div style="display:flex;justify-content:space-between;">
       <span>Saved annual fee</span>
       <span class="mono" style="font-weight:600;color:${annualFee > 0 ? '#059669' : '#78716c'};">+${formatCurrencyPrecise(annualFee)}</span>
     </div>
@@ -6253,7 +6047,8 @@ function renderStep4Swap() {
   }
 
   const combinedPointValue = biltImpact ? biltImpact.pointValueChange : totalSpendChange;
-  const netImpact = combinedPointValue + netCredits + netFee;
+  const biltCashDelta = biltImpact ? biltImpact.biltCashKeptDelta : 0;
+  const netImpact = combinedPointValue + netCredits + biltCashDelta + netFee;
   const isPositive = netImpact >= 0;
   const removeName = removeCard.shortName || removeCard.name;
   const addName = addCard.shortName || addCard.name;
@@ -6270,7 +6065,7 @@ function renderStep4Swap() {
     </div>
   </div>`;
 
-  // Compact summary — no separate Bilt Rewards line; rent points folded into Point Value Change
+  // Compact summary
   html += `<div style="max-width:360px;margin:0 auto 20px;font-size:14px;line-height:2;">`;
 
   html += `<div style="display:flex;justify-content:space-between;">
@@ -6282,8 +6077,21 @@ function renderStep4Swap() {
   html += `<div style="display:flex;justify-content:space-between;">
       <span>Point value change${showRentPtsHint ? ' <span style="font-size:11px;color:#78716c;font-weight:400;">(incl. rent pts)</span>' : ''}</span>
       <span class="mono" style="font-weight:600;color:${combinedPointValue >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosSwapRewardsLine">${combinedPointValue >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(combinedPointValue))}</span>
-    </div>
-    <div style="display:flex;justify-content:space-between;">
+    </div>`;
+  if (biltImpact) {
+    const biltCashEarned = biltImpact.finalBiltCashEarned || 0;
+    const biltCashKept = biltImpact.finalBiltCashRemaining || 0;
+    html += `<div style="display:flex;justify-content:space-between;align-items:center;">
+      <span>Bilt Cash <span style="font-size:11px;color:#78716c;font-weight:400;">(kept)</span></span>
+      <span style="display:flex;align-items:center;gap:4px;">
+        <span class="mono" style="font-size:12px;color:#78716c;">$</span>
+        <input type="number" id="cardscenariosSwapBiltCashInput" min="0" max="${biltCashEarned.toFixed(2)}" step="0.01" value="${biltCashKept.toFixed(2)}"
+          style="width:72px;padding:2px 4px;border:1px solid #d6d3d1;border-radius:4px;font-size:13px;text-align:right;font-family:monospace;" />
+        <span style="font-size:11px;color:#a8a29e;">of ${formatCurrencyPrecise(biltCashEarned)}</span>
+      </span>
+    </div>`;
+  }
+  html += `<div style="display:flex;justify-content:space-between;">
       <span>Annual fee</span>
       <span class="mono" style="font-weight:600;color:${netFee >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosSwapFeeLine">${netFee >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netFee))}</span>
     </div>
@@ -6476,15 +6284,21 @@ function renderSummaryLine(scenarioType, impact) {
 
   if (scenarioType === 'add' || scenarioType === 'swap') {
     if (impact.addCreditsTotal > 0) parts.push(`+${formatCurrencyPrecise(impact.addCreditsTotal)} from credits`);
-    if (impact.biltRewardsImpact !== 0 && (impact.currentBiltSpend > 0 || impact.finalBiltSpend > 0)) {
-      parts.push(`${impact.biltRewardsImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(impact.biltRewardsImpact)} Bilt Rewards`);
+    if (impact.rentPointsValueDelta !== 0) {
+      parts.push(`${impact.rentPointsValueDelta >= 0 ? '+' : ''}${formatCurrencyPrecise(impact.rentPointsValueDelta)} rent points`);
+    }
+    if (impact.biltCashKeptDelta !== 0) {
+      parts.push(`${impact.biltCashKeptDelta >= 0 ? '+' : ''}${formatCurrencyPrecise(impact.biltCashKeptDelta)} Bilt Cash`);
     }
     if (impact.addFee > 0) parts.push(`-${formatCurrencyPrecise(impact.addFee)} annual fee`);
   }
   if (scenarioType === 'remove' || scenarioType === 'swap') {
     if (impact.removeCreditsTotal > 0) parts.push(`-${formatCurrencyPrecise(impact.removeCreditsTotal)} lost credits`);
-    if (impact.biltRewardsImpact !== 0 && (impact.currentBiltSpend > 0 || impact.finalBiltSpend > 0) && scenarioType === 'remove') {
-      parts.push(`${impact.biltRewardsImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(impact.biltRewardsImpact)} lost Bilt Rewards`);
+    if (impact.rentPointsValueDelta !== 0 && scenarioType === 'remove') {
+      parts.push(`${impact.rentPointsValueDelta >= 0 ? '+' : ''}${formatCurrencyPrecise(impact.rentPointsValueDelta)} lost rent points`);
+    }
+    if (impact.biltCashKeptDelta !== 0 && scenarioType === 'remove') {
+      parts.push(`${impact.biltCashKeptDelta >= 0 ? '+' : ''}${formatCurrencyPrecise(impact.biltCashKeptDelta)} lost Bilt Cash`);
     }
     if (impact.removeFee > 0) parts.push(`+${formatCurrencyPrecise(impact.removeFee)} saved annual fee`);
   }
@@ -6821,6 +6635,7 @@ function attachCardScenariosListeners() {
   document.querySelectorAll('input[name="biltCashPlan"]').forEach(radio => {
     radio.addEventListener('change', (e) => {
       wi.biltCashPlan = e.target.value;
+      delete wi.biltCashKeptOverride; // Reset manual override when plan changes
       // Show/hide custom redemption input
       const customRow = document.getElementById('biltCustomRedemptionRow');
       if (customRow) customRow.style.display = e.target.value === 'custom' ? 'flex' : 'none';
@@ -7030,34 +6845,24 @@ function attachCardScenariosListeners() {
     });
   }
 
-  // Sub-group toggles (Non-category / Category spend) and Bilt detail toggle
+  // Bilt Cash input handlers (blur/enter)
   ['Add', 'Remove', 'Swap'].forEach(prefix => {
-    // Non-category and Category spend sub-group toggles
-    ['NonCat', 'Cat'].forEach(group => {
-      const toggle = document.getElementById(`cardscenarios${prefix}${group}Toggle`);
-      if (toggle) {
-        toggle.addEventListener('click', () => {
-          const rows = document.getElementById(`cardscenarios${prefix}${group}Rows`);
-          const arrow = toggle.querySelector('.toggle-arrow');
-          if (rows) {
-            const isHidden = rows.classList.contains('hidden');
-            rows.classList.toggle('hidden');
-            if (arrow) arrow.textContent = isHidden ? '▼' : '▶';
-          }
-        });
-      }
-    });
-    // Bilt rent points breakdown toggle
-    const biltDetailToggle = document.getElementById(`cardscenarios${prefix}BiltDetailToggle`);
-    if (biltDetailToggle) {
-      biltDetailToggle.addEventListener('click', () => {
-        const detail = document.getElementById(`cardscenarios${prefix}BiltDetail`);
-        const arrow = biltDetailToggle.querySelector('.toggle-arrow');
-        if (detail) {
-          const isHidden = detail.classList.contains('hidden');
-          detail.classList.toggle('hidden');
-          if (arrow) arrow.textContent = isHidden ? '▼' : '▶';
-        }
+    const biltCashInput = document.getElementById(`cardscenarios${prefix}BiltCashInput`);
+    if (biltCashInput) {
+      const handleBiltCashChange = () => {
+        let val = parseFloat(biltCashInput.value) || 0;
+        const max = parseFloat(biltCashInput.max) || 0;
+        val = Math.max(0, Math.min(val, max));
+        biltCashInput.value = val.toFixed(2);
+        wi.biltCashKeptOverride = val;
+        // Recalculate and update everything
+        if (wi.scenarioType === 'add') updateAddCardResult();
+        else if (wi.scenarioType === 'remove') updateRemoveCardResult();
+        else if (wi.scenarioType === 'swap') updateSwapCardResult();
+      };
+      biltCashInput.addEventListener('blur', handleBiltCashChange);
+      biltCashInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); biltCashInput.blur(); }
       });
     }
   });
@@ -7080,6 +6885,18 @@ function canProceedStep2() {
   if (wi.scenarioType === 'remove') return !!wi.removeCardId;
   if (wi.scenarioType === 'swap') return !!wi.addCardId && !!wi.removeCardId;
   return false;
+}
+
+function _updateBiltCashDisplay(prefix, biltImpact) {
+  if (!biltImpact) return;
+  const input = document.getElementById(`cardscenarios${prefix}BiltCashInput`);
+  if (input) {
+    const earned = biltImpact.finalBiltCashEarned || 0;
+    input.max = earned.toFixed(2);
+    // Update "of $X" label (next sibling span after the input)
+    const ofLabel = input.parentElement?.querySelector('span:last-child');
+    if (ofLabel) ofLabel.textContent = `of ${formatCurrencyPrecise(earned)}`;
+  }
 }
 
 function _updateSummaryElements(prefix, combinedPointValue, netImpact) {
@@ -7121,8 +6938,8 @@ function updateAddCardResult() {
   }
 
   const combinedPointValue = biltImpact ? biltImpact.pointValueChange : totalGain;
-  const baseTotal = biltImpact ? biltImpact.baseSpendingImpact : totalGain;
-  const netImpact = combinedPointValue + creditsTotal - annualFee;
+  const biltCashDelta = biltImpact ? biltImpact.biltCashKeptDelta : 0;
+  const netImpact = combinedPointValue + creditsTotal + biltCashDelta - annualFee;
   const isPositive = netImpact >= 0;
 
   const headlineEl = document.getElementById('cardscenariosAddHeadline');
@@ -7139,7 +6956,8 @@ function updateAddCardResult() {
   if (creditsLineEl) creditsLineEl.textContent = `+${formatCurrencyPrecise(creditsTotal)}`;
 
   _updateSummaryElements('Add', combinedPointValue, netImpact);
-  updatePointValueContent('Add', null, baseTotal, biltImpact);
+  _updateBiltCashDisplay('Add', biltImpact);
+  updatePointValueContent('Add', biltImpact);
 }
 
 function updateRemoveCardResult() {
@@ -7157,8 +6975,8 @@ function updateRemoveCardResult() {
   }
 
   const combinedPointValue = biltImpact ? biltImpact.pointValueChange : totalChange;
-  const baseTotal = biltImpact ? biltImpact.baseSpendingImpact : totalChange;
-  const netImpact = combinedPointValue - creditsTotal + annualFee;
+  const biltCashDelta = biltImpact ? biltImpact.biltCashKeptDelta : 0;
+  const netImpact = combinedPointValue - creditsTotal + biltCashDelta + annualFee;
   const isPositive = netImpact >= 0;
 
   const headlineEl = document.getElementById('cardscenariosRemoveHeadline');
@@ -7175,7 +6993,8 @@ function updateRemoveCardResult() {
   if (creditsLineEl) creditsLineEl.textContent = `-${formatCurrencyPrecise(creditsTotal)}`;
 
   _updateSummaryElements('Remove', combinedPointValue, netImpact);
-  updatePointValueContent('Remove', null, baseTotal, biltImpact);
+  _updateBiltCashDisplay('Remove', biltImpact);
+  updatePointValueContent('Remove', biltImpact);
 }
 
 function updateSwapCardResult() {
@@ -7196,8 +7015,8 @@ function updateSwapCardResult() {
   }
 
   const combinedPointValue = biltImpact ? biltImpact.pointValueChange : totalSpendChange;
-  const baseTotal = biltImpact ? biltImpact.baseSpendingImpact : totalSpendChange;
-  const netImpact = combinedPointValue + netCredits + netFee;
+  const biltCashDelta = biltImpact ? biltImpact.biltCashKeptDelta : 0;
+  const netImpact = combinedPointValue + netCredits + biltCashDelta + netFee;
   const isPositive = netImpact >= 0;
 
   const headlineEl = document.getElementById('cardscenariosSwapHeadline');
@@ -7222,7 +7041,8 @@ function updateSwapCardResult() {
   }
 
   _updateSummaryElements('Swap', combinedPointValue, netImpact);
-  updatePointValueContent('Swap', null, baseTotal, biltImpact);
+  _updateBiltCashDisplay('Swap', biltImpact);
+  updatePointValueContent('Swap', biltImpact);
 }
 
 function updateCardScenariosSummary() {
@@ -7241,6 +7061,8 @@ function updateCardScenariosSummary() {
 
     let parts = [];
     if (impact.spendingImpact !== 0) parts.push(`${impact.spendingImpact >= 0 ? '+' : ''}${formatCurrencyPrecise(impact.spendingImpact)} from spending shifts`);
+    if (impact.rentPointsValueDelta) parts.push(`${impact.rentPointsValueDelta >= 0 ? '+' : ''}${formatCurrencyPrecise(impact.rentPointsValueDelta)} rent points`);
+    if (impact.biltCashKeptDelta) parts.push(`${impact.biltCashKeptDelta >= 0 ? '+' : ''}${formatCurrencyPrecise(impact.biltCashKeptDelta)} Bilt Cash`);
     if (wi.scenarioType === 'add' || wi.scenarioType === 'swap') {
       if (impact.addCreditsTotal > 0) parts.push(`+${formatCurrencyPrecise(impact.addCreditsTotal)} from credits`);
       if (impact.addFee > 0) parts.push(`-${formatCurrencyPrecise(impact.addFee)} annual fee`);

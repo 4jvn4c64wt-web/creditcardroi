@@ -3354,13 +3354,20 @@ function showResults(results, isNewUpload = false) {
   
   // Initial metrics (will be updated by filters)
   const t = results.totals;
-  document.getElementById('metricSpend').textContent = formatCurrency(t.spend);
-  document.getElementById('metricPoints').textContent = formatNumber(t.points);
-  document.getElementById('metricPointsValue').textContent = formatCurrency(t.pointsValue);
-  document.getElementById('metricCredits').textContent = formatCurrency(t.credits);
+  const metricSpendEl = document.getElementById('metricSpend');
+  if (metricSpendEl) metricSpendEl.textContent = formatCurrency(t.spend);
+  const metricPointsEl = document.getElementById('metricPoints');
+  if (metricPointsEl) metricPointsEl.textContent = formatNumber(t.points);
+  const metricPVEl = document.getElementById('metricPointsValue');
+  if (metricPVEl) metricPVEl.textContent = formatCurrency(t.pointsValue);
+  const metricCreditsEl = document.getElementById('metricCredits');
+  if (metricCreditsEl) metricCreditsEl.textContent = formatCurrency(t.credits);
   const netEl = document.getElementById('metricNetValue');
-  netEl.textContent = formatCurrency(t.netValue);
-  netEl.className = `metric-value ${t.netValue >= 0 ? 'positive' : 'negative'}`;
+  if (netEl) {
+    netEl.textContent = formatCurrency(t.netValue);
+    netEl.classList.remove('positive', 'negative');
+    netEl.classList.add(t.netValue >= 0 ? 'positive' : 'negative');
+  }
   // Update shell net value
   const shellNetEl = document.getElementById('shellNetValue');
   if (shellNetEl) {
@@ -6440,11 +6447,15 @@ function renderView(view) {
       // If not CY active or CY failed, use calendar year metrics (no entry in cardDisplayData)
     });
 
-    // Update top metrics
-    document.getElementById('metricSpend').textContent = formatCurrency(filteredTotals.spend);
-    document.getElementById('metricPoints').textContent = formatNumber(filteredTotals.points);
-    document.getElementById('metricPointsValue').textContent = formatCurrency(filteredTotals.pointsValue);
-    document.getElementById('metricCredits').textContent = formatCurrency(filteredTotals.credits);
+    // Update top metrics (null guards for resilience)
+    const mSpend = document.getElementById('metricSpend');
+    if (mSpend) mSpend.textContent = formatCurrency(filteredTotals.spend);
+    const mPoints = document.getElementById('metricPoints');
+    if (mPoints) mPoints.textContent = formatNumber(filteredTotals.points);
+    const mPV = document.getElementById('metricPointsValue');
+    if (mPV) mPV.textContent = formatCurrency(filteredTotals.pointsValue);
+    const mCredits = document.getElementById('metricCredits');
+    if (mCredits) mCredits.textContent = formatCurrency(filteredTotals.credits);
 
     // Calculate net value including manual credits for the selected year
     let totalManualCredits = 0;
@@ -6544,10 +6555,14 @@ function renderView(view) {
     });
 
     const netValue = adjustedTotalPointsValue + adjustedTotalCredits - totalAnnualFees;
-    document.getElementById('metricCredits').textContent = formatCurrency(adjustedTotalCredits);
+    const mCreditsAdj = document.getElementById('metricCredits');
+    if (mCreditsAdj) mCreditsAdj.textContent = formatCurrency(adjustedTotalCredits);
     const netEl = document.getElementById('metricNetValue');
-    netEl.textContent = formatCurrency(netValue);
-    netEl.className = `metric-value ${netValue >= 0 ? 'positive' : 'negative'}`;
+    if (netEl) {
+      netEl.textContent = formatCurrency(netValue);
+      netEl.classList.remove('positive', 'negative');
+      netEl.classList.add(netValue >= 0 ? 'positive' : 'negative');
+    }
 
     // Update shell header net value
     const shellNetEl = document.getElementById('shellNetValue');
@@ -7111,13 +7126,20 @@ function renderView(view) {
 
       const netValue = filteredTotals.pointsValue + filteredTotals.credits + totalManualCredits + totalAnnualBonus - totalAnnualFees;
 
-      document.getElementById('metricSpend').textContent = formatCurrency(filteredTotals.spend);
-      document.getElementById('metricPoints').textContent = formatNumber(filteredTotals.points);
-      document.getElementById('metricPointsValue').textContent = formatCurrency(filteredTotals.pointsValue);
-      document.getElementById('metricCredits').textContent = formatCurrency(filteredTotals.credits + totalManualCredits);
+      const mSpendTxn = document.getElementById('metricSpend');
+      if (mSpendTxn) mSpendTxn.textContent = formatCurrency(filteredTotals.spend);
+      const mPointsTxn = document.getElementById('metricPoints');
+      if (mPointsTxn) mPointsTxn.textContent = formatNumber(filteredTotals.points);
+      const mPVTxn = document.getElementById('metricPointsValue');
+      if (mPVTxn) mPVTxn.textContent = formatCurrency(filteredTotals.pointsValue);
+      const mCreditsTxn = document.getElementById('metricCredits');
+      if (mCreditsTxn) mCreditsTxn.textContent = formatCurrency(filteredTotals.credits + totalManualCredits);
       const netEl = document.getElementById('metricNetValue');
-      netEl.textContent = formatCurrency(netValue);
-      netEl.className = `metric-value ${netValue >= 0 ? 'positive' : 'negative'}`;
+      if (netEl) {
+        netEl.textContent = formatCurrency(netValue);
+        netEl.classList.remove('positive', 'negative');
+        netEl.classList.add(netValue >= 0 ? 'positive' : 'negative');
+      }
       
       // Pagination
       const pageSize = 100;
@@ -8227,7 +8249,14 @@ async function runProcessing(isNewUpload = false) {
     }
   } catch (e) {
     showLoading(false);
+    console.error('runProcessing error:', e);
     alert('Error: ' + e.message);
+    // Restore UI so the user isn't stuck on a blank page
+    const resultsEl = document.getElementById('resultsSection');
+    const uploadEl = document.getElementById('uploadSection');
+    if (resultsEl && resultsEl.classList.contains('hidden') && uploadEl) {
+      uploadEl.classList.remove('hidden');
+    }
   }
 }
 
@@ -8675,10 +8704,19 @@ async function initCore() {
     state.transactions = state.savedTransactions;
     const allLast4s = [...new Set(state.transactions.map(t => t.last4).filter(Boolean))];
     const unmapped = allLast4s.filter(l4 => !state.cardMappings[l4]);
-    
+
     // Always process and show Summary, even if some cards unmapped
     // User can click Card Mapping to map them
-    await runProcessing();
+    try {
+      await runProcessing();
+    } catch (e) {
+      // If processing fails entirely, restore the upload section so user isn't stuck
+      console.error('initCore processing error:', e);
+      const resultsEl = document.getElementById('resultsSection');
+      if (!resultsEl || resultsEl.classList.contains('hidden')) {
+        document.getElementById('uploadSection').classList.remove('hidden');
+      }
+    }
   }
   
   document.getElementById('saveCardConfig').addEventListener('click', async () => {

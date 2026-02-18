@@ -3350,7 +3350,7 @@ function showResults(results, isNewUpload = false) {
   state.selectedYear = years.length > 0 ? years[0] : null;
   state.availableYears = years; // Store for use in filters
   
-  document.getElementById('transactionCount').textContent = `${results.processed.length} transactions`;
+
   
   // Initial metrics (will be updated by filters)
   const t = results.totals;
@@ -6553,8 +6553,6 @@ function renderView(view) {
     const metricAFEl = document.getElementById('metricAnnualFees');
     if (metricAFEl) metricAFEl.textContent = formatCurrency(totalAnnualFees);
 
-    // Update transaction count
-    document.getElementById('transactionCount').textContent = `${filteredProcessed.length} transactions`;
 
     // Get available years for filter
     const summaryYears = state.availableYears.length > 0 ? state.availableYears : [...new Set(r.processed.map(t => getYearFromDateString(t.date)))].sort((a, b) => b - a);

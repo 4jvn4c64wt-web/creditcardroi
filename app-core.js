@@ -8245,18 +8245,19 @@ async function initCore() {
   });
   
   document.getElementById('processBtn').addEventListener('click', () => runProcessing(true));
-  document.getElementById('configBtn').addEventListener('click', () => {
-    const allLast4s = [...new Set(state.transactions.map(t => t.last4).filter(Boolean))];
-    showMapping(allLast4s);
-  });
-  
-  // Manage Data dropdown - declare early so clear handlers can use it
-  const manageDataBtn = document.getElementById('manageDataBtn');
+  // Manage dropdown system - declare early so clear handlers can use closeManageMenus()
+  const manageBtn = document.getElementById('manageBtn');
+  const manageDropdown = document.getElementById('manageDropdown');
   const manageDataDropdown = document.getElementById('manageDataDropdown');
+  function closeManageMenus() {
+    manageDropdown.classList.remove('open');
+    manageDataDropdown.classList.remove('open');
+    manageBtn.setAttribute('aria-expanded', 'false');
+  }
   
   // Clear all transactions button
   document.getElementById('clearAllTxns').addEventListener('click', () => {
-    manageDataDropdown.classList.add('hidden');
+    closeManageMenus();
     if (confirm('Are you sure you want to delete ALL stored transactions? This cannot be undone.')) {
       state.transactions = [];
       state.savedTransactions = [];
@@ -8281,7 +8282,7 @@ async function initCore() {
   
   // Clear by year button
   document.getElementById('clearByYear').addEventListener('click', () => {
-    manageDataDropdown.classList.add('hidden');
+    closeManageMenus();
     // Get available years
     const years = [...new Set(state.savedTransactions.map(t => getYearFromDateString(t.date)))].sort((a, b) => b - a);
     
@@ -8338,7 +8339,7 @@ async function initCore() {
   
   // Clear all settings button
   document.getElementById('clearAllSettings').addEventListener('click', () => {
-    manageDataDropdown.classList.add('hidden');
+    closeManageMenus();
     if (confirm('Are you sure you want to clear all settings (card mappings, point values, category selections, credit claims)? Transactions will be kept.')) {
       state.cardMappings = {};
       state.customPointValues = {};
@@ -8385,7 +8386,7 @@ async function initCore() {
   
   // Clear everything button
   document.getElementById('clearEverything').addEventListener('click', () => {
-    manageDataDropdown.classList.add('hidden');
+    closeManageMenus();
     if (confirm('⚠️ This will delete ALL data including transactions, settings, and card mappings. Are you absolutely sure?')) {
       if (confirm('This action CANNOT be undone. Type "DELETE" in the next prompt to confirm.')) {
         const confirmation = prompt('Type DELETE to confirm:');
@@ -8492,7 +8493,7 @@ async function initCore() {
   
   // Export Data button and modal handlers
   document.getElementById('exportData').addEventListener('click', () => {
-    manageDataDropdown.classList.add('hidden');
+    closeManageMenus();
 
     // Gate export: require at least one active Decision Pass or Pro
     if (window.TIER_CONFIG !== 'pro' && getActiveDecisionPasses().length === 0) {
@@ -8538,20 +8539,55 @@ async function initCore() {
   // Initialize stored transaction count display
   updateStoredTxnCount();
   
-  // Manage Data dropdown toggle
-  manageDataBtn.addEventListener('click', (e) => {
+  // Manage dropdown toggle
+  manageBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    manageDataDropdown.classList.toggle('hidden');
+    const isOpen = manageDropdown.classList.contains('open');
+    closeManageMenus();
+    if (!isOpen) {
+      manageDropdown.classList.add('open');
+      manageBtn.setAttribute('aria-expanded', 'true');
+    }
   });
-  
-  // Close dropdown when clicking outside
+
+  // "Manage Data" item inside Manage dropdown opens the data sub-dropdown
+  document.getElementById('manageDataBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    manageDropdown.classList.remove('open');
+    manageDataDropdown.classList.add('open');
+    manageBtn.setAttribute('aria-expanded', 'true');
+  });
+
+  // configBtn inside Manage dropdown — close menu then show mapping
+  document.getElementById('configBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeManageMenus();
+    const allLast4s = [...new Set(state.transactions.map(t => t.last4).filter(Boolean))];
+    showMapping(allLast4s);
+  });
+
+  // cardConfigBtn inside Manage dropdown — close menu then show card config
+  document.getElementById('cardConfigBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeManageMenus();
+    showCardConfigEditor();
+  });
+
+  // Close all manage dropdowns when clicking outside
   document.addEventListener('click', () => {
-    manageDataDropdown.classList.add('hidden');
+    closeManageMenus();
   });
-  
-  // Prevent dropdown from closing when clicking inside it
-  manageDataDropdown.addEventListener('click', (e) => {
-    e.stopPropagation();
+
+  // Prevent dropdowns from closing when clicking inside them
+  manageDropdown.addEventListener('click', (e) => { e.stopPropagation(); });
+  manageDataDropdown.addEventListener('click', (e) => { e.stopPropagation(); });
+
+  // Keyboard: Escape closes menus and returns focus to Manage button
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && (manageDropdown.classList.contains('open') || manageDataDropdown.classList.contains('open'))) {
+      closeManageMenus();
+      manageBtn.focus();
+    }
   });
   
   document.getElementById('backFromMapping').addEventListener('click', async () => {
@@ -8568,8 +8604,6 @@ async function initCore() {
       document.getElementById('newFileInput').value = '';
     }
   });
-  
-  document.getElementById('cardConfigBtn').addEventListener('click', showCardConfigEditor);
   
   // Low-confidence review modal handlers
   document.getElementById('lowConfidenceModal').addEventListener('click', () => {

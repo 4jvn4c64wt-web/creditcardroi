@@ -99,6 +99,12 @@
     .shell-expand-btn { width: 26px; height: 26px; border-radius: 50%; border: 1px solid #e8e5e0; background: #fff; color: #9e9b96; font-size: 16px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; margin-left: 10px; transition: all 0.15s; line-height: 1; }
     .shell-expand-btn:hover { background: #f5f5f4; color: #1c1917; }
     .shell-topbar-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .manage-dropdown-wrap { position: relative; display: inline-block; }
+    .manage-dropdown { position: absolute; top: 100%; right: 0; margin-top: 8px; background: #fff; border: 1px solid #e7e5e4; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.10); min-width: 200px; z-index: 200; padding: 4px 0; display: none; }
+    .manage-dropdown.open { display: block; }
+    .manage-dropdown-item { display: block; width: 100%; text-align: left; padding: 10px 16px; border: none; background: none; cursor: pointer; font-size: 13px; font-family: inherit; color: #1c1917; }
+    .manage-dropdown-item:hover { background: #f5f5f4; }
+    .manage-dropdown-item + .manage-dropdown-item { border-top: 1px solid #f5f5f4; }
 
     /* Details strip */
     .shell-details-strip { overflow: hidden; transition: max-height 0.35s ease, opacity 0.3s ease; max-height: 0; opacity: 0; background: #fff; border-bottom: 1px solid #e8e5e0; }
@@ -354,7 +360,7 @@
     <div id="cardConfigSection" class="card hidden">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
         <h2 class="card-title" style="margin:0;">Card Configuration</h2>
-        <button class="btn btn-secondary" id="helpBtnCardConfig" style="padding:6px 12px;">❓ Help</button>
+        <button class="btn btn-secondary" id="helpBtnCardConfig" style="padding:6px 12px;">Help</button>
       </div>
       
       <div style="margin-bottom:16px;display:flex;align-items:center;gap:8px;">
@@ -404,7 +410,7 @@
     <div id="helpModal" class="loading-overlay hidden" style="cursor:pointer;">
       <div class="loading-modal" style="cursor:default;max-width:550px;text-align:left;max-height:80vh;overflow-y:auto;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-          <h3 style="font-size:18px;font-weight:600;margin:0;">❓ Help</h3>
+          <h3 style="font-size:18px;font-weight:600;margin:0;">Help</h3>
           <button id="closeHelpModal" style="background:none;border:none;font-size:20px;cursor:pointer;color:#78716c;">&times;</button>
         </div>
         <div id="helpModalContent"></div>
@@ -431,34 +437,37 @@
           <div class="shell-topbar-right">
             <button class="btn btn-secondary" id="upgradeBtn" style="color:#059669;border-color:#bbf7d0;" title="Unlock editing, full history, and more">Upgrade to Pro</button>
             <button class="btn btn-secondary" id="helpBtn" title="How the tracker works and how to get the most out of it">Help</button>
-            <button class="btn btn-secondary" id="configBtn" title="Reassign card numbers to rewards cards">Card Mapping</button>
-            <button class="btn btn-secondary" id="cardConfigBtn" title="Adjust annual fees, credits, and card-specific settings">Card Config</button>
-            <div style="position:relative;display:inline-block;">
-              <button class="btn btn-secondary" id="manageDataBtn" title="Export, clear, or reset your data and settings">Manage Data</button>
-              <div id="manageDataDropdown" class="hidden" style="position:absolute;top:100%;right:0;margin-top:4px;background:#fff;border:1px solid #e7e5e4;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.1);min-width:260px;z-index:100;">
-                <button class="dropdown-item" id="exportData" style="display:block;width:100%;text-align:left;padding:10px 14px;border:none;background:none;cursor:pointer;font-size:13px;border-bottom:1px solid #f5f5f4;">
+            <div class="manage-dropdown-wrap">
+              <button class="btn btn-secondary" id="manageBtn" aria-expanded="false" aria-controls="manageDropdown" title="Card Mapping, Card Config, and Data Management">Manage</button>
+              <div class="manage-dropdown" id="manageDropdown" role="menu">
+                <button class="manage-dropdown-item" id="configBtn" role="menuitem">Card Mapping</button>
+                <button class="manage-dropdown-item" id="cardConfigBtn" role="menuitem">Card Config</button>
+                <button class="manage-dropdown-item" id="manageDataBtn" role="menuitem">Manage Data</button>
+              </div>
+              <div id="manageDataDropdown" class="manage-dropdown" style="min-width:260px;" role="menu">
+                <button class="manage-dropdown-item" id="exportData" role="menuitem">
                   <div>Export Data</div>
                   <div style="font-size:11px;color:#78716c;margin-top:2px;">Download backup of transactions & settings</div>
                 </button>
-                <button class="dropdown-item" id="clearByYear" style="display:block;width:100%;text-align:left;padding:10px 14px;border:none;background:none;cursor:pointer;font-size:13px;border-bottom:1px solid #f5f5f4;">
+                <button class="manage-dropdown-item" id="clearByYear" role="menuitem">
                   <div>Clear Year...</div>
                   <div style="font-size:11px;color:#78716c;margin-top:2px;">Delete transactions from a specific year</div>
                 </button>
-                <button class="dropdown-item" id="clearAllTxns" style="display:block;width:100%;text-align:left;padding:10px 14px;border:none;background:none;cursor:pointer;font-size:13px;border-bottom:1px solid #f5f5f4;">
+                <button class="manage-dropdown-item" id="clearAllTxns" role="menuitem">
                   <div>Clear All Transactions</div>
                   <div style="font-size:11px;color:#78716c;margin-top:2px;">Remove all transaction history</div>
                 </button>
-                <button class="dropdown-item" id="clearAllSettings" style="display:block;width:100%;text-align:left;padding:10px 14px;border:none;background:none;cursor:pointer;font-size:13px;border-bottom:1px solid #f5f5f4;">
+                <button class="manage-dropdown-item" id="clearAllSettings" role="menuitem">
                   <div>Clear Settings</div>
                   <div style="font-size:11px;color:#78716c;margin-top:2px;">Reset card mappings, categories & credit claims</div>
                 </button>
-                <button class="dropdown-item" id="clearEverything" style="display:block;width:100%;text-align:left;padding:10px 14px;border:none;background:none;cursor:pointer;font-size:13px;color:#dc2626;">
+                <button class="manage-dropdown-item" id="clearEverything" role="menuitem" style="color:#dc2626;">
                   <div>Clear Everything</div>
                   <div style="font-size:11px;color:#a8a29e;margin-top:2px;">Start completely fresh</div>
                 </button>
               </div>
             </div>
-            <label class="btn btn-secondary" id="newUploadBtn" style="cursor:pointer;" title="Import another CSV or restore a backup">
+            <label class="btn btn-primary" id="newUploadBtn" style="cursor:pointer;" title="Import another CSV or restore a backup">
               <input type="file" id="newFileInput" accept=".csv,.json">
               New Upload
             </label>
@@ -548,7 +557,7 @@
     <div id="exportModal" class="loading-overlay hidden" style="cursor:pointer;">
       <div class="loading-modal" style="cursor:default;max-width:560px;text-align:left;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-          <h3 style="font-size:18px;font-weight:600;margin:0;">💾 Export Your Data</h3>
+          <h3 style="font-size:18px;font-weight:600;margin:0;">Export Your Data</h3>
           <button id="closeExportModal" style="background:none;border:none;font-size:20px;cursor:pointer;color:#78716c;">&times;</button>
         </div>
         <p style="font-size:14px;color:#57534e;margin-bottom:20px;">

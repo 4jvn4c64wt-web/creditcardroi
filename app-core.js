@@ -3851,6 +3851,15 @@ function calculateRemoveCardValue(removeCardId, year) {
       r.valueChange *= annualizationFactor;
     }
   }
+  // For rent on Bilt cards: use configured monthly rent × 12 instead of annualized
+  // transaction data, which can be inflated by timing issues (e.g. 3 payments in 2 months)
+  const monthlyRent = state.cardScenarios?.rentAmount || 0;
+  if (monthlyRent > 0 && buckets['rent'] && CARDS[removeCardId]?.isBilt && buckets['rent'].spend > 0) {
+    const annualRent = monthlyRent * 12;
+    const ratio = annualRent / buckets['rent'].spend;
+    buckets['rent'].spend = annualRent;
+    buckets['rent'].valueChange *= ratio;
+  }
   // Sort by value change ascending (biggest losses first)
   rows.sort((a, b) => a.valueChange - b.valueChange);
 
@@ -4093,6 +4102,13 @@ function calculateSwapValue(removeCardId, addCardId, year) {
   if (removeBuckets['rent']) {
     removeBuckets['rent'].spend *= annualizationFactor;
     removeBuckets['rent'].valueChange *= annualizationFactor;
+    // Use configured monthly rent × 12 instead of annualized transaction data
+    if (monthlyRent > 0 && CARDS[removeCardId]?.isBilt && removeBuckets['rent'].spend > 0) {
+      const annualRent = monthlyRent * 12;
+      const ratio = annualRent / removeBuckets['rent'].spend;
+      removeBuckets['rent'].spend = annualRent;
+      removeBuckets['rent'].valueChange *= ratio;
+    }
   }
 
   const removeRows = Object.values(removeBuckets);
@@ -4291,7 +4307,7 @@ function calculateSwapValue(removeCardId, addCardId, year) {
 function getAnnualizedCardSpend(cardId, year) {
   if (!state.results || !state.results.processed) return { factor: 1, categories: {}, subcategories: {} };
   const txns = state.results.processed.filter(t =>
-    t.cardId === cardId && !t.isPayment && !t.isCredit &&
+    t.cardId === cardId && !t.isPayment && !t.isCredit && !t.isRefund &&
     getYearFromDateString(t.date) === year
   );
 
@@ -4334,6 +4350,19 @@ function getAnnualizedCardSpend(cardId, year) {
     for (const d of [...Object.values(categories), ...Object.values(subcategories)]) {
       d.spend *= factor;
       d.points *= factor;
+    }
+  }
+  // For rent on Bilt cards: use configured monthly rent × 12 instead of annualized
+  // transaction data, which can be inflated by timing issues (e.g. 3 payments in 2 months)
+  const monthlyRent = state.cardScenarios?.rentAmount || 0;
+  if (monthlyRent > 0 && subcategories['rent'] && CARDS[cardId]?.isBilt && subcategories['rent'].spend > 0) {
+    const annualRent = monthlyRent * 12;
+    const ratio = annualRent / subcategories['rent'].spend;
+    subcategories['rent'].spend = annualRent;
+    subcategories['rent'].points = Math.round(subcategories['rent'].points * ratio);
+    if (categories['rent'] && categories['rent'].spend > 0) {
+      categories['rent'].spend = annualRent;
+      categories['rent'].points = Math.round(categories['rent'].points * ratio);
     }
   }
 

@@ -6641,8 +6641,9 @@ function attachCardScenariosListeners() {
   if (back2) back2.addEventListener('click', () => { wi.step = 1; renderView('cardscenarios'); });
   const next2 = document.getElementById('cardscenariosNext2');
   if (next2) next2.addEventListener('click', () => {
-    // Check if any Bilt card is involved — prompt for rent amount
-    if (scenarioInvolvesBilt()) {
+    // Check if the card being added/removed/swapped is Bilt — prompt for rent amount
+    const scenarioCardIsBilt = (wi.addCardId && CARDS[wi.addCardId]?.isBilt) || (wi.removeCardId && CARDS[wi.removeCardId]?.isBilt);
+    if (scenarioCardIsBilt) {
       wi.showRentPrompt = true;
       renderView('cardscenarios');
       return;

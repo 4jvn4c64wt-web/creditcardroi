@@ -296,7 +296,7 @@ This is the single source of truth for "how many points does this card earn on t
 
 1. **Cash+ quarterly categories** — User-selected 5% and 2% categories per quarter/year. Walks hierarchy to match.
 2. **CFF quarterly rotating categories** — Stored historical data with PayPal December-only handling and merchant-keyword bonuses.
-3. **Bilt cards (legacy vs 2.0)** — Before Feb 7, 2026: flat 3x dining, 2x travel, 1x else. After: card-specific rates with rent ratio calculation (housing-only) or Bilt Cash flexible option.
+3. **Bilt cards (legacy vs 2.0)** — Before Feb 7, 2026: flat 3x dining, 2x travel, 1x else. After: card-specific rates with rent ratio calculation (housing-only) or Bilt Cash flexible option. **Bilt Cash (4%) is a flat rebate on ALL non-rent spend on any Bilt card. It is completely independent of points/multipliers — do not mix or combine them.** See Section 13 for how Bilt Cash is handled in scenarios.
 4. **Chase Lyft partnership** — Date-dependent: CSR had 10x before April 2025, 5x after. CFU had 5x before, 2x after.
 5. **CSR legacy rates** — Before Oct 26, 2025: 10x Chase Travel, 3x dining, 3x all travel. After: new rate structure.
 6. **Capital One Venture X portal sub-types** — Hotels/rental cars get 10x, flights/other get 5x on Capital One Travel portal.
@@ -558,7 +558,7 @@ Logic is in `getCategoryBadgeStyle()` (~line 1688).
 
 ## 13. Card Scenarios (What-If)
 
-The Card Scenarios feature is a multi-step wizard in `app-core.js` (~lines 4521–5700). The tab is visible in both free and pro tiers, but free users see a pro-gating modal instead of the wizard (handled in `app.js`).
+The Card Scenarios feature is a multi-step wizard in `app-core.js` (~lines 4521–7100). The tab is visible in both free and pro tiers, but free users see a pro-gating modal instead of the wizard (handled in `app.js`).
 
 ### Scenario Types
 - **Add a card** — "What if I got card X?"
@@ -574,6 +574,121 @@ The Card Scenarios feature is a multi-step wizard in `app-core.js` (~lines 4521�
 | `calculateRemoveCardValue()` | Projects loss from cancelling a card |
 | `calculateSwapValue()` | Net impact of replacing one card with another |
 | `calculateCardScenariosNetImpact()` | Final net impact including credits |
+
+### Bilt Cash in Scenarios
+
+Bilt Cash is a **flat 4% rebate on all non-rent spend on any Bilt card**. It is independent of points. In scenarios, a cap-aware routing algorithm (`computeBiltRouting()`) determines which categories to route to Bilt by sorting categories by sacrifice cost and routing cheapest-sacrifice spend first, up to the rent cap.
+
+**Key concepts:**
+- **Sacrifice cost**: `altValuePerDollar - biltBaseValuePerDollar` — the points you give up by routing spend to Bilt instead of the alternative card
+- **Rent uplift**: `(0.04 / 3) × 100 × biltPointValue` per dollar — the value of rent points you gain from Bilt Cash earned on that dollar (~$0.024/dollar at PV $0.018)
+- **Net benefit**: `rentUpliftPerDollar - sacrificeCost` — if positive, routing to Bilt is worthwhile
+- **Rent cap**: Monthly rent × $0.03 monthly Bilt Cash needed → annual Bilt spend cap = `monthlyRent × 0.75 × 12`
+
+### Bilt Rewards (Bilt Cash → Rent Points → Remaining)
+
+Bilt Rewards is displayed as a collapsible section in scenario results, separate from points and credits. **Bilt Cash is CONSUMED to earn rent points — do not double-count them.**
+
+#### How Bilt Cash Works
+
+1. **Earned**: 4% of all non-rent spend on any Bilt card
+2. **Redeemed**: You must SPEND Bilt Cash to buy rent points ($3 Bilt Cash = 100 Bilt Points, capped at 1 point per $1 rent)
+3. **Remaining**: Earned − Redeemed = leftover cash (counted as value only when plan is NOT 'maximize')
+
+**Total Bilt Rewards = Rent Points Value + Bilt Cash Remaining (if plan ≠ maximize)**
+
+#### Rent Points (Bilt 2.0 Flexible Mode)
+
+Under Bilt 2.0 (effective Feb 7, 2026), rent points require redeeming Bilt Cash:
+- **$3 of Bilt Cash = 100 rent points** (i.e. $1 Bilt Cash = 33.33 points)
+- Rent points are capped at 1 point per $1 rent per month
+- `rentUpliftPerDollar = (0.04 / 3) × 100 × biltPointValue` — always computed dynamically, never hardcoded
+- At PV $0.018: uplift = ~$0.024/dollar. Break-even PV is $0.03/point.
+
+#### Cap-Aware Routing Algorithm (`computeBiltRouting()`)
+
+Replaces the old `getBiltBenefitPerDollar()` static approach. The algorithm:
+
+1. **Collect candidates**: Each category has a Bilt option and a non-Bilt alternative
+2. **Compute sacrifice cost** per category: `altValuePerDollar - biltBaseValuePerDollar`
+3. **Separate into two groups**:
+   - `biltWins` (sacrifice ≤ 0): Bilt already wins on pure points → always route to Bilt
+   - `altWins` (sacrifice > 0): Alternative card wins on points → route to Bilt only if rent uplift exceeds sacrifice
+4. **Sort `altWins` by sacrifice ascending** (cheapest sacrifice first)
+5. **Route `altWins` to Bilt** while `netBenefit > 0` AND rent cap not reached
+6. **Handle partial splits**: When a category straddles the cap boundary, split the spend
+7. **Post-cap**: Pure points comparison; Bilt Cash is tiebreaker only (never overrides a card that wins on points)
+
+**Bilt Cash Plans** (selected in step 2b):
+- `'maximize'` (default): Route spend to fill rent cap. Remaining Bilt Cash NOT counted as value.
+- `'cash'`: No rent uplift in routing. Bilt Cash acts as tiebreaker ONLY for equal-value cards.
+- `'custom'`: User specifies monthly Bilt Cash to redeem. Remaining cash IS counted as value.
+
+Each route result includes a `routeReason` string explaining the routing decision.
+
+#### Step 2b Rent & Plan Prompt
+
+The rent/plan prompt (step 2b) appears whenever **any Bilt card is in the current wallet or involved in the scenario**. Controlled by `scenarioInvolvesBilt()`. It collects:
+- Monthly rent amount
+- Bilt Cash plan (maximize / keep as cash / custom)
+- Custom monthly redemption amount (if custom plan)
+
+#### Display
+
+Bilt scenario results look nearly identical to non-Bilt scenarios. The only additions are a rent points row inside Point Value Change and a Bilt Cash line in the top-level summary.
+
+**Top-level summary (Bilt scenarios):**
+```
+Credits                                +$XX
+Point value change (incl. rent pts)    +$XX  ← collapsible flat table + rent points row
+Bilt Cash (kept)          [$input]     +$XX  ← editable input, controls rent points
+Annual fee                             -$XX
+─────────────────────────
+Estimated net impact                   +$XX
+```
+
+**Non-Bilt scenarios**: Same structure without Bilt Cash line or rent points row.
+
+**Point Value Change section**: Uses the same flat `renderUnifiedSpendTable()` for all scenarios. For Bilt, appends a single "Rent points (N pts @ $X.XXX)" summary row below the table showing the rent points value delta.
+
+**Bilt Cash input**: Editable number input controlling how much Bilt Cash to keep (not redeemed). The remainder is redeemed for rent points. Capped at `[0, finalBiltCashEarned]`. Defaults: maximize plan → $0, cash plan → full earned amount. On blur/enter, updates rent points and all dependent values.
+
+**Key rendering functions:**
+- `renderPointValueContent(prefix, rows, baseTotal, biltImpact, tableId, annualizationFactor)` — flat table + optional rent points row
+- `updatePointValueContent(prefix, biltImpact)` — live-updates rent points display
+- `_updateBiltCashDisplay(prefix, biltImpact)` — updates Bilt Cash input constraints
+
+#### State Properties
+
+- `wi.biltCashPlan` — `'maximize'` | `'cash'` | `'custom'` (default: `'maximize'`)
+- `wi.biltCustomMonthlyRedemption` — Monthly $ of Bilt Cash to redeem (for custom plan)
+- `wi.biltCashKeptOverride` — User-set Bilt Cash to keep (from the editable input). When set, overrides plan-based computation. Cleared when plan changes.
+- `wi.rentAmount` — Monthly rent amount
+
+#### Calculation (in `calculateCardScenariosNetImpact()`)
+
+The return object includes:
+- `pointValueChange` — `spendingImpact + rentPointsValueDelta` (Point Value Change line, includes rent points, excludes Bilt Cash)
+- `biltCashKeptDelta` — `finalBiltCashRemaining - currentBiltCashRemaining` (Bilt Cash line, separate from points)
+- `spendingImpact` — net value change from card-to-card spend shifts only
+- `rentPointsValueDelta` — change in annual rent points value
+- `totalImpact` — `pointValueChange + creditsImpact + biltCashKeptDelta + feeImpact`
+- `finalBiltCashEarned`, `finalBiltCashRedeemed`, `finalBiltCashRemaining`
+- `finalRentPointsAnnual`, `finalRentPointsValue`
+- `finalBiltSpend`, `currentBiltSpend`
+- `currentBiltCashEarned`, `currentBiltCashRedeemed`, `currentBiltCashRemaining`, `currentRentPointsValue`
+- `biltCashPlan`, `countCashAsValue`, `monthlyRent`
+- `annualBiltSpendCap`, `rentCapUsedPct`
+
+| Scenario | finalBiltSpend | Impact |
+|----------|---------------|--------|
+| Remove only Bilt card | 0 | Lose all Bilt Cash + Rent Points |
+| Remove Bilt card (another Bilt remains) | Spend routed to remaining Bilt via computeBiltRouting | Partial loss |
+| Swap Bilt → Bilt | Routed by computeBiltRouting | Delta based on routing changes |
+| Swap Bilt → non-Bilt (no other Bilt) | 0 | Lose all Bilt Cash + Rent Points |
+| Swap non-Bilt → Bilt | current + newly routed | Gain Bilt Cash + Rent Points |
+| Add Bilt | current + newly routed | Gain Bilt Cash + Rent Points |
+| Add non-Bilt (wallet has Bilt) | May decrease if spend shifts away from Bilt | Reduced Bilt Cash |
 
 ### Fairness Principle
 
@@ -774,6 +889,7 @@ Quick lookup for the most commonly needed functions in `app-core.js`:
 | `showCardConfigEditor()` | 2231 | Card config UI |
 | `showResults()` | 3300 | Results page setup |
 | `calculateOptimizationRate()` | 3448 | Wallet optimization measurement |
+| `computeBiltRouting()` | ~4164 | Cap-aware Bilt routing algorithm (sacrifice-cost sorting, rent cap enforcement) |
 | `renderCardScenarios()` | 4521 | What-If wizard |
 | `renderView()` | 6154 | Tab switching (summary/transactions/monthly) |
 | `showCategoryModal()` | 7347 | Transaction recategorization |

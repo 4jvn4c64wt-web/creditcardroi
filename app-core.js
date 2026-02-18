@@ -5576,16 +5576,10 @@ function renderStep4Add() {
       <span class="mono" style="font-weight:600;color:${combinedPointValue >= 0 ? '#059669' : combinedPointValue < 0 ? '#dc2626' : '#78716c'};" id="cardscenariosAddRewardsLine">${combinedPointValue >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(combinedPointValue))}</span>
     </div>`;
   if (biltImpact) {
-    const biltCashEarned = biltImpact.finalBiltCashEarned || 0;
     const biltCashKept = biltImpact.finalBiltCashRemaining || 0;
-    html += `<div style="display:flex;justify-content:space-between;align-items:center;">
+    html += `<div style="display:flex;justify-content:space-between;">
       <span>Bilt Cash <span style="font-size:11px;color:#78716c;font-weight:400;">(kept)</span></span>
-      <span style="display:flex;align-items:center;gap:4px;">
-        <span class="mono" style="font-size:12px;color:#78716c;">$</span>
-        <input type="number" id="cardscenariosAddBiltCashInput" min="0" max="${biltCashEarned.toFixed(2)}" step="0.01" value="${biltCashKept.toFixed(2)}"
-          style="width:72px;padding:2px 4px;border:1px solid #d6d3d1;border-radius:4px;font-size:13px;text-align:right;font-family:monospace;" />
-        <span style="font-size:11px;color:#a8a29e;">of ${formatCurrencyPrecise(biltCashEarned)}</span>
-      </span>
+      <span class="mono" style="font-weight:600;color:${biltCashDelta >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosAddBiltCashTopLine">${biltCashDelta >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(biltCashDelta))}</span>
     </div>`;
   }
   html += `<div style="display:flex;justify-content:space-between;">
@@ -5644,6 +5638,23 @@ function renderStep4Add() {
   html += renderPointValueContent('Add', addNormalizedRows, baseTotal, biltImpact, 'cardscenariosAddTable', annualizationFactor);
 
   html += `</div></div>`; // end rewards detail + rewards section
+
+  // Bilt Cash (editable) in bottom ledger
+  if (biltImpact) {
+    const biltCashEarned = biltImpact.finalBiltCashEarned || 0;
+    const biltCashKept = biltImpact.finalBiltCashRemaining || 0;
+    html += `<div style="margin-top:12px;border-top:1px solid #e7e5e4;padding-top:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;">
+        <span style="font-weight:600;color:#57534e;">Bilt Cash <span style="font-weight:400;color:#78716c;">(kept)</span></span>
+        <span style="display:flex;align-items:center;gap:4px;">
+          <span class="mono" style="font-size:12px;color:#78716c;">$</span>
+          <input type="number" id="cardscenariosAddBiltCashInput" min="0" max="${biltCashEarned.toFixed(2)}" step="0.01" value="${biltCashKept.toFixed(2)}"
+            style="width:72px;padding:2px 4px;border:1px solid #d6d3d1;border-radius:4px;font-size:13px;text-align:right;font-family:monospace;" />
+          <span style="font-size:11px;color:#a8a29e;">of ${formatCurrencyPrecise(biltCashEarned)}</span>
+        </span>
+      </div>
+    </div>`;
+  }
 
   // Annual fee
   html += `<div class="cardscenarios-annual-fee" style="margin-top:12px;">
@@ -5948,16 +5959,9 @@ function renderStep4Remove() {
       <span class="mono" style="font-weight:600;color:${combinedPointValue >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosRemoveRewardsLine">${combinedPointValue >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(combinedPointValue))}</span>
     </div>`;
   if (biltImpact) {
-    const biltCashEarned = biltImpact.finalBiltCashEarned || 0;
-    const biltCashKept = biltImpact.finalBiltCashRemaining || 0;
-    html += `<div style="display:flex;justify-content:space-between;align-items:center;">
+    html += `<div style="display:flex;justify-content:space-between;">
       <span>Bilt Cash <span style="font-size:11px;color:#78716c;font-weight:400;">(kept)</span></span>
-      <span style="display:flex;align-items:center;gap:4px;">
-        <span class="mono" style="font-size:12px;color:#78716c;">$</span>
-        <input type="number" id="cardscenariosRemoveBiltCashInput" min="0" max="${biltCashEarned.toFixed(2)}" step="0.01" value="${biltCashKept.toFixed(2)}"
-          style="width:72px;padding:2px 4px;border:1px solid #d6d3d1;border-radius:4px;font-size:13px;text-align:right;font-family:monospace;" />
-        <span style="font-size:11px;color:#a8a29e;">of ${formatCurrencyPrecise(biltCashEarned)}</span>
-      </span>
+      <span class="mono" style="font-weight:600;color:${biltCashDelta >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosRemoveBiltCashTopLine">${biltCashDelta >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(biltCashDelta))}</span>
     </div>`;
   }
   html += `<div style="display:flex;justify-content:space-between;">
@@ -6000,6 +6004,23 @@ function renderStep4Remove() {
   html += renderPointValueContent('Remove', removeNormalizedRows, totalChange, biltImpact, 'cardscenariosRemoveTable', annualizationFactor);
 
   html += `</div></div>`; // end rewards detail + spending section
+
+  // Bilt Cash (editable) in bottom ledger
+  if (biltImpact) {
+    const biltCashEarned = biltImpact.finalBiltCashEarned || 0;
+    const biltCashKept = biltImpact.finalBiltCashRemaining || 0;
+    html += `<div style="margin-top:12px;border-top:1px solid #e7e5e4;padding-top:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;">
+        <span style="font-weight:600;color:#57534e;">Bilt Cash <span style="font-weight:400;color:#78716c;">(kept)</span></span>
+        <span style="display:flex;align-items:center;gap:4px;">
+          <span class="mono" style="font-size:12px;color:#78716c;">$</span>
+          <input type="number" id="cardscenariosRemoveBiltCashInput" min="0" max="${biltCashEarned.toFixed(2)}" step="0.01" value="${biltCashKept.toFixed(2)}"
+            style="width:72px;padding:2px 4px;border:1px solid #d6d3d1;border-radius:4px;font-size:13px;text-align:right;font-family:monospace;" />
+          <span style="font-size:11px;color:#a8a29e;">of ${formatCurrencyPrecise(biltCashEarned)}</span>
+        </span>
+      </div>
+    </div>`;
+  }
 
   // Saved annual fee
   html += `<div class="cardscenarios-annual-fee" style="margin-top:12px;">
@@ -6079,16 +6100,9 @@ function renderStep4Swap() {
       <span class="mono" style="font-weight:600;color:${combinedPointValue >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosSwapRewardsLine">${combinedPointValue >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(combinedPointValue))}</span>
     </div>`;
   if (biltImpact) {
-    const biltCashEarned = biltImpact.finalBiltCashEarned || 0;
-    const biltCashKept = biltImpact.finalBiltCashRemaining || 0;
-    html += `<div style="display:flex;justify-content:space-between;align-items:center;">
+    html += `<div style="display:flex;justify-content:space-between;">
       <span>Bilt Cash <span style="font-size:11px;color:#78716c;font-weight:400;">(kept)</span></span>
-      <span style="display:flex;align-items:center;gap:4px;">
-        <span class="mono" style="font-size:12px;color:#78716c;">$</span>
-        <input type="number" id="cardscenariosSwapBiltCashInput" min="0" max="${biltCashEarned.toFixed(2)}" step="0.01" value="${biltCashKept.toFixed(2)}"
-          style="width:72px;padding:2px 4px;border:1px solid #d6d3d1;border-radius:4px;font-size:13px;text-align:right;font-family:monospace;" />
-        <span style="font-size:11px;color:#a8a29e;">of ${formatCurrencyPrecise(biltCashEarned)}</span>
-      </span>
+      <span class="mono" style="font-weight:600;color:${biltCashDelta >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosSwapBiltCashTopLine">${biltCashDelta >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(biltCashDelta))}</span>
     </div>`;
   }
   html += `<div style="display:flex;justify-content:space-between;">
@@ -6144,6 +6158,23 @@ function renderStep4Swap() {
   html += renderPointValueContent('Swap', swapNormalizedRows, totalSpendChange, biltImpact, 'cardscenariosSwapTable', annualizationFactor);
 
   html += `</div></div>`; // end rewards detail + rewards section
+
+  // Bilt Cash (editable) in bottom ledger
+  if (biltImpact) {
+    const biltCashEarned = biltImpact.finalBiltCashEarned || 0;
+    const biltCashKept = biltImpact.finalBiltCashRemaining || 0;
+    html += `<div style="margin-top:12px;border-top:1px solid #e7e5e4;padding-top:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;">
+        <span style="font-weight:600;color:#57534e;">Bilt Cash <span style="font-weight:400;color:#78716c;">(kept)</span></span>
+        <span style="display:flex;align-items:center;gap:4px;">
+          <span class="mono" style="font-size:12px;color:#78716c;">$</span>
+          <input type="number" id="cardscenariosSwapBiltCashInput" min="0" max="${biltCashEarned.toFixed(2)}" step="0.01" value="${biltCashKept.toFixed(2)}"
+            style="width:72px;padding:2px 4px;border:1px solid #d6d3d1;border-radius:4px;font-size:13px;text-align:right;font-family:monospace;" />
+          <span style="font-size:11px;color:#a8a29e;">of ${formatCurrencyPrecise(biltCashEarned)}</span>
+        </span>
+      </div>
+    </div>`;
+  }
 
   // Annual fee section — show both
   html += `<div style="margin-top:12px;border-top:1px solid #e7e5e4;padding-top:12px;">
@@ -6899,7 +6930,7 @@ function _updateBiltCashDisplay(prefix, biltImpact) {
   }
 }
 
-function _updateSummaryElements(prefix, combinedPointValue, netImpact) {
+function _updateSummaryElements(prefix, combinedPointValue, netImpact, biltCashDelta) {
   const isPositive = netImpact >= 0;
   const rewardsLineEl = document.getElementById(`cardscenarios${prefix}RewardsLine`);
   if (rewardsLineEl) {
@@ -6910,6 +6941,14 @@ function _updateSummaryElements(prefix, combinedPointValue, netImpact) {
   if (rewardsValueEl) {
     rewardsValueEl.textContent = `${combinedPointValue >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(combinedPointValue))}`;
     rewardsValueEl.style.color = combinedPointValue >= 0 ? '#059669' : '#dc2626';
+  }
+  // Update the static Bilt Cash line in top summary
+  if (biltCashDelta !== undefined) {
+    const biltTopEl = document.getElementById(`cardscenarios${prefix}BiltCashTopLine`);
+    if (biltTopEl) {
+      biltTopEl.textContent = `${biltCashDelta >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(biltCashDelta))}`;
+      biltTopEl.style.color = biltCashDelta >= 0 ? '#059669' : '#dc2626';
+    }
   }
   const netTopEl = document.getElementById(`cardscenarios${prefix}NetTop`);
   if (netTopEl) {
@@ -6955,7 +6994,7 @@ function updateAddCardResult() {
   const creditsLineEl = document.getElementById('cardscenariosAddCreditsLine');
   if (creditsLineEl) creditsLineEl.textContent = `+${formatCurrencyPrecise(creditsTotal)}`;
 
-  _updateSummaryElements('Add', combinedPointValue, netImpact);
+  _updateSummaryElements('Add', combinedPointValue, netImpact, biltCashDelta);
   _updateBiltCashDisplay('Add', biltImpact);
   updatePointValueContent('Add', biltImpact);
 }
@@ -6992,7 +7031,7 @@ function updateRemoveCardResult() {
   const creditsLineEl = document.getElementById('cardscenariosRemoveCreditsLine');
   if (creditsLineEl) creditsLineEl.textContent = `-${formatCurrencyPrecise(creditsTotal)}`;
 
-  _updateSummaryElements('Remove', combinedPointValue, netImpact);
+  _updateSummaryElements('Remove', combinedPointValue, netImpact, biltCashDelta);
   _updateBiltCashDisplay('Remove', biltImpact);
   updatePointValueContent('Remove', biltImpact);
 }
@@ -7040,7 +7079,7 @@ function updateSwapCardResult() {
     creditsTotalEl.style.color = netCredits >= 0 ? '#059669' : '#dc2626';
   }
 
-  _updateSummaryElements('Swap', combinedPointValue, netImpact);
+  _updateSummaryElements('Swap', combinedPointValue, netImpact, biltCashDelta);
   _updateBiltCashDisplay('Swap', biltImpact);
   updatePointValueContent('Swap', biltImpact);
 }

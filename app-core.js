@@ -276,7 +276,7 @@ let state = {
   selectedCFFYear: null, // For CFF quarterly category year selection
   selectedBiltYear: null, // For Bilt config year selection (separate from summary year)
   availableYears: [],
-  summarySortState: { column: 'cardName', direction: 'asc' }, // For summary table sorting
+  summarySortState: { column: 'netValue', direction: 'desc' }, // For summary card grid sorting (default: Net Value)
   txnSortState: { column: 'date', direction: 'desc' }, // For transaction table sorting
 
   // Card Scenarios state (session-only)
@@ -3361,6 +3361,12 @@ function showResults(results, isNewUpload = false) {
   const netEl = document.getElementById('metricNetValue');
   netEl.textContent = formatCurrency(t.netValue);
   netEl.className = `metric-value ${t.netValue >= 0 ? 'positive' : 'negative'}`;
+  // Update shell net value
+  const shellNetEl = document.getElementById('shellNetValue');
+  if (shellNetEl) {
+    shellNetEl.textContent = (t.netValue < 0 ? '-' : '') + formatCurrency(t.netValue);
+    shellNetEl.className = `shell-net-value ${t.netValue >= 0 ? 'positive' : 'negative'}`;
+  }
   
   // Count low-confidence transactions actionable by this tier
   const actionableLowConf = getVisibleLowConfidenceTransactions(results.processed);
@@ -4563,22 +4569,24 @@ function renderCardScenarios() {
   // Pro gate check
   if (window.TIER_CONFIG !== 'pro') {
     container.innerHTML = `
+      <div style="max-width:1400px;margin:0 auto;padding:24px;">
       <div class="card" style="text-align:center;padding:48px 24px;">
         <div style="font-size:36px;margin-bottom:12px;">🔮</div>
         <h2 class="card-title" style="margin:0 0 8px;">Card Scenarios</h2>
         <p style="color:#78716c;margin-bottom:20px;">Model how adding or removing a card would change your wallet's value.</p>
         <p style="color:#b45309;font-weight:500;">This feature requires Pro access.</p>
-      </div>`;
+      </div></div>`;
     return;
   }
 
   if (!state.results || !state.results.processed || state.results.processed.length === 0) {
     container.innerHTML = `
+      <div style="max-width:1400px;margin:0 auto;padding:24px;">
       <div class="card" style="text-align:center;padding:48px 24px;">
         <div style="font-size:36px;margin-bottom:12px;">🔮</div>
         <h2 class="card-title" style="margin:0 0 8px;">Card Scenarios</h2>
         <p style="color:#78716c;">Upload transaction data first to model scenarios.</p>
-      </div>`;
+      </div></div>`;
     return;
   }
 
@@ -4590,7 +4598,7 @@ function renderCardScenarios() {
     return `<span class="cardscenarios-breadcrumb-step ${cls}">${label}</span>`;
   }).join('<span class="cardscenarios-breadcrumb-sep">›</span>');
 
-  let html = `<div class="card">
+  let html = `<div style="max-width:1400px;margin:0 auto;padding:24px;"><div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
       <h2 class="card-title" style="margin:0;">Card Scenarios</h2>
       ${wi.step > 1 ? '<button class="btn btn-secondary cardscenarios-start-over" style="font-size:12px;padding:6px 12px;">Start Over</button>' : ''}
@@ -4609,7 +4617,7 @@ function renderCardScenarios() {
     html += renderCardScenariosStep5();
   }
 
-  html += '</div>';
+  html += '</div></div>';
   container.innerHTML = html;
   attachCardScenariosListeners();
 }
@@ -6191,8 +6199,10 @@ function updateCardScenariosSummary() {
 
 function renderView(view) {
   state.activeView = view;
-  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
-  document.getElementById('topMetrics').style.display = (view === 'cardscenarios') ? 'none' : '';
+  // Support both old .tab and new .shell-tab selectors
+  document.querySelectorAll('.tab, .shell-tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
+  const topMetricsEl = document.getElementById('topMetrics');
+  if (topMetricsEl) topMetricsEl.style.display = 'none'; // Always hidden; shell handles display
 
   const container = document.getElementById('viewContainer');
   const r = state.results;
@@ -6354,7 +6364,7 @@ function renderView(view) {
     });
     
     // Apply sort based on sortState
-    const sortState = state.summarySortState || { column: 'cardName', direction: 'asc' };
+    const sortState = state.summarySortState || { column: 'netValue', direction: 'desc' };
     
     const sortFn = (a, b) => {
       let aVal, bVal;
@@ -6429,11 +6439,11 @@ function renderView(view) {
     document.getElementById('metricPoints').textContent = formatNumber(filteredTotals.points);
     document.getElementById('metricPointsValue').textContent = formatCurrency(filteredTotals.pointsValue);
     document.getElementById('metricCredits').textContent = formatCurrency(filteredTotals.credits);
-    
+
     // Calculate net value including manual credits for the selected year
     let totalManualCredits = 0;
     let totalAnnualFees = 0;
-    
+
     // Build credits used map per card (transaction-detected + manual)
     const creditsUsedByCard = {};
     filteredProcessed.forEach(txn => {
@@ -6443,37 +6453,33 @@ function renderView(view) {
         creditsUsedByCard[txn.cardId][txn.creditMatch] += Math.abs(txn.amount);
       }
     });
-    
+
     // Add monthly credits to the map (claimed months × monthly amount) - YEAR-SPECIFIC
     const creditYear = displayYear || new Date().getFullYear();
     for (const [cardId, creditMap] of Object.entries(state.monthlyCredits)) {
       if (!creditsUsedByCard[cardId]) creditsUsedByCard[cardId] = {};
       const cardDef = CARDS[cardId];
       if (!cardDef) continue;
-      
+
       for (const [creditName, yearData] of Object.entries(creditMap)) {
         const credit = cardDef.credits.find(c => c.name === creditName);
         if (!credit || !credit.manual) continue;
-        
-        // Handle both legacy array format and new year-based object format
+
         let claimedMonths = [];
         if (Array.isArray(yearData)) {
-          // Legacy format - treat as current year only if showing current year or all
           if (!displayYear || displayYear === new Date().getFullYear()) {
             claimedMonths = yearData;
           }
         } else if (typeof yearData === 'object') {
-          // New year-specific format
           if (displayYear) {
             claimedMonths = yearData[displayYear] || [];
           } else {
-            // All years - sum all
             for (const yr of Object.keys(yearData)) {
               claimedMonths = claimedMonths.concat(yearData[yr] || []);
             }
           }
         }
-        
+
         if (claimedMonths.length > 0) {
           const monthlyAmount = credit.amount / 12;
           const totalClaimed = claimedMonths.length * monthlyAmount;
@@ -6512,25 +6518,20 @@ function renderView(view) {
     }
 
     // Calculate total annual fees (only count if we have transactions for that card in this period)
-    // Uses date-aware fee calculation for cards like CSR with legacy rates
     const activeCardIds = new Set(filteredProcessed.map(t => t.cardId).filter(id => id && id !== 'skip'));
     activeCardIds.forEach(cardId => {
       totalAnnualFees += getEffectiveAnnualFee(cardId, filteredProcessed);
     });
 
     // Calculate total credits, respecting CY capping for toggled cards
-    // For CY-active cards, use their capped totalCredits from cardDisplayData
-    // For other cards, use their uncapped totalCredits
     let adjustedTotalCredits = 0;
     let adjustedTotalPointsValue = 0;
     cards.forEach(c => {
       const cyData = cardDisplayData[c.cardId];
       if (cyData) {
-        // Card has CY active - use capped values
         adjustedTotalCredits += cyData.displayMetrics.totalCredits;
         adjustedTotalPointsValue += cyData.displayMetrics.pointsValue;
       } else {
-        // Card using calendar year - use uncapped values
         adjustedTotalCredits += c.totalCredits;
         adjustedTotalPointsValue += c.pointsValue;
       }
@@ -6541,230 +6542,240 @@ function renderView(view) {
     const netEl = document.getElementById('metricNetValue');
     netEl.textContent = formatCurrency(netValue);
     netEl.className = `metric-value ${netValue >= 0 ? 'positive' : 'negative'}`;
-    
+
+    // Update shell header net value
+    const shellNetEl = document.getElementById('shellNetValue');
+    if (shellNetEl) {
+      shellNetEl.textContent = (netValue < 0 ? '-' : '') + formatCurrency(netValue);
+      shellNetEl.className = `shell-net-value ${netValue >= 0 ? 'positive' : 'negative'}`;
+    }
+    // Update details strip values
+    const metricAFEl = document.getElementById('metricAnnualFees');
+    if (metricAFEl) metricAFEl.textContent = formatCurrency(totalAnnualFees);
+
     // Update transaction count
     document.getElementById('transactionCount').textContent = `${filteredProcessed.length} transactions`;
-    
+
     // Get available years for filter
     const summaryYears = state.availableYears.length > 0 ? state.availableYears : [...new Set(r.processed.map(t => getYearFromDateString(t.date)))].sort((a, b) => b - a);
-    
+
+    // =============================================
+    // CARD GRID RENDERING (replaces old summary table)
+    // =============================================
+
+    // Compute tags
+    const tagMap = {};
+    const positiveCards = cards.filter(c => c.netValue > 0);
+    const sortedByNet = [...cards].sort((a, b) => b.netValue - a.netValue);
+    const sortedByPts = [...cards].sort((a, b) => b.points - a.points);
+
+    // MVP tag
+    if (sortedByNet.length > 0 && sortedByNet[0].netValue > 0) {
+      const top = sortedByNet[0];
+      const second = sortedByNet.length > 1 ? sortedByNet[1] : null;
+      if (!second || second.netValue <= 0 || top.netValue >= second.netValue * 1.2) {
+        tagMap[top.cardId] = { type: 'mvp', label: 'MVP', cls: 'fc-tag-mvp', tip: 'Highest net value in your wallet \u2014 and clearly ahead of the pack.' };
+      }
+    }
+
+    // Dead Weight tags
+    cards.forEach(c => {
+      if (c.netValue < 0 && c.annualFee > 0) {
+        tagMap[c.cardId] = { type: 'deadweight', label: 'Dead Weight', cls: 'fc-tag-deadweight', tip: 'This card has an annual fee and is currently losing you money.' };
+      }
+    });
+
+    // Workhorse tag
+    if (sortedByPts.length > 0) {
+      const topPts = sortedByPts[0];
+      const secondPts = sortedByPts.length > 1 ? sortedByPts[1] : null;
+      if (topPts.points > 0 && (!secondPts || topPts.points >= secondPts.points * 1.2)) {
+        if (!tagMap[topPts.cardId]) {
+          tagMap[topPts.cardId] = { type: 'workhorse', label: 'Workhorse', cls: 'fc-tag-workhorse', tip: 'Earning significantly more points than any other card in your wallet.' };
+        }
+      }
+    }
+
+    // Sort options for dropdown
+    const sortOptions = [
+      { value: 'netValue', label: 'Sort: Net Value' },
+      { value: 'cardName', label: 'Sort: A \u2192 Z' },
+      { value: 'points', label: 'Sort: Points Earned' },
+      { value: 'annualFee', label: 'Sort: Annual Fee' },
+      { value: 'spend', label: 'Sort: Total Spend' }
+    ];
+    const currentSort = sortState.column || 'netValue';
+
+    // Build card grid HTML
     container.innerHTML = `
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
-          <div>
-            <h2 class="card-title" style="margin:0;">Card Performance Summary</h2>
-            <p style="font-size:12px;color:#78716c;margin-top:4px;">Click column headers to sort • Click ▼ on Credits to see breakdown</p>
-          </div>
+      <div class="summary-grid-container">
+        <div class="summary-grid-header">
+          <div></div>
           <div style="display:flex;align-items:center;gap:8px;">
-            <span class="help-icon tooltip" data-tooltip="'All Years' shows combined totals. Annual fees counted once per card.">?</span>
             <select id="summaryYearFilter" class="form-select" style="min-width:120px;">
               <option value="" ${!displayYear ? 'selected' : ''}>All Years</option>
               ${summaryYears.map(y => `<option value="${y}" ${displayYear == y ? 'selected' : ''}>${y}</option>`).join('')}
             </select>
+            <select id="summarySortSelect" class="form-select" style="min-width:160px;">
+              ${sortOptions.map(o => `<option value="${o.value}" ${currentSort === o.value ? 'selected' : ''}>${o.label}</option>`).join('')}
+            </select>
           </div>
         </div>
-        <div style="overflow-x:auto;">
-          <table id="summaryTable">
-            <thead><tr>
-              <th class="sortable" data-sort="cardName">Card${sortState.column === 'cardName' ? `<span class="sort-arrow">${sortState.direction === 'asc' ? '▲' : '▼'}</span>` : ''}</th>
-              <th class="text-right sortable" data-sort="spend">Spend${sortState.column === 'spend' ? `<span class="sort-arrow">${sortState.direction === 'asc' ? '▲' : '▼'}</span>` : ''}</th>
-              <th class="text-right sortable" data-sort="points">Points${sortState.column === 'points' ? `<span class="sort-arrow">${sortState.direction === 'asc' ? '▲' : '▼'}</span>` : ''}</th>
-              <th class="text-right sortable" data-sort="pointsValue">Pts Value${sortState.column === 'pointsValue' ? `<span class="sort-arrow">${sortState.direction === 'asc' ? '▲' : '▼'}</span>` : ''}</th>
-              <th class="text-right sortable" data-sort="credits">Credits${sortState.column === 'credits' ? `<span class="sort-arrow">${sortState.direction === 'asc' ? '▲' : '▼'}</span>` : ''}</th>
-              <th class="text-right sortable" data-sort="annualFee">Ann. Fee${sortState.column === 'annualFee' ? `<span class="sort-arrow">${sortState.direction === 'asc' ? '▲' : '▼'}</span>` : ''}</th>
-              <th class="text-right sortable" data-sort="netValue">Net Value${sortState.column === 'netValue' ? `<span class="sort-arrow">${sortState.direction === 'asc' ? '▲' : '▼'}</span>` : ''}</th>
-            </tr></thead>
-            <tbody>
-              ${cards.map(c => {
-                const cardDef = CARDS[c.cardId];
-                const availableCredits = cardDef?.credits || [];
-                const hasCredits = availableCredits.length > 0 || (cardDef?.annualBonusPoints || 0) > 0;
+        <div class="summary-grid">
+          ${cards.map(c => {
+            const tag = tagMap[c.cardId];
+            const cyData = cardDisplayData[c.cardId];
+            const displayCreditsUsed = cyData?.creditsUsed || creditsUsedByCard[c.cardId] || {};
+            const displayMetrics = cyData?.displayMetrics || c;
+            const cardDef = CARDS[c.cardId];
+            const availableCredits = cardDef?.credits || [];
+            const hasCreditsData = availableCredits.length > 0 || Object.keys(displayCreditsUsed).length > 0 || (displayMetrics.annualBonusValue || 0) > 0;
 
-                const hasPointsBreakdown = Object.keys(c.pointsByCategory || {}).length > 0;
-                const hasDetails = hasPointsBreakdown || hasCredits;
-                const rowId = c.cardId.replace(/[^a-z0-9]/gi, '-');
+            // Build credits breakdown rows for back face
+            let creditsDetailHtml = '';
+            if (hasCreditsData) {
+              const rows = [];
+              availableCredits.forEach(cr => {
+                const disabled = (state.disabledCredits[c.cardId] || []).includes(cr.name);
+                const used = disabled ? 0 : (displayCreditsUsed[cr.name] || 0);
+                if (used > 0 || !disabled) {
+                  rows.push('<div class="fc-credits-detail-row"><span class="fc-credits-detail-row-name">' + escapeHtml(cr.name) + (disabled ? ' (off)' : '') + '</span><span class="fc-credits-detail-row-val">$' + used.toFixed(0) + '</span></div>');
+                }
+              });
+              if (availableCredits.some(cr => cr.streamingBenefit)) {
+                const streamUsed = displayCreditsUsed['Paramount+ or Peacock'] || 0;
+                if (streamUsed > 0) {
+                  rows.push('<div class="fc-credits-detail-row"><span class="fc-credits-detail-row-name">Paramount+ / Peacock</span><span class="fc-credits-detail-row-val">$' + streamUsed.toFixed(0) + '</span></div>');
+                }
+              }
+              if ((displayMetrics.annualBonusValue || 0) > 0) {
+                rows.push('<div class="fc-credits-detail-row"><span class="fc-credits-detail-row-name" style="color:#86efac;">Anniversary bonus</span><span class="fc-credits-detail-row-val" style="color:#86efac;">$' + displayMetrics.annualBonusValue.toFixed(0) + '</span></div>');
+              }
+              creditsDetailHtml = rows.join('');
+            }
 
-                // Use pre-calculated card year data if available
-                const cyData = cardDisplayData[c.cardId];
-                const showCardYearToggle = displayYear && canShowCardYearToggle(c.cardId) && isCardEditable(c.cardId, 'config');
-                const isCardYearActive = cyData?.isCardYearActive || false;
-                const cardYearPeriod = cyData?.cardYearPeriod || null;
-                const displayCreditsUsed = cyData?.creditsUsed || creditsUsedByCard[c.cardId] || {};
-                const displayMetrics = cyData?.displayMetrics || c;
-
-                // Row styling for card year mode
-                const cardYearRowStyle = isCardYearActive ? 'color:#4b6bfb;' : '';
-                const cardYearTooltip = cardYearPeriod
-                  ? `Showing card year active Dec 31, ${displayYear} (${cardYearPeriod.startFormatted} – ${cardYearPeriod.endFormatted})`
-                  : '';
-
-                // Toggle indicator HTML - small CY text to the right of the card name
-                const toggleHtml = showCardYearToggle ? `
-                  <span class="card-year-toggle tooltip tooltip-multiline" data-card-id="${escapeHtml(c.cardId)}"
-                    data-tooltip="${isCardYearActive ? cardYearTooltip : 'Switch to card anniversary year'}"
-                    style="display:inline-block;font-size:9px;font-weight:600;padding:1px 4px;border-radius:3px;background:${isCardYearActive ? '#4b6bfb' : '#e7e5e4'};color:${isCardYearActive ? '#fff' : '#a8a29e'};cursor:pointer;margin-left:6px;vertical-align:middle;flex-shrink:0;">CY</span>
-                ` : '';
-
-                // Decision Pass indicator - shows when this card has an active Decision Pass (free tier only)
-                const hasDPActive = hasActiveDecisionPass(c.cardId);
-                const dpBadgeHtml = (window.TIER_CONFIG !== 'pro' && hasDPActive) ? `
-                  <span class="tooltip" data-tooltip="Decision Pass active — all-time data, editing unlocked"
-                    style="display:inline-block;font-size:9px;font-weight:600;padding:1px 4px;border-radius:3px;background:#059669;color:#fff;margin-left:4px;vertical-align:middle;flex-shrink:0;">DP</span>
-                ` : '';
-
-                return `<tr data-row-id="${rowId}" style="${cardYearRowStyle}">
-                  <td style="white-space:nowrap;"><span style="display:inline-flex;align-items:center;">${escapeHtml(c.cardName)}${toggleHtml}${dpBadgeHtml}</span></td>
-                  <td class="text-right mono">${formatCurrencyPrecise(displayMetrics.spend)}</td>
-                  <td class="text-right mono">
-                    ${hasDetails ? `
-                      <div class="detail-toggle" data-row="${rowId}" style="cursor:pointer;display:flex;align-items:center;justify-content:flex-end;gap:4px;">
-                        ${formatNumber(displayMetrics.points)} <span class="toggle-arrow" style="font-size:10px;">▼</span>
+            return `<div class="flip-card" data-card-id="${escapeHtml(c.cardId)}">
+              <div class="flip-card-inner">
+                <div class="flip-card-front ${displayMetrics.netValue >= 0 ? 'positive-border' : 'negative-border'}">
+                  <div class="fc-front-body">
+                    <div class="fc-card-name">${escapeHtml(c.cardName)}</div>
+                    <div class="fc-tags">
+                      ${tag ? `<span class="fc-tag ${tag.cls}" data-tag-tip="${escapeHtml(tag.tip)}">${tag.label}</span>` : ''}
+                    </div>
+                    <div class="fc-net-section">
+                      <div class="fc-net-label">NET VALUE</div>
+                      <div class="fc-net-value ${displayMetrics.netValue >= 0 ? 'positive' : 'negative'}">${displayMetrics.netValue >= 0 ? '' : '-'}${formatCurrencyPrecise(displayMetrics.netValue)}</div>
+                    </div>
+                  </div>
+                  <div class="fc-bottom-row">
+                    <div class="fc-annual-fee">${c.annualFee > 0 ? '-$' + c.annualFee + ' annual fee' : 'No annual fee'}</div>
+                    <div class="fc-flip-hint">\u21bb details</div>
+                  </div>
+                </div>
+                <div class="flip-card-back">
+                  <div class="fc-back-header">
+                    <div class="fc-back-header-label">Full Breakdown</div>
+                    <div class="fc-back-card-name">${escapeHtml(c.cardName)}</div>
+                  </div>
+                  <div class="fc-back-rows">
+                    <div class="fc-back-row">
+                      <span class="fc-back-row-label">Total Spend</span>
+                      <span class="fc-back-row-value">${formatCurrencyPrecise(displayMetrics.spend)}</span>
+                    </div>
+                    <div class="fc-back-row">
+                      <span class="fc-back-row-label">Points Earned</span>
+                      <span class="fc-back-row-value">${formatNumber(displayMetrics.points)}</span>
+                    </div>
+                    <div class="fc-back-row">
+                      <span class="fc-back-row-label">Points Value</span>
+                      <span class="fc-back-row-value positive">${formatCurrencyPrecise(displayMetrics.pointsValue)}</span>
+                    </div>
+                    <div class="fc-back-row credits-row" data-has-credits="${hasCreditsData && creditsDetailHtml ? 'true' : 'false'}">
+                      <div class="fc-credits-toggle">
+                        <span class="fc-back-row-label">Credits Used${hasCreditsData && creditsDetailHtml ? ' <span class="fc-credits-arrow">\u25be</span>' : ''}</span>
+                        <span class="fc-back-row-value positive">${formatCurrencyPrecise(displayMetrics.totalCredits)}</span>
                       </div>
-                      <div class="detail-panel points-panel" data-row="${rowId}" style="display:none;text-align:left;font-size:11px;margin-top:8px;padding:8px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;">
-                        ${Object.keys(displayMetrics.pointsByCategory || {}).length > 0 ? `
-                          ${Object.entries(displayMetrics.pointsByCategory || {})
-                            .sort((a, b) => b[1].points - a[1].points)
-                            .map(([cat, data]) => `
-                              <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
-                                <span style="text-transform:capitalize;">${escapeHtml(cat)}</span>
-                                <span style="font-weight:500;">${formatNumber(data.points)} pts</span>
-                              </div>
-                            `).join('')}
-                        ` : '<div style="color:#78716c;">No category breakdown</div>'}
-                      </div>
-                    ` : formatNumber(displayMetrics.points)}
-                  </td>
-                  <td class="text-right mono">${formatCurrencyPrecise(displayMetrics.pointsValue)}</td>
-                  <td class="text-right mono">
-                    ${hasDetails ? `
-                      <div class="detail-toggle" data-row="${rowId}" style="cursor:pointer;display:flex;align-items:center;justify-content:flex-end;gap:4px;">
-                        ${formatCurrencyPrecise(displayMetrics.totalCredits)} <span class="toggle-arrow" style="font-size:10px;">▼</span>
-                      </div>
-                      <div class="detail-panel credits-panel" data-row="${rowId}" style="display:none;text-align:left;font-size:11px;margin-top:8px;padding:8px;background:#f5f5f4;border:1px solid #e7e5e4;border-radius:6px;">
-                        ${hasCredits ? `
-                          ${availableCredits.map(cr => {
-                            const disabled = (state.disabledCredits[c.cardId] || []).includes(cr.name);
-                            const isManual = cr.manual === true;
-                            const used = disabled ? 0 : (displayCreditsUsed[cr.name] || 0);
-                            // Only show cap/progress in card year mode
-                            const showCap = isCardYearActive;
-                            const pct = showCap ? Math.min(100, (used / cr.amount) * 100) : 100;
-                            const amountDisplay = showCap ? `$${used.toFixed(0)} / $${cr.amount}` : `$${used.toFixed(0)}`;
-                            return `
-                              <div style="margin-bottom:6px;${disabled ? 'opacity:0.4;' : ''}">
-                                <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
-                                  <span style="${disabled ? 'text-decoration:line-through;' : ''}">${escapeHtml(cr.name)}${disabled ? ' (off)' : ''}${isManual && !disabled ? ' ⚡' : ''}</span>
-                                  <span>${amountDisplay}</span>
-                                </div>
-                                ${showCap ? `
-                                <div style="background:#e7e5e4;border-radius:2px;height:4px;">
-                                  <div style="background:${disabled ? '#a8a29e' : (pct >= 100 ? '#166534' : '#f59e0b')};width:${pct}%;height:100%;border-radius:2px;"></div>
-                                </div>
-                                ` : ''}
-                              </div>
-                            `;
-                          }).join('')}
-                        ` : '<div style="color:#78716c;">No credits available</div>'}
-                        ${availableCredits.some(cr => cr.streamingBenefit) ? (() => {
-                          const streamUsed = displayCreditsUsed['Paramount+ or Peacock'] || 0;
-                          return `
-                          <div style="margin-bottom:6px;">
-                            <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
-                              <span>Paramount+ / Peacock ⚡</span>
-                              <span>$${streamUsed.toFixed(0)}</span>
-                            </div>
-                          </div>`;
-                        })() : ''}
-                        ${(displayMetrics.annualBonusValue || 0) > 0 ? `
-                          <div style="margin-top:6px;padding-top:6px;border-top:1px dashed #d6d3d1;">
-                            <div style="display:flex;justify-content:space-between;">
-                              <span style="color:#4b6bfb;">Anniversary bonus miles</span>
-                              <span style="font-weight:500;color:#4b6bfb;">$${(displayMetrics.annualBonusValue).toFixed(0)}</span>
-                            </div>
-                            <div style="font-size:10px;color:#78716c;">${formatNumber(getAnnualBonusPoints(c.cardId))} pts × ${(getPointValue(c.cardId) * 100).toFixed(1)}¢</div>
-                          </div>
-                        ` : ''}
-                      </div>
-                    ` : formatCurrencyPrecise(displayMetrics.totalCredits)}
-                  </td>
-                  <td class="text-right mono" style="color:#dc2626;">-$${c.annualFee}</td>
-                  <td class="text-right mono" style="font-weight:600;color:${displayMetrics.netValue >= 0 ? '#166534' : '#dc2626'};">${formatCurrencyPrecise(displayMetrics.netValue)}</td>
-                </tr>`
-              }).join('')}
-            </tbody>
-          </table>
+                      ${hasCreditsData && creditsDetailHtml ? '<div class="fc-credits-detail">' + creditsDetailHtml + '</div>' : ''}
+                    </div>
+                    <div class="fc-back-row">
+                      <span class="fc-back-row-label">Annual Fee</span>
+                      <span class="fc-back-row-value negative">${c.annualFee > 0 ? '-$' + c.annualFee : '$0'}</span>
+                    </div>
+                    <div class="fc-back-row net-row">
+                      <span class="fc-back-row-label">Net Value</span>
+                      <span class="fc-back-row-value ${displayMetrics.netValue >= 0 ? 'positive' : 'negative'}">${displayMetrics.netValue >= 0 ? '' : '-'}${formatCurrencyPrecise(displayMetrics.netValue)}</span>
+                    </div>
+                  </div>
+                  <div class="fc-back-footer">
+                    <span class="fc-back-flip-hint">\u21bb flip back</span>
+                  </div>
+                </div>
+              </div>
+            </div>`;
+          }).join('')}
         </div>
-        <div style="margin-top:16px;font-size:12px;color:#78716c;">Net Value = Points Value + Credits Used${cards.some(c => (c.annualBonusValue || 0) > 0) ? ' + Anniversary Bonus' : ''} - Annual Fee</div>
       </div>`;
-    
-    // Add year filter event listener
+
+    // Year filter
     document.getElementById('summaryYearFilter').addEventListener('change', (e) => {
       const newYear = e.target.value ? parseInt(e.target.value) : null;
-
-      // Reset card year toggles when calendar year changes
       if (newYear !== state.selectedYear) {
         state.cardYearToggles = {};
         safeLocalStorageSet('ccTracker_cardYearToggles', state.cardYearToggles);
       }
-
       state.selectedYear = newYear;
       renderView('summary');
     });
 
-    // Add click handler for detail toggles - clicking either Points or Credits toggles both panels
-    document.querySelectorAll('.detail-toggle').forEach(toggle => {
-      toggle.addEventListener('click', () => {
-        const rowId = toggle.dataset.row;
-        const panels = document.querySelectorAll(`.detail-panel[data-row="${rowId}"]`);
-        const arrows = document.querySelectorAll(`.detail-toggle[data-row="${rowId}"] .toggle-arrow`);
-        const isOpen = panels[0]?.style.display !== 'none';
+    // Sort dropdown
+    document.getElementById('summarySortSelect').addEventListener('change', (e) => {
+      const column = e.target.value;
+      const direction = column === 'cardName' ? 'asc' : 'desc';
+      state.summarySortState = { column, direction };
+      renderView('summary');
+    });
 
-        panels.forEach(panel => {
-          panel.style.display = isOpen ? 'none' : 'block';
-        });
-        arrows.forEach(arrow => {
-          arrow.textContent = isOpen ? '▼' : '▲';
-        });
+    // Flip card click handlers
+    document.querySelectorAll('.flip-card').forEach(card => {
+      card.addEventListener('click', () => {
+        card.classList.toggle('flipped');
       });
     });
 
-    // Add click handler for card year toggle buttons
-    document.querySelectorAll('.card-year-toggle').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+    // Credits dropdown (stopPropagation to prevent flip)
+    document.querySelectorAll('.fc-back-row.credits-row[data-has-credits="true"]').forEach(row => {
+      row.addEventListener('click', (e) => {
         e.stopPropagation();
-        const cardId = btn.dataset.cardId;
-
-        // Toggle the card year state
-        if (state.cardYearToggles[cardId]) {
-          delete state.cardYearToggles[cardId];
-        } else {
-          state.cardYearToggles[cardId] = true;
+        const arrow = row.querySelector('.fc-credits-arrow');
+        const detail = row.querySelector('.fc-credits-detail');
+        if (arrow && detail) {
+          arrow.classList.toggle('open');
+          detail.classList.toggle('open');
         }
-
-        // Persist to localStorage
-        safeLocalStorageSet('ccTracker_cardYearToggles', state.cardYearToggles);
-
-        // Re-render the summary view
-        renderView('summary');
       });
     });
 
-    // Add sortable column click handlers
-    document.querySelectorAll('#summaryTable th.sortable').forEach(th => {
-      th.addEventListener('click', () => {
-        const column = th.dataset.sort;
-        const currentState = state.summarySortState || { column: 'cardName', direction: 'asc' };
-        
-        // Toggle direction if same column, otherwise default to desc (except cardName which defaults to asc)
-        let newDirection;
-        if (currentState.column === column) {
-          newDirection = currentState.direction === 'asc' ? 'desc' : 'asc';
-        } else {
-          newDirection = column === 'cardName' ? 'asc' : 'desc';
-        }
-        
-        state.summarySortState = { column, direction: newDirection };
-        renderView('summary');
+    // Tag tooltip (fixed position, appended to body)
+    if (!document.getElementById('fcTooltipEl')) {
+      const tip = document.createElement('div');
+      tip.id = 'fcTooltipEl';
+      tip.className = 'fc-tooltip';
+      document.body.appendChild(tip);
+    }
+    const tooltipEl = document.getElementById('fcTooltipEl');
+    document.querySelectorAll('.fc-tag[data-tag-tip]').forEach(tag => {
+      tag.addEventListener('mouseenter', (e) => {
+        e.stopPropagation();
+        tooltipEl.textContent = tag.dataset.tagTip;
+        tooltipEl.classList.add('visible');
+        const rect = tag.getBoundingClientRect();
+        let left = rect.left + rect.width / 2 - tooltipEl.offsetWidth / 2;
+        left = Math.max(8, Math.min(left, window.innerWidth - tooltipEl.offsetWidth - 8));
+        tooltipEl.style.left = left + 'px';
+        tooltipEl.style.top = (rect.top - tooltipEl.offsetHeight - 6) + 'px';
+      });
+      tag.addEventListener('mouseleave', () => {
+        tooltipEl.classList.remove('visible');
       });
     });
   }
@@ -6794,6 +6805,7 @@ function renderView(view) {
     */
 
     container.innerHTML = `
+      <div style="max-width:1400px;margin:0 auto;padding:24px;">
       <div class="card">
         <h2 class="card-title">Transaction Detail</h2>
         ${txnDPBanner}
@@ -6876,6 +6888,7 @@ function renderView(view) {
           <h3 style="font-size:16px;font-weight:600;margin-bottom:16px;">Classify This Transaction</h3>
           <div id="creditModalContent"></div>
         </div>
+      </div>
       </div>`;
     
     // Close modal when clicking outside
@@ -8748,10 +8761,23 @@ async function initCore() {
     renderView(state.activeView);
   });
   
-  document.querySelectorAll('.tab').forEach(tab => {
+  // Support both old .tab and new .shell-tab selectors for tab click
+  document.querySelectorAll('.tab, .shell-tab').forEach(tab => {
     tab.addEventListener('click', () => renderView(tab.dataset.view));
   });
-  
+
+  // Shell expand/collapse button for details strip
+  const shellExpandBtn = document.getElementById('shellExpandBtn');
+  if (shellExpandBtn) {
+    shellExpandBtn.addEventListener('click', () => {
+      const strip = document.getElementById('shellDetailsStrip');
+      if (strip) {
+        const isOpen = strip.classList.toggle('open');
+        shellExpandBtn.textContent = isOpen ? '\u2212' : '+';
+      }
+    });
+  }
+
   // Initialize tutorial system (help, tour, guidance - defined in tutorial.js)
   initTutorial();
 }

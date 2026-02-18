@@ -3367,7 +3367,13 @@ function showResults(results, isNewUpload = false) {
     shellNetEl.textContent = (t.netValue < 0 ? '-' : '') + formatCurrency(t.netValue);
     shellNetEl.className = `shell-net-value ${t.netValue >= 0 ? 'positive' : 'negative'}`;
   }
-  
+  // Update shell spend + return context line
+  const shellCtxEl = document.getElementById('shellNetContext');
+  if (shellCtxEl) {
+    const returnPct = t.spend > 0 ? ((t.netValue / t.spend) * 100).toFixed(1) + '%' : '\u2014';
+    shellCtxEl.textContent = 'Spend: ' + formatCurrency(t.spend) + ' \u00B7 Return: ' + returnPct;
+  }
+
   // Count low-confidence transactions actionable by this tier
   const actionableLowConf = getVisibleLowConfidenceTransactions(results.processed);
   const lowConfidenceCount = actionableLowConf.length;
@@ -6549,6 +6555,12 @@ function renderView(view) {
       shellNetEl.textContent = (netValue < 0 ? '-' : '') + formatCurrency(netValue);
       shellNetEl.className = `shell-net-value ${netValue >= 0 ? 'positive' : 'negative'}`;
     }
+    // Update shell spend + return context line
+    const shellCtxEl = document.getElementById('shellNetContext');
+    if (shellCtxEl) {
+      const returnPct = filteredTotals.spend > 0 ? ((netValue / filteredTotals.spend) * 100).toFixed(1) + '%' : '\u2014';
+      shellCtxEl.textContent = 'Spend: ' + formatCurrency(filteredTotals.spend) + ' \u00B7 Return: ' + returnPct;
+    }
     // Update details strip values
     const metricAFEl = document.getElementById('metricAnnualFees');
     if (metricAFEl) metricAFEl.textContent = formatCurrency(totalAnnualFees);
@@ -6652,6 +6664,8 @@ function renderView(view) {
               creditsDetailHtml = rows.join('');
             }
 
+            const showCYToggle = displayYear && canShowCardYearToggle(c.cardId) && isCardEditable(c.cardId, 'config');
+            const isCYActive = showCYToggle && state.cardYearToggles[c.cardId];
             return `<div class="flip-card" data-card-id="${escapeHtml(c.cardId)}">
               <div class="flip-card-inner">
                 <div class="flip-card-front ${displayMetrics.netValue >= 0 ? 'positive-border' : 'negative-border'}">
@@ -6667,7 +6681,10 @@ function renderView(view) {
                   </div>
                   <div class="fc-bottom-row">
                     <div class="fc-annual-fee">${c.annualFee > 0 ? '-$' + c.annualFee + ' annual fee' : 'No annual fee'}</div>
-                    <div class="fc-flip-hint">\u21bb details</div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                      ${showCYToggle ? '<span class="card-year-toggle" data-card-id="' + escapeHtml(c.cardId) + '" style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:3px;background:' + (isCYActive ? '#4b6bfb' : '#e7e5e4') + ';color:' + (isCYActive ? '#fff' : '#a8a29e') + ';cursor:pointer;" title="' + (isCYActive ? 'Showing card anniversary year' : 'Switch to card anniversary year') + '">CY</span>' : ''}
+                      <div class="fc-flip-hint">\u21bb details</div>
+                    </div>
                   </div>
                 </div>
                 <div class="flip-card-back">
@@ -6774,6 +6791,21 @@ function renderView(view) {
       });
       tag.addEventListener('mouseleave', () => {
         tooltipEl.classList.remove('visible');
+      });
+    });
+
+    // CY toggle click handlers (stopPropagation to prevent card flip)
+    document.querySelectorAll('.card-year-toggle').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const cardId = btn.dataset.cardId;
+        if (state.cardYearToggles[cardId]) {
+          delete state.cardYearToggles[cardId];
+        } else {
+          state.cardYearToggles[cardId] = true;
+        }
+        safeLocalStorageSet('ccTracker_cardYearToggles', state.cardYearToggles);
+        renderView('summary');
       });
     });
   }

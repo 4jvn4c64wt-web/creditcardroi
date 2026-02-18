@@ -96,6 +96,7 @@
     .shell-net-value { font-size: 28px; font-weight: 700; font-family: 'DM Mono', monospace; letter-spacing: -1px; line-height: 1.1; }
     .shell-net-value.positive { color: #166534; }
     .shell-net-value.negative { color: #991b1b; }
+    .shell-net-context { font-size: 11px; color: #9e9b96; font-family: 'DM Sans', sans-serif; margin-top: 2px; white-space: nowrap; }
     .shell-expand-btn { width: 26px; height: 26px; border-radius: 50%; border: 1px solid #e8e5e0; background: #fff; color: #9e9b96; font-size: 16px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; margin-left: 10px; transition: all 0.15s; line-height: 1; }
     .shell-expand-btn:hover { background: #f5f5f4; color: #1c1917; }
     .shell-topbar-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -123,8 +124,6 @@
     .shell-details-strip.open .shell-details-item:nth-child(5) { transition-delay: 200ms; }
     .shell-details-strip.open .shell-details-op:nth-child(6) { transition-delay: 250ms; }
     .shell-details-strip.open .shell-details-item:nth-child(7) { transition-delay: 300ms; }
-    .shell-details-strip.open .shell-details-op:nth-child(8) { transition-delay: 350ms; }
-    .shell-details-strip.open .shell-details-item:nth-child(9) { transition-delay: 400ms; }
     .shell-nav { background: #fff; border-bottom: 1px solid #e8e5e0; }
     .shell-nav-inner { max-width: 1400px; margin: 0 auto; padding: 0 24px; display: flex; gap: 8px; padding-top: 4px; padding-bottom: 4px; flex-wrap: wrap; }
     .shell-tab { padding: 8px 16px; border-radius: 6px; border: none; background: transparent; font-size: 14px; font-weight: 500; cursor: pointer; color: #78716c; font-family: inherit; }
@@ -472,6 +471,7 @@
             <div class="shell-net-block">
               <div class="shell-net-label">NET VALUE</div>
               <div class="shell-net-value positive" id="shellNetValue">$0</div>
+              <div class="shell-net-context" id="shellNetContext"></div>
             </div>
             <button class="shell-expand-btn" id="shellExpandBtn" title="Show breakdown">+</button>
           </div>
@@ -520,11 +520,6 @@
       <div class="shell-details-strip" id="shellDetailsStrip">
         <div class="shell-details-inner">
           <div class="shell-details-item">
-            <div class="shell-details-item-label">Total Spend</div>
-            <div class="shell-details-item-value" id="metricSpend">$0</div>
-          </div>
-          <div class="shell-details-op">+</div>
-          <div class="shell-details-item">
             <div class="shell-details-item-label">Points Value</div>
             <div class="shell-details-item-value" id="metricPointsValue">$0</div>
           </div>
@@ -549,6 +544,7 @@
       <!-- Hidden elements for backward compatibility -->
       <div id="topMetrics" style="display:none;">
         <div class="metric-value" id="metricPoints">0</div>
+        <div id="metricSpend">$0</div>
       </div>
 
       <!-- Persistent Shell: Nav Tabs -->

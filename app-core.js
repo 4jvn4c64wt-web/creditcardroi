@@ -1395,9 +1395,12 @@ function getEffectiveAnnualFee(cardId, transactions = []) {
   // Handle cards where annual fee started from a specific date (e.g., Bilt Obsidian/Palladium - no fee before Feb 7, 2026)
   if (card.annualFeeStartDate) {
     const startDate = new Date(card.annualFeeStartDate);
-    if (cardTxns.length > 0) {
-      const hasPostStart = cardTxns.some(t => new Date(t.date) >= startDate);
-      return hasPostStart ? card.annualFee : 0;
+    const startYear = startDate.getFullYear();
+    // Determine the calendar year being viewed from transaction years
+    const maxTxnYear = txnYears.size > 0 ? Math.max(...txnYears) : null;
+    if (maxTxnYear !== null) {
+      // Fee applies if the viewed year is the start year or later
+      return maxTxnYear >= startYear ? card.annualFee : 0;
     }
     // No transactions for this card - default to current annual fee
     return card.annualFee || 0;

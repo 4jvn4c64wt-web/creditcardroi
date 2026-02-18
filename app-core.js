@@ -3486,9 +3486,6 @@ function scenarioInvolvesBilt() {
   const wi = state.cardScenarios;
   if (wi.addCardId && CARDS[wi.addCardId]?.isBilt) return true;
   if (wi.removeCardId && CARDS[wi.removeCardId]?.isBilt) return true;
-  // Also trigger if the wallet already has a Bilt card (routing changes affect Bilt Cash)
-  const activeCards = getActiveCardIds(wi.selectedYear || state.selectedYear);
-  if (activeCards.some(id => CARDS[id]?.isBilt)) return true;
   return false;
 }
 

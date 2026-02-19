@@ -614,6 +614,19 @@ function showTourSpotlight(step, retryCount = 0) {
     return;
   }
 
+  // Also retry if the target exists but isn't visible yet (zero dimensions)
+  const targetRect = target.getBoundingClientRect();
+  if (targetRect.width === 0 && targetRect.height === 0) {
+    if (retryCount < 5) {
+      setTimeout(() => showTourSpotlight(step, retryCount + 1), 300);
+      return;
+    }
+    console.warn('Tour target has zero dimensions after retries:', step.target);
+    state.tourStep++;
+    renderTourStep();
+    return;
+  }
+
   const overlay = document.getElementById('tourOverlay');
   const spotlight = document.getElementById('tourSpotlight');
   const tooltip = document.getElementById('tourTooltip');
@@ -766,7 +779,7 @@ function handleSpotlightClick(step) {
     setTimeout(() => {
       state.tourStep++;
       renderTourStep();
-    }, 300);
+    }, 500);
   } else if (step.clickAction === 'select-card') {
     // Allow user to select, then continue
     document.getElementById('tourOverlay').classList.add('hidden');

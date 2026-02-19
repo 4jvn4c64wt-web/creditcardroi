@@ -286,8 +286,7 @@ let state = {
     addCardId: null,        // Card being added
     removeCardId: null,     // Card being removed
     selectedYear: null,     // Year for analysis
-    optimizationRate: null, // Current slider value (0-100), null = auto-detect
-    isCustomMode: false,    // Whether user manually edited amounts (slider inactive)
+    isCustomMode: false,    // Whether user manually edited shift amounts
     shiftAmounts: {},       // { 'cardId|category': amount } confirmed shift amounts
     creditToggles: {},      // { creditName: true/false } for new card credits
     creditAmounts: {},      // { creditName: amount } for new card credit amounts
@@ -3484,7 +3483,6 @@ function resetCardScenariosState() {
     addCardId: null,
     removeCardId: null,
     selectedYear: null,
-    optimizationRate: null,
     isCustomMode: false,
     shiftAmounts: {},
     creditToggles: {},
@@ -5207,7 +5205,7 @@ function getCurrentWalletValue(year) {
  */
 function prefillShiftAmounts() {
   const wi = state.cardScenarios;
-  const rate = (wi.optimizationRate !== null ? wi.optimizationRate : calculateOptimizationRate()) / 100;
+  const rate = calculateOptimizationRate() / 100;
 
   if (wi.scenarioType === 'add' || wi.scenarioType === 'swap') {
     const addRows = wi.addCardId ? getAddCardShiftRows(wi.addCardId, wi.selectedYear) : [];
@@ -6208,17 +6206,6 @@ function renderStep4Swap() {
   return html;
 }
 
-function renderOptimizationSlider(value, isCustom) {
-  return `
-    <div class="cardscenarios-slider-wrap">
-      <div class="cardscenarios-slider-label">
-        <span>How often would you use the best card for each category?</span>
-        <span class="cardscenarios-slider-value ${isCustom ? 'custom' : ''}" id="cardscenariosSliderLabel">${isCustom ? 'Custom' : value + '%'}</span>
-      </div>
-      <input type="range" class="cardscenarios-slider ${isCustom ? 'inactive' : ''}" id="cardscenariosSlider" min="0" max="100" step="5" value="${value}">
-      ${isCustom ? '<span class="cardscenarios-slider-reset" id="cardscenariosSliderReset">Reset to slider</span>' : ''}
-    </div>`;
-}
 
 function renderSwapCredits(wi, removeCard, addCard, removeCredits, addCredits, netCredits) {
   const removeHasCredits = removeCard.credits && removeCard.credits.length > 0;
@@ -6380,7 +6367,7 @@ function renderCardScenariosStep5() {
         </div>
       </div>
       <div class="cardscenarios-context">
-        Optimization rate: ${wi.optimizationRate}%${wi.isCustomMode ? ' (custom adjustments)' : ''} • Year: ${wi.selectedYear}${annualized ? ` (annualized from ${monthSet.size} months)` : ''}
+        Optimization rate: ${calculateOptimizationRate()}%${wi.isCustomMode ? ' (custom adjustments)' : ''} • Year: ${wi.selectedYear}${annualized ? ` (annualized from ${monthSet.size} months)` : ''}
       </div>`;
 
   // Detail section (collapsed by default)
@@ -6716,7 +6703,6 @@ function attachCardScenariosListeners() {
     }
     // Reset shift amounts and custom mode when entering step 4
     wi.isCustomMode = false;
-    wi.optimizationRate = null;
     wi.shiftAmounts = {};
     wi.step = 4;
     renderView('cardscenarios');
@@ -6725,28 +6711,6 @@ function attachCardScenariosListeners() {
   // Step 4: Assumption review
   const back4 = document.getElementById('cardscenariosBack4');
   if (back4) back4.addEventListener('click', () => { wi.step = 3; renderView('cardscenarios'); });
-
-  // Optimization slider
-  const slider = document.getElementById('cardscenariosSlider');
-  if (slider) {
-    slider.addEventListener('input', (e) => {
-      const val = parseInt(e.target.value);
-      wi.optimizationRate = val;
-      wi.isCustomMode = false;
-      wi.shiftAmounts = {};
-      renderView('cardscenarios');
-    });
-  }
-
-  // Reset to slider button
-  const resetBtn = document.getElementById('cardscenariosSliderReset');
-  if (resetBtn) {
-    resetBtn.addEventListener('click', () => {
-      wi.isCustomMode = false;
-      wi.shiftAmounts = {};
-      renderView('cardscenarios');
-    });
-  }
 
   // Shift amount inputs
   document.querySelectorAll('.cardscenarios-shift-input').forEach(input => {

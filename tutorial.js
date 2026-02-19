@@ -107,11 +107,6 @@ const HELP_CONTENT = {
         text: 'When you add a card, the engine checks each transaction: if the new card earns more than the card you actually used, that spending shifts to the new card. When you remove a card, its spending shifts to whichever remaining card earns the most for each category.'
       },
       {
-        icon: '\u{1F39A}\uFE0F',
-        title: 'Optimization Rate Slider',
-        text: 'In practice, nobody routes every purchase to the optimal card 100% of the time. The slider adjusts what percentage of shiftable spending actually moves. It defaults to your real-world rate (calculated from your data), but you can adjust it.'
-      },
-      {
         icon: '\u{1F4CA}',
         title: 'Result Breakdown',
         text: 'The result shows: Credits gained or lost, Point value change from rerouted spending, Annual fee of the new or removed card, and the combined Estimated Net Impact. You can expand each section to see the per-category detail.'

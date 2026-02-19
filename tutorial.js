@@ -242,27 +242,15 @@ const TOUR_STEPS = [
     clickRequired: false,
     onShow: 'flip-first-card'
   },
-  // Manage menu in the condensed nav bar — click to open it
+  // Manage menu in the condensed nav bar — click to open Card Config
   {
     type: 'spotlight',
     phase: 'summary-tour',
     id: 'manage-menu',
     target: '#manageBtn',
     title: 'Manage Menu',
-    content: 'The <strong>Manage</strong> button is your hub for configuration. Click it to see Card Mapping, Card Config, and Manage Data.',
+    content: 'The <strong>Manage</strong> button is your hub for configuration:<br><br>\u2022 <strong>Card Mapping</strong> \u2014 match account numbers to reward cards<br>\u2022 <strong>Card Config</strong> \u2014 point values, credits, quarterly categories<br>\u2022 <strong>Manage Data</strong> \u2014 export, clear, or reset your data<br><br>Click here and we\'ll jump into <strong>Card Config</strong> so you can see how it works.',
     position: 'bottom',
-    clickRequired: true,
-    clickAction: 'open-manage'
-  },
-  // Card Config inside the now-open Manage dropdown
-  {
-    type: 'spotlight',
-    phase: 'summary-tour',
-    id: 'card-config-btn',
-    target: '#cardConfigBtn',
-    title: 'Card Configuration',
-    content: 'Click here to configure each card\'s settings \u2014 point values, credits to track, and quarterly bonus categories.',
-    position: 'left',
     clickRequired: true,
     clickAction: 'navigate-card-config'
   },
@@ -397,7 +385,7 @@ const TOUR_STEPS = [
     id: 'needs-review',
     target: '#needsReviewFilter',
     title: 'Needs Review \u26A0\uFE0F',
-    content: 'Transactions we couldn\'t confidently categorize appear here. Review them to improve accuracy \u2014 look for the \u26A0\uFE0F icon. Creating rules helps the app learn your preferences.',
+    content: 'Transactions we couldn\'t confidently categorize appear here. Review them to improve accuracy \u2014 look for the \u26A0\uFE0F icon.<br><br><span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">PRO</span> Creating rules and recategorizing transactions to improve accuracy is a Pro feature.',
     position: 'bottom',
     clickRequired: false
   },
@@ -409,7 +397,7 @@ const TOUR_STEPS = [
     id: 'card-scenarios',
     target: '#cardScenariosTab',
     title: 'Card Scenarios',
-    content: '<span style="background:#059669;color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">PRO</span> Card Scenarios lets you model what happens if you <strong>add</strong>, <strong>remove</strong>, or <strong>swap</strong> a card in your wallet \u2014 using your actual spending data. It reroutes every transaction to show the real impact on points, credits, and net value. Powerful for deciding whether a new card is worth it or if it\'s time to cancel one.',
+    content: '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">PRO</span> Card Scenarios lets you model what happens if you <strong>add</strong>, <strong>remove</strong>, or <strong>swap</strong> a card in your wallet \u2014 using your actual spending data. It reroutes every transaction to show the real impact on points, credits, and net value. Powerful for deciding whether a new card is worth it or if it\'s time to cancel one.',
     position: 'bottom',
     clickRequired: false
   },
@@ -769,16 +757,7 @@ function showTourSpotlight(step, retryCount = 0) {
 
 // Handle spotlight click
 function handleSpotlightClick(step) {
-  if (step.clickAction === 'open-manage') {
-    // Open the Manage dropdown, then advance to next step (Card Config spotlight)
-    const manageDropdown = document.getElementById('manageDropdown');
-    if (manageDropdown) manageDropdown.classList.add('open');
-    document.getElementById('tourOverlay').classList.add('hidden');
-    setTimeout(() => {
-      state.tourStep++;
-      renderTourStep();
-    }, 300);
-  } else if (step.clickAction === 'navigate-card-config') {
+  if (step.clickAction === 'navigate-card-config') {
     document.getElementById('tourOverlay').classList.add('hidden');
     // Close the manage dropdown before navigating
     const manageDropdown = document.getElementById('manageDropdown');

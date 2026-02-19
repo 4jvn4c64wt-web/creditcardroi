@@ -126,7 +126,7 @@ window.CardTracker.classification.SPECIFIC_CATEGORY_KEYWORDS = {
   'skip': ['transfer', 'payment thank you', 'autopay', 'credit card payment', 'paycheck', 'direct deposit', 'income', 'payroll', 'ach credit',
            'automatic payment', 'last statement bal', 'statement balance', 'previous balance', 'balance from',
            'interest charge', 'interest debit', 'purch interest',
-           'annual membership fee', 'annual fee', 'returned payment', 'late fee', 'late charge',
+           'annual membership fee', 'membership fee', 'annual fee', 'returned payment', 'late fee', 'late charge',
            'over limit fee', 'balance transfer fee', 'cash advance fee', 'foreign transaction fee',
            'payment received', 'autopay payment', 'credit balance refund'],
 

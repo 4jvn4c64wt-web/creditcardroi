@@ -273,7 +273,7 @@ const TOUR_STEPS = [
     id: 'config-point-value',
     target: '#configPointValue',
     title: 'Point Valuation \u{1F4B0}',
-    content: 'This value represents how much each point or mile is worth when redeemed. It\u2019s based on commonly accepted valuations for your card\u2019s rewards program and is used to calculate the dollar value of the points you earn.<br><br><span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING TO PRO</span> Pro users will be able to edit point valuations to match their personal redemption strategy\u2014whether you value points at 1.0\u00A2 for cash back or 2.0\u00A2+ for premium travel redemptions.',
+    content: 'This value represents how much each point or mile is worth when redeemed. It\u2019s based on commonly accepted valuations for your card\u2019s rewards program and is used to calculate the dollar value of the points you earn.<br><br><span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">PRO</span> Pro users will be able to edit point valuations to match their personal redemption strategy\u2014whether you value points at 1.0\u00A2 for cash back or 2.0\u00A2+ for premium travel redemptions.',
     position: 'right',
     clickRequired: false
   },
@@ -283,7 +283,7 @@ const TOUR_STEPS = [
     id: 'config-credits-section',
     target: '#configCreditsSection',
     title: 'Statement Credits \u{1F4B3}',
-    content: 'Your statement credits are <strong>auto-detected</strong> from transactions (like streaming or airline incidentals). Others marked \u26A1 (like Uber Cash) require manual tracking.<br><br><span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING TO PRO</span> Toggle individual credits ON/OFF to customize your ROI calculation.',
+    content: 'Your statement credits are <strong>auto-detected</strong> from transactions (like streaming or airline incidentals). Others marked \u26A1 (like Uber Cash) require manual tracking.<br><br><span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">PRO</span> Toggle individual credits ON/OFF to customize your ROI calculation.',
     position: 'top',
     clickRequired: false
   },
@@ -365,7 +365,7 @@ const TOUR_STEPS = [
     id: 'recategorize',
     target: '#transactionsBody .badge',
     title: 'Recategorize Transactions \u{1F3F7}\uFE0F',
-    content: '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING TO PRO</span> You\'ll be able to recategorize spending categories and credits by clicking any badge. You can also add rules for specific merchants so they\'re always classified correctly.',
+    content: '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">PRO</span> You\'ll be able to recategorize spending categories and credits by clicking any badge. You can also add rules for specific merchants so they\'re always classified correctly.',
     position: 'right',
     clickRequired: false
   },
@@ -423,9 +423,9 @@ const TOUR_STEPS = [
     content: `
       <p><strong>What to do next:</strong></p>
       <ol style="margin:16px 0;line-height:2;text-align:left;">
-        <li><strong>Summary</strong> \u2014 Flip your cards to see detailed performance, use CY toggle for annual fee decisions</li>
-        <li><strong>All Transactions</strong> \u2014 Review how spending was classified, fix anything flagged for review</li>
-        <li><strong>Card Scenarios</strong> \u2014 Model adding, removing, or swapping cards to optimize your wallet</li>
+        <li><strong>Summary</strong> \u2014 Flip your cards to see detailed performance, use the CY toggle for annual fee decisions</li>
+        <li><strong>All Transactions</strong> \u2014 See how your spending was classified across all your cards</li>
+        <li><strong>Manage</strong> \u2014 Configure cards, export data, or upload new transactions anytime</li>
       </ol>
       <p style="margin-top:12px;font-size:12px;color:#78716c;">Click <strong>Help</strong> on any page for guidance, or to restart this tour.</p>
     `,

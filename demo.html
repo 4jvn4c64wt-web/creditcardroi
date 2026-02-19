@@ -6,14 +6,11 @@
   <meta name="robots" content="noindex">
   <title>Credit Card Value Tracker — Demo</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💳</text></svg>">
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'IBM Plex Sans', -apple-system, sans-serif; background: #fafaf9; color: #1c1917; min-height: 100vh; line-height: 1.5; }
+    body { font-family: 'DM Sans', 'IBM Plex Sans', -apple-system, sans-serif; background: #f7f6f3; color: #1c1917; min-height: 100vh; line-height: 1.5; }
     .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
-    .header { margin-bottom: 32px; }
-    .header h1 { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 8px; }
-    .header p { font-size: 14px; color: #78716c; }
     .card { background: #fff; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #e7e5e4; }
     .card-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
     .btn { display: inline-flex; align-items: center; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; border: none; font-family: inherit; text-decoration: none; }
@@ -23,50 +20,106 @@
     .btn-secondary:hover { background: #e7e5e4; }
     .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; }
     .badge-demo { background: #dbeafe; color: #1e40af; }
-    .metrics-grid { display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid #e7e5e4; border-radius: 12px; overflow: hidden; background: #fff; margin-bottom: 20px; }
-    .metric { padding: 20px; text-align: center; border-right: 1px solid #e7e5e4; }
-    .metric:last-child { border-right: none; }
-    .metric-value { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; font-family: 'IBM Plex Mono', monospace; }
-    .metric-value.positive { color: #059669; }
-    .metric-value.negative { color: #dc2626; }
-    .metric-label { font-size: 11px; color: #78716c; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
-    .tabs { display: flex; gap: 8px; margin-bottom: 24px; border-bottom: 1px solid #e7e5e4; padding-bottom: 12px; flex-wrap: wrap; }
-    .tab { padding: 8px 16px; border-radius: 6px; border: none; background: transparent; font-size: 14px; font-weight: 500; cursor: pointer; color: #78716c; font-family: inherit; }
-    .tab.active { background: #1c1917; color: #fff; }
+    .badge-green { background: #dcfce7; color: #166534; }
+    .badge-yellow { background: #fef9c3; color: #854d0e; }
+    .badge-gray { background: #f5f5f4; color: #57534e; }
+    .form-select { padding: 10px 12px; border-radius: 6px; border: 1px solid #d6d3d1; font-size: 14px; font-family: inherit; background: #fff; cursor: pointer; }
+    .positive-amount { color: #059669; font-weight: 600; }
+    .negative-amount { color: #b91c1c; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     th { text-align: left; padding: 12px 8px; border-bottom: 2px solid #e7e5e4; font-weight: 600; color: #57534e; font-size: 11px; text-transform: uppercase; }
     th.text-right { text-align: right; }
     td { padding: 12px 8px; border-bottom: 1px solid #f5f5f4; }
     td.text-right { text-align: right; }
-    td.mono { font-family: 'IBM Plex Mono', monospace; }
+    td.mono { font-family: 'DM Mono', 'IBM Plex Mono', monospace; }
     tr:hover td { background: #fafaf9; }
-    .controls-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
-    .controls-left, .controls-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-    .positive-amount { color: #059669; font-weight: 600; }
-    .negative-amount { color: #b91c1c; }
-    .form-select { padding: 10px 12px; border-radius: 6px; border: 1px solid #d6d3d1; font-size: 14px; font-family: inherit; background: #fff; cursor: pointer; }
-    .badge-green { background: #dcfce7; color: #166534; }
-    .badge-yellow { background: #fef9c3; color: #854d0e; }
-    .badge-gray { background: #f5f5f4; color: #57534e; }
-    .demo-banner { background: #dbeafe; border: 1px solid #93c5fd; border-radius: 12px; padding: 16px 24px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
-    .demo-banner-text { font-size: 14px; color: #1e40af; }
-    .demo-banner-text strong { font-weight: 600; }
     .detail-panel { text-align: left; font-size: 11px; margin-top: 8px; padding: 8px; border-radius: 6px; }
     .points-panel { background: #f0fdf4; border: 1px solid #bbf7d0; }
     .credits-panel { background: #f5f5f4; border: 1px solid #e7e5e4; }
     .toggle-arrow { font-size: 10px; cursor: pointer; }
     .hidden { display: none !important; }
-    @media (max-width: 900px) { .metrics-grid { grid-template-columns: repeat(2, 1fr); } .metric:nth-child(2), .metric:nth-child(4) { border-right: none; } }
-    @media (max-width: 500px) { .metrics-grid { grid-template-columns: 1fr; } .metric { border-right: none; border-bottom: 1px solid #e7e5e4; } .metric:last-child { border-bottom: none; } }
+
+    /* Demo banner */
+    .demo-banner { background: #dbeafe; border: 1px solid #93c5fd; border-radius: 12px; padding: 16px 24px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+    .demo-banner-text { font-size: 14px; color: #1e40af; }
+    .demo-banner-text strong { font-weight: 600; }
+
+    /* ============================================= */
+    /* Persistent Shell: Top bar, Details, Nav tabs  */
+    /* ============================================= */
+    #resultsSection { margin-left: -24px; margin-right: -24px; width: calc(100% + 48px); }
+    @media (min-width: 1449px) { #resultsSection { margin-left: calc(-1 * (100vw - 1400px) / 2 - 24px); margin-right: calc(-1 * (100vw - 1400px) / 2 - 24px); width: 100vw; } }
+    .shell-topbar { background: #fff; border-bottom: 1px solid #e8e5e0; padding: 14px 0; }
+    .shell-topbar-inner { max-width: 1400px; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+    .shell-topbar-left { display: flex; align-items: center; gap: 0; }
+    .shell-title-block { display: flex; flex-direction: column; }
+    .shell-title { font-size: 18px; font-weight: 700; color: #1c1917; letter-spacing: -0.01em; font-family: 'DM Sans', sans-serif; }
+    .shell-txn-count { font-size: 12px; color: #9e9b96; margin-top: 1px; }
+    .shell-divider { width: 1px; height: 36px; background: #e8e5e0; margin: 0 18px; }
+    .shell-net-block { display: flex; flex-direction: column; align-items: flex-start; }
+    .shell-net-label { font-size: 10px; font-weight: 600; color: #9e9b96; text-transform: uppercase; letter-spacing: 0.06em; }
+    .shell-net-value { font-size: 28px; font-weight: 700; font-family: 'DM Mono', monospace; letter-spacing: -1px; line-height: 1.1; }
+    .shell-net-value.positive { color: #166534; }
+    .shell-net-value.negative { color: #991b1b; }
+    .shell-net-context { font-size: 11px; color: #9e9b96; font-family: 'DM Sans', sans-serif; margin-top: 2px; white-space: nowrap; }
+    .shell-expand-btn { width: 26px; height: 26px; border-radius: 50%; border: 1px solid #e8e5e0; background: #fff; color: #9e9b96; font-size: 16px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; margin-left: 10px; transition: all 0.15s; line-height: 1; }
+    .shell-expand-btn:hover { background: #f5f5f4; color: #1c1917; }
+    .shell-topbar-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+    /* Details strip */
+    .shell-details-strip { overflow: hidden; transition: max-height 0.35s ease, opacity 0.3s ease; max-height: 0; opacity: 0; background: #fff; border-bottom: 1px solid #e8e5e0; }
+    .shell-details-strip.open { max-height: 120px; opacity: 1; }
+    .shell-details-inner { max-width: 1400px; margin: 0 auto; padding: 12px 24px 14px; display: flex; align-items: center; gap: 0; flex-wrap: wrap; }
+    .shell-details-item { display: flex; flex-direction: column; align-items: center; min-width: 80px; }
+    .shell-details-item-label { font-size: 10px; font-weight: 600; color: #9e9b96; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px; }
+    .shell-details-item-value { font-size: 18px; font-weight: 600; font-family: 'DM Mono', monospace; color: #1c1917; }
+    .shell-details-op { font-size: 20px; font-weight: 500; color: #9e9b96; margin: 0 14px; padding-top: 12px; }
+    .shell-details-item.result .shell-details-item-value { font-weight: 700; }
+    .shell-details-item-value.positive { color: #059669; }
+    .shell-details-item-value.negative { color: #dc2626; }
+
+    /* Stagger animation for details items */
+    .shell-details-item, .shell-details-op { opacity: 0; transform: translateY(8px); transition: opacity 0.3s ease, transform 0.3s ease; }
+    .shell-details-strip.open .shell-details-item,
+    .shell-details-strip.open .shell-details-op { opacity: 1; transform: translateY(0); }
+    .shell-details-strip.open .shell-details-item:nth-child(1) { transition-delay: 0ms; }
+    .shell-details-strip.open .shell-details-op:nth-child(2) { transition-delay: 50ms; }
+    .shell-details-strip.open .shell-details-item:nth-child(3) { transition-delay: 100ms; }
+    .shell-details-strip.open .shell-details-op:nth-child(4) { transition-delay: 150ms; }
+    .shell-details-strip.open .shell-details-item:nth-child(5) { transition-delay: 200ms; }
+    .shell-details-strip.open .shell-details-op:nth-child(6) { transition-delay: 250ms; }
+    .shell-details-strip.open .shell-details-item:nth-child(7) { transition-delay: 300ms; }
+
+    /* Nav tabs bar */
+    .shell-nav { background: #fff; border-bottom: 1px solid #e8e5e0; }
+    .shell-nav-inner { max-width: 1400px; margin: 0 auto; padding: 0 24px; display: flex; gap: 8px; padding-top: 4px; padding-bottom: 4px; flex-wrap: wrap; }
+    .shell-tab { padding: 8px 16px; border-radius: 6px; border: none; background: transparent; font-size: 14px; font-weight: 500; cursor: pointer; color: #78716c; font-family: inherit; }
+    .shell-tab.active { background: #1c1917; color: #fff; }
+
+    /* Content container under shell */
+    .view-container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+    /* Info modal */
+    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; cursor: pointer; }
+    .modal-content { background: #fff; border-radius: 16px; padding: 32px; max-width: 420px; width: 90%; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.4); cursor: default; }
+
+    /* Stats footer */
+    .stats-footer { background: transparent; border: none; border-radius: 0; padding: 12px 16px; font-size: 12px; color: #9e9b96; margin-top: 20px; }
+
+    @media (max-width: 768px) {
+      .shell-topbar-inner { flex-direction: column; align-items: flex-start; }
+      .shell-divider { display: none; }
+      .shell-net-block { margin-top: 8px; }
+      .shell-expand-btn { margin-left: 0; margin-top: 8px; }
+      .shell-topbar-right { width: 100%; }
+      .shell-details-inner { gap: 8px; justify-content: center; }
+      .shell-details-op { margin: 0 8px; }
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="header">
-      <h1>Credit Card Value Tracker <span class="badge badge-demo" style="font-size:11px;vertical-align:middle;position:relative;top:-2px;">DEMO</span></h1>
-      <p>Sample data showing how the tracker calculates value for each card</p>
-    </div>
-
+    <!-- Demo banner -->
     <div class="demo-banner">
       <div class="demo-banner-text"><strong>This is a demo with sample data.</strong> Ready to try it with your own transactions?</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -75,97 +128,147 @@
       </div>
     </div>
 
-    <!-- Top Metrics -->
-    <div class="metrics-grid">
-      <div class="metric">
-        <div class="metric-value" id="metricSpend">$52,847</div>
-        <div class="metric-label">Total Spend</div>
+    <!-- Results Section (full-width shell matching app.html) -->
+    <div id="resultsSection">
+      <!-- Shell Topbar -->
+      <div class="shell-topbar">
+        <div class="shell-topbar-inner">
+          <div class="shell-topbar-left">
+            <div class="shell-title-block">
+              <div class="shell-title">Credit Card Value Tracker <span style="display:inline-block;font-size:11px;font-weight:600;background:#3b82f6;color:#fff;padding:2px 8px;border-radius:9999px;vertical-align:middle;letter-spacing:0.04em;position:relative;top:-1px;margin-left:4px;">DEMO</span></div>
+              <div class="shell-txn-count">Sample data showing how the tracker calculates value for each card</div>
+            </div>
+            <div class="shell-divider"></div>
+            <div class="shell-net-block">
+              <div class="shell-net-label">NET VALUE</div>
+              <div class="shell-net-value positive" id="shellNetValue">$0</div>
+              <div class="shell-net-context" id="shellNetContext">across 4 cards</div>
+            </div>
+            <button class="shell-expand-btn" id="shellExpandBtn" title="Show breakdown">+</button>
+          </div>
+          <div class="shell-topbar-right">
+            <a href="app.html" class="btn btn-primary" style="font-size:13px;padding:8px 16px;">Launch Tracker (Free)</a>
+            <a href="index.html" class="btn btn-secondary" style="font-size:13px;padding:8px 16px;">Back to Home</a>
+          </div>
+        </div>
       </div>
-      <div class="metric">
-        <div class="metric-value" id="metricPoints">93,214</div>
-        <div class="metric-label">Points Earned</div>
+
+      <!-- Details Strip (hidden by default) -->
+      <div class="shell-details-strip" id="shellDetailsStrip">
+        <div class="shell-details-inner">
+          <div class="shell-details-item">
+            <div class="shell-details-item-label">Points Value</div>
+            <div class="shell-details-item-value" id="metricPointsValue">$0</div>
+          </div>
+          <div class="shell-details-op">+</div>
+          <div class="shell-details-item">
+            <div class="shell-details-item-label">Credits Used</div>
+            <div class="shell-details-item-value" id="metricCredits">$0</div>
+          </div>
+          <div class="shell-details-op">&minus;</div>
+          <div class="shell-details-item">
+            <div class="shell-details-item-label">Annual Fees</div>
+            <div class="shell-details-item-value" id="metricAnnualFees">$0</div>
+          </div>
+          <div class="shell-details-op">=</div>
+          <div class="shell-details-item result">
+            <div class="shell-details-item-label">Net Value</div>
+            <div class="shell-details-item-value" id="metricNetValue">$0</div>
+          </div>
+        </div>
       </div>
-      <div class="metric">
-        <div class="metric-value positive" id="metricPointsValue">$1,477</div>
-        <div class="metric-label">Points Value</div>
+
+      <!-- Nav Tabs -->
+      <div class="shell-nav">
+        <div class="shell-nav-inner">
+          <button class="shell-tab active" data-view="summary">Summary</button>
+          <button class="shell-tab" data-view="transactions">All Transactions</button>
+          <button class="shell-tab" data-view="cardscenarios">Card Scenarios</button>
+        </div>
       </div>
-      <div class="metric">
-        <div class="metric-value positive" id="metricCredits">$1,040</div>
-        <div class="metric-label">Credits Used</div>
-      </div>
-      <div class="metric">
-        <div class="metric-value positive" id="metricNetValue">$397</div>
-        <div class="metric-label">Net Value</div>
+
+      <!-- View Container -->
+      <div id="viewContainer">
+        <!-- Summary View -->
+        <div id="summaryView">
+          <div class="view-container">
+            <div class="card">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+                <div>
+                  <h2 class="card-title" style="margin:0;">Card Performance Summary</h2>
+                  <p style="font-size:12px;color:#78716c;margin-top:4px;">Click column headers to sort</p>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <select class="form-select" style="min-width:120px;">
+                    <option selected>2025</option>
+                  </select>
+                </div>
+              </div>
+              <div style="overflow-x:auto;">
+                <table id="summaryTable">
+                  <thead><tr>
+                    <th>Card</th>
+                    <th class="text-right">Spend</th>
+                    <th class="text-right">Points</th>
+                    <th class="text-right">Pts Value</th>
+                    <th class="text-right">Credits</th>
+                    <th class="text-right">Ann. Fee</th>
+                    <th class="text-right">Net Value</th>
+                  </tr></thead>
+                  <tbody id="summaryBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Transactions View -->
+        <div id="transactionsView" class="hidden">
+          <div class="view-container">
+            <div class="card">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+                <h2 class="card-title" style="margin:0;">All Transactions</h2>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                  <select id="cardFilter" class="form-select" style="font-size:13px;" onchange="renderTransactions()">
+                    <option value="">All Cards</option>
+                  </select>
+                  <select id="categoryFilter" class="form-select" style="font-size:13px;" onchange="renderTransactions()">
+                    <option value="">All Categories</option>
+                  </select>
+                </div>
+              </div>
+              <div style="overflow-x:auto;">
+                <table>
+                  <thead><tr>
+                    <th>Date</th>
+                    <th>Merchant</th>
+                    <th>Card</th>
+                    <th>Category</th>
+                    <th class="text-right">Amount</th>
+                    <th class="text-right">Multi</th>
+                    <th class="text-right">Points</th>
+                    <th>Reason</th>
+                  </tr></thead>
+                  <tbody id="txnBody"></tbody>
+                </table>
+              </div>
+              <div id="txnCount" style="font-size:12px;color:#78716c;margin-top:12px;"></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- Tabs -->
-    <div class="tabs">
-      <button class="tab active" onclick="showTab('summary')">Summary</button>
-      <button class="tab" onclick="showTab('transactions')">All Transactions</button>
-    </div>
-
-    <!-- Summary View -->
-    <div id="summaryView">
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
-          <div>
-            <h2 class="card-title" style="margin:0;">Card Performance Summary</h2>
-            <p style="font-size:12px;color:#78716c;margin-top:4px;">Click column headers to sort</p>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <select class="form-select" style="min-width:120px;">
-              <option selected>2025</option>
-            </select>
-          </div>
-        </div>
-        <div style="overflow-x:auto;">
-          <table id="summaryTable">
-            <thead><tr>
-              <th>Card</th>
-              <th class="text-right">Spend</th>
-              <th class="text-right">Points</th>
-              <th class="text-right">Pts Value</th>
-              <th class="text-right">Credits</th>
-              <th class="text-right">Ann. Fee</th>
-              <th class="text-right">Net Value</th>
-            </tr></thead>
-            <tbody id="summaryBody"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- Transactions View -->
-    <div id="transactionsView" class="hidden">
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
-          <h2 class="card-title" style="margin:0;">All Transactions</h2>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-            <select id="cardFilter" class="form-select" style="font-size:13px;" onchange="renderTransactions()">
-              <option value="">All Cards</option>
-            </select>
-            <select id="categoryFilter" class="form-select" style="font-size:13px;" onchange="renderTransactions()">
-              <option value="">All Categories</option>
-            </select>
-          </div>
-        </div>
-        <div style="overflow-x:auto;">
-          <table>
-            <thead><tr>
-              <th>Date</th>
-              <th>Merchant</th>
-              <th>Card</th>
-              <th>Category</th>
-              <th class="text-right">Amount</th>
-              <th class="text-right">Multi</th>
-              <th class="text-right">Points</th>
-              <th>Reason</th>
-            </tr></thead>
-            <tbody id="txnBody"></tbody>
-          </table>
-        </div>
-        <div id="txnCount" style="font-size:12px;color:#78716c;margin-top:12px;"></div>
+    <!-- Card Scenarios Info Modal -->
+    <div id="cardScenariosInfoModal" class="modal-overlay hidden">
+      <div class="modal-content">
+        <div style="font-size:40px;margin-bottom:12px;">&#128260;</div>
+        <h3 style="font-size:20px;font-weight:600;margin:0 0 8px;">Card Scenarios</h3>
+        <p style="font-size:14px;color:#57534e;line-height:1.6;margin-bottom:16px;">
+          Card Scenarios lets you model what happens if you add, remove, or swap a card in your wallet &mdash; using your actual spending data. See how a new card would perform with your real purchases, or find out if dropping a card would cost you more than it saves.
+        </p>
+        <p style="font-size:13px;color:#78716c;margin-bottom:20px;">This feature is available to <strong>Pro</strong> users.</p>
+        <button id="closeCardScenariosInfo" class="btn btn-secondary" style="width:100%;justify-content:center;">Got it</button>
       </div>
     </div>
 
@@ -548,13 +651,18 @@ function renderSummary() {
   });
   const totalNet = totalPtsValue + totalCredits - totalFees;
 
-  document.getElementById('metricSpend').textContent = fmt(totalSpend);
-  document.getElementById('metricPoints').textContent = fmtNum(totalPoints);
+  // Update shell topbar net value
+  const shellNetEl = document.getElementById('shellNetValue');
+  shellNetEl.textContent = (totalNet >= 0 ? '+' : '-') + fmt(totalNet);
+  shellNetEl.className = 'shell-net-value ' + (totalNet >= 0 ? 'positive' : 'negative');
+
+  // Update details strip values
   document.getElementById('metricPointsValue').textContent = fmt(totalPtsValue);
   document.getElementById('metricCredits').textContent = fmt(totalCredits);
+  document.getElementById('metricAnnualFees').textContent = fmt(totalFees);
   const netEl = document.getElementById('metricNetValue');
   netEl.textContent = (totalNet >= 0 ? '+' : '-') + fmt(totalNet);
-  netEl.className = 'metric-value ' + (totalNet >= 0 ? 'positive' : 'negative');
+  netEl.className = 'shell-details-item-value ' + (totalNet >= 0 ? 'positive' : 'negative');
 
   // Render summary table
   const tbody = document.getElementById('summaryBody');
@@ -715,19 +823,52 @@ function populateFilters() {
   });
 }
 
+// =========================================================================
+// SHELL INTERACTIONS
+// =========================================================================
+
+// Expand/collapse details strip
+document.getElementById('shellExpandBtn').addEventListener('click', function() {
+  const strip = document.getElementById('shellDetailsStrip');
+  const isOpen = strip.classList.contains('open');
+  strip.classList.toggle('open');
+  this.textContent = isOpen ? '+' : '\u2212';
+  this.title = isOpen ? 'Show breakdown' : 'Hide breakdown';
+});
+
+// Tab navigation
+document.querySelectorAll('.shell-tab').forEach(tab => {
+  tab.addEventListener('click', function() {
+    const view = this.getAttribute('data-view');
+    showTab(view);
+  });
+});
+
 function showTab(tab) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  // Update active tab
+  document.querySelectorAll('.shell-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.shell-tab[data-view="${tab}"]`).classList.add('active');
+
   if (tab === 'summary') {
     document.getElementById('summaryView').classList.remove('hidden');
     document.getElementById('transactionsView').classList.add('hidden');
-    document.querySelectorAll('.tab')[0].classList.add('active');
-  } else {
+  } else if (tab === 'transactions') {
     document.getElementById('summaryView').classList.add('hidden');
     document.getElementById('transactionsView').classList.remove('hidden');
-    document.querySelectorAll('.tab')[1].classList.add('active');
     renderTransactions();
+  } else if (tab === 'cardscenarios') {
+    // Show info modal
+    document.getElementById('cardScenariosInfoModal').classList.remove('hidden');
   }
 }
+
+// Card Scenarios info modal
+document.getElementById('closeCardScenariosInfo').addEventListener('click', function() {
+  document.getElementById('cardScenariosInfoModal').classList.add('hidden');
+});
+document.getElementById('cardScenariosInfoModal').addEventListener('click', function(e) {
+  if (e.target === this) this.classList.add('hidden');
+});
 
 // Initialize
 renderSummary();

@@ -307,10 +307,10 @@ This is the single source of truth for "how many points does this card earn on t
 ### Annual Fee Calculation
 
 `getEffectiveAnnualFee(cardId, transactions)` handles:
-- **Detected fees from transaction data** — If the CSV contains an "annual membership fee" line, the actual amount and date are extracted and used. This is the most accurate path.
+- **Detected fees from transaction data** — Annual fees are detected in `processTransactions()` via a two-step pass: (1) text matching against skip patterns including "annual membership fee", "annual fee", and "membership fee", then (2) amount validation against the card definition's `annualFee` value. Both label and amount must match. When detected, fees appear as a subcategory of spend on the All Transactions page with a point value of 0. The actual amount and date are stored in `state.detectedAnnualFees` and used for the most accurate fee calculation.
 - **CSR legacy fee** — $550 before Oct 26, 2025; $795 after.
 - **Bilt fee start date** — No fee before Feb 7, 2026 for Obsidian/Palladium.
-- **Card definition fallback** — Uses `card.annualFee` if no fee detected.
+- **Card definition fallback** — Uses `card.annualFee` if no fee detected in transaction data.
 
 ### Card Year vs Calendar Year
 

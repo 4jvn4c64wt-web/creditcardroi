@@ -1892,8 +1892,10 @@ async function processTransactions(transactions) {
         // Annual fees typically appear as negative amounts (charges) on statements
         // We validate the amount against the card's known fee to avoid capturing
         // unrelated charges (e.g., a country club membership) that happen to
-        // contain "annual membership fee" or "annual fee" in their description.
-        if ((pattern === 'annual membership fee' || pattern === 'annual fee') && txn.amount < 0) {
+        // contain "membership fee" or "annual fee" in their description.
+        // "membership fee" (broad) covers Amex Platinum which omits "Annual".
+        // The amount check below disciplines any false positives from the broader match.
+        if ((pattern === 'annual membership fee' || pattern === 'membership fee' || pattern === 'annual fee') && txn.amount < 0) {
           const cardId = state.cardMappings[txn.last4];
           if (cardId && cardId !== 'skip') {
             const card = CARDS[cardId];

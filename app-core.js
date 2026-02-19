@@ -6197,7 +6197,10 @@ function renderStep4Swap() {
   // Normalize removeRows + addRows for grouped rendering
   const swapNormalizedRows = [];
   for (const r of removeRows) {
-    if (Math.abs(r.valueChange) < 0.005 && !(r.routeReason && r.routeReason.includes('Rent uplift'))) continue;
+    // Always show rows shifting to a Bilt card (even $0 impact) since that spend
+    // generates Bilt Cash → rent points. For non-Bilt destinations, hide near-zero rows.
+    const destIsBilt = r.bestCardId && CARDS[r.bestCardId]?.isBilt;
+    if (Math.abs(r.valueChange) < 0.005 && !destIsBilt) continue;
     swapNormalizedRows.push({
       subcategory: r.subcategory, sourceCardId: wi.removeCardId, sourceCardName: removeName,
       sourceRate: r.sourceRate, destCardName: r.bestCardName, destRate: r.bestRate,
@@ -6205,7 +6208,8 @@ function renderStep4Swap() {
     });
   }
   for (const r of addRows) {
-    if (Math.abs(r.additionalValue) < 0.005 && !(r.routeReason && r.routeReason.includes('Rent uplift'))) continue;
+    const destIsBilt = CARDS[wi.addCardId]?.isBilt;
+    if (Math.abs(r.additionalValue) < 0.005 && !destIsBilt) continue;
     swapNormalizedRows.push({
       subcategory: r.subcategory, sourceCardId: r.sourceCardId, sourceCardName: r.sourceCardName,
       sourceRate: r.sourceRate, destCardName: addName, destRate: r.newRate,

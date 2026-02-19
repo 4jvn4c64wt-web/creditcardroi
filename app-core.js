@@ -1952,6 +1952,52 @@ async function processTransactions(transactions) {
     }
     if (isSkipTransaction) continue;
 
+    // Detect card annual fees that don't match skip patterns (e.g., Amex uses
+    // just "Membership Fee" without "Annual"). We check for "membership fee" in
+    // the description AND validate the amount against the card's known annual fee.
+    // Amount validation is critical here — "membership fee" is generic enough to
+    // appear on gym memberships, club dues, etc., so we only classify as annual-fee
+    // when the amount matches a known card fee (within $1 tolerance).
+    if (combinedText.includes('membership fee') && txn.amount < 0) {
+      const cardId = state.cardMappings[txn.last4];
+      if (cardId && cardId !== 'skip') {
+        const card = CARDS[cardId];
+        const feeAmount = Math.abs(txn.amount);
+        const knownFees = [];
+        if (card && card.annualFee > 0) knownFees.push(card.annualFee);
+        if (card && card.legacyAnnualFee > 0) knownFees.push(card.legacyAnnualFee);
+        const isKnownCardFee = knownFees.some(fee => Math.abs(feeAmount - fee) < 1);
+
+        if (isKnownCardFee) {
+          let txnYear;
+          if (txn.date.includes('-')) {
+            txnYear = parseInt(txn.date.split('-')[0]);
+          } else if (txn.date.includes('/')) {
+            txnYear = parseInt(txn.date.split('/')[2]);
+            if (txnYear < 100) txnYear += 2000;
+          } else {
+            txnYear = new Date().getFullYear();
+          }
+
+          if (!state.detectedAnnualFees[cardId]) {
+            state.detectedAnnualFees[cardId] = {};
+          }
+          state.detectedAnnualFees[cardId][txnYear] = {
+            amount: feeAmount,
+            date: txn.date
+          };
+
+          classifications[txn.id] = {
+            subcategory: 'annual-fee',
+            source: 'skip-pattern',
+            confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE,
+            reason: 'Annual membership fee'
+          };
+          continue;
+        }
+      }
+    }
+
     // Check for single-transaction confirmation (takes precedence like merchant rules)
     if (state.confirmedTransactions[txn.id]) {
       classifications[txn.id] = {

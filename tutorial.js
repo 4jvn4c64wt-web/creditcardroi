@@ -3,29 +3,31 @@
 // =============================================================================
 
 // Context-sensitive help content for each page/view
+// Sections with `pro: true` are only shown when window.TIER_CONFIG === 'pro'
 const HELP_CONTENT = {
   summary: {
     title: 'Summary Page Help',
     sections: [
       {
         icon: '\u{1F4CA}',
-        title: 'Card Performance Table',
-        text: 'Shows points earned, credits used, and net value for each card. Click column headers to sort. Click \u25BC next to Credits to see a breakdown of each credit.'
+        title: 'Card Performance Cards',
+        text: 'Each card shows net value, annual fee, and a performance tag on the front. <strong>Click any card to flip it</strong> and see the full breakdown: spend, points earned, credits, and net value.'
       },
       {
-        icon: '\u{1F3A8}',
-        title: 'Category Colors',
-        text: 'Colors compare across your cards. <span style="background:#dcfce7;padding:2px 6px;border-radius:4px;">Green</span> = Best card in your wallet for that purchase. <span style="background:#fef9c3;padding:2px 6px;border-radius:4px;">Yellow</span> = Good, but a better option exists. <span style="background:#fee2e2;padding:2px 6px;border-radius:4px;">Red</span> = Another card would have earned more. Use this to optimize which card to use going forward.'
+        icon: '\u{1F4B0}',
+        title: 'Net Value Header',
+        text: 'Your overall Net Value stays visible at the top of every page. Click the <strong>+</strong> button to expand a breakdown: Points Value + Credits \u2212 Annual Fees = Net Value. It stays open until you close it.'
       },
       {
         icon: '\u{1F4C5}',
-        title: 'Year Filter & Card Year',
-        text: 'Filter results by year. "All Years" shows combined totals with annual fees counted once per card. Use the <strong>CY</strong> toggle on each card to switch between Calendar Year (Jan\u2013Dec) and Card Year (anniversary date). Card Year is more useful when deciding whether to keep a card at renewal, since some credits and fees reset on the anniversary.'
+        title: 'Year Filter',
+        text: 'Filter results by year using the dropdown. "All Years" shows combined totals with annual fees counted once per card.'
       },
       {
-        icon: '\u26A1',
-        title: 'Manual Credits',
-        text: 'Credits marked with \u26A1 (like Uber Cash) aren\'t auto-detected. Go to Card Config to mark which months you\'ve claimed them.'
+        icon: '\u{1F4C5}',
+        title: 'Card Year (CY) Toggle',
+        text: 'Use the <strong>CY</strong> toggle on each card to switch between Calendar Year (Jan\u2013Dec) and Card Year (anniversary date). Card Year is more useful when deciding whether to keep a card at renewal, since some credits and fees reset on the anniversary.',
+        pro: true
       }
     ]
   },
@@ -35,32 +37,34 @@ const HELP_CONTENT = {
       {
         icon: '\u{1F9E9}',
         title: 'How Classification Works',
-        text: 'The app automatically categorizes each transaction (e.g., restaurants \u2192 Dining, CVS \u2192 Drugstore) using the merchant name, your bank\'s category label, and built-in rules. This determines which point multiplier applies for each card. When the app isn\'t confident, it flags the transaction for your review.'
-      },
-      {
-        icon: '\u{1F3F7}\uFE0F',
-        title: 'Recategorize Transactions',
-        text: '<strong>Click any category badge</strong> to change how a transaction is classified. This affects point calculations. You can set rules to apply to all similar merchants.'
+        text: 'The app automatically categorizes each transaction (e.g., restaurants \u2192 Dining, CVS \u2192 Drugstore) using the merchant name, your bank\'s category label, and built-in rules. This determines which point multiplier applies for each card.'
       },
       {
         icon: '\u{1F50D}',
         title: 'Filters',
-        text: 'Filter by year, month, card, or category. Use "Credits" to see statement credits, or <strong>"Needs Review"</strong> to see transactions we couldn\'t confidently classify.'
-      },
-      {
-        icon: '\u26A0\uFE0F',
-        title: 'Needs Review',
-        text: 'Transactions marked with \u26A0\uFE0F have low confidence. Click the category badge to correct them \u2014 this improves accuracy and creates rules for similar transactions.'
+        text: 'Filter by year, month, card, or category. Use "Credits" to see statement credits, or <strong>"Needs Review"</strong> to see transactions the app couldn\'t confidently classify.'
       },
       {
         icon: '\u{1F4DD}',
         title: 'Reason Column',
-        text: 'Shows why each transaction was classified the way it was. "User-defined rule" means you set it manually.'
+        text: 'Shows why each transaction was classified the way it was. "User-defined rule" means you (or a rule you created) set it manually.'
       },
       {
         icon: '\u21A9\uFE0F',
         title: 'Refunds & Credits',
         text: 'Refunds subtract points (shown in red). Statement credits also subtract points but still count toward your ROI.'
+      },
+      {
+        icon: '\u{1F3F7}\uFE0F',
+        title: 'Recategorize Transactions',
+        text: '<strong>Click any category badge</strong> to change how a transaction is classified. This affects point calculations. You can also set rules to apply to all similar merchants.',
+        pro: true
+      },
+      {
+        icon: '\u26A0\uFE0F',
+        title: 'Needs Review',
+        text: 'Transactions flagged with \u26A0\uFE0F have low confidence. Click the category badge to correct them \u2014 this improves accuracy and creates rules for similar transactions.',
+        pro: true
       }
     ]
   },
@@ -86,6 +90,31 @@ const HELP_CONTENT = {
         icon: '\u{1F4C5}',
         title: 'Year Selection',
         text: 'Use the year dropdown to configure categories and credits for different years. Each year can have different quarterly selections.'
+      }
+    ]
+  },
+  cardscenarios: {
+    title: 'Card Scenarios Help',
+    sections: [
+      {
+        icon: '\u{1F52E}',
+        title: 'What Card Scenarios Does',
+        text: 'Model the financial impact of changing your wallet. Choose <strong>Add</strong>, <strong>Remove</strong>, or <strong>Swap</strong> a card, pick a year of spending data, and the engine reroutes every transaction to show the net effect on points, credits, and annual fees.'
+      },
+      {
+        icon: '\u{1F4B3}',
+        title: 'How Spending Is Rerouted',
+        text: 'When you add a card, the engine checks each transaction: if the new card earns more than the card you actually used, that spending shifts to the new card. When you remove a card, its spending shifts to whichever remaining card earns the most for each category.'
+      },
+      {
+        icon: '\u{1F4CA}',
+        title: 'Result Breakdown',
+        text: 'The result shows: Credits gained or lost, Point value change from rerouted spending, Annual fee of the new or removed card, and the combined Estimated Net Impact. You can expand each section to see the per-category detail.'
+      },
+      {
+        icon: '\u26A0\uFE0F',
+        title: 'Key Assumptions',
+        text: 'Scenarios assume your spending patterns stay the same and that shiftable spending goes to the best-earning card. Bilt scenarios account for rent points and Bilt Cash redemption. Results are estimates \u2014 actual value depends on real-world card usage habits.'
       }
     ]
   }
@@ -115,6 +144,8 @@ function showHelp(context = null) {
   if (!context) {
     if (document.getElementById('cardConfigSection').classList.contains('hidden') === false) {
       context = 'cardConfig';
+    } else if (state.activeView === 'cardscenarios') {
+      context = 'cardscenarios';
     } else if (state.activeView === 'transactions') {
       context = 'transactions';
     } else {
@@ -125,9 +156,12 @@ function showHelp(context = null) {
   const help = HELP_CONTENT[context];
   if (!help) return;
 
+  const isPro = window.TIER_CONFIG === 'pro';
+  const sections = help.sections.filter(s => !s.pro || isPro);
+
   document.getElementById('helpModalContent').innerHTML = `
     <h4 style="font-size:15px;font-weight:600;margin-bottom:16px;color:#78716c;">${help.title}</h4>
-    ${help.sections.map(s => `
+    ${sections.map(s => `
       <div style="margin-bottom:16px;padding:12px;background:#fafaf9;border-radius:8px;">
         <div style="font-weight:600;margin-bottom:6px;">${s.icon} ${s.title}</div>
         <div style="font-size:13px;color:#57534e;line-height:1.5;">${s.text}</div>
@@ -196,50 +230,66 @@ const TOUR_STEPS = [
     id: 'wait-mapping'
   },
 
-  // Phase 2: Summary Tour (spotlight-based) - steps 4-8
+  // Phase 2: Summary Tour (spotlight-based)
+  // Net Value in the top bar — always visible across all pages
   {
     type: 'spotlight',
     phase: 'summary-tour',
-    id: 'metrics-bar',
-    target: '#topMetrics',
-    title: 'Your Key Metrics \u{1F4CA}',
-    content: 'These are your totals for the selected time period. <strong>Net Value</strong> = Points Value + Credits \u2212 Annual Fees. This is your true ROI.',
+    id: 'net-value-header',
+    target: '.shell-net-block',
+    title: 'Your Net Value',
+    content: 'This is your overall <strong>Net Value</strong> across all cards \u2014 it stays visible at the top of every page so you always know where you stand. Net Value = Points Value + Credits \u2212 Annual Fees.',
     position: 'bottom',
     clickRequired: false
   },
+  // The + button that opens the sticky details strip
   {
     type: 'spotlight',
     phase: 'summary-tour',
-    id: 'card-table',
-    target: '#viewContainer table',
-    title: 'Card Performance Table \u{1F4B3}',
-    content: 'Each row shows one card\'s performance \u2014 spend, points earned, credits used, and net value. Click column headers to sort.',
-    position: 'top',
+    id: 'net-value-expand',
+    target: '#shellExpandBtn',
+    title: 'Expand for Details',
+    content: 'Click the <strong>+</strong> button to open a breakdown showing how your Net Value is calculated: Points Value + Credits \u2212 Annual Fees = Net Value. It stays open until you close it.',
+    position: 'bottom',
     clickRequired: false
   },
+  // Flippable card front — high-level summary
   {
     type: 'spotlight',
     phase: 'summary-tour',
-    id: 'credits-expand',
-    target: '.detail-toggle',
-    title: 'Credit Details \u25BC',
-    content: 'Click the \u25BC arrow to see a breakdown of which credits were detected for each card. Credits marked \u26A1 require manual tracking.',
-    position: 'left',
+    id: 'card-front',
+    target: '.flip-card',
+    title: 'Card Performance Cards',
+    content: 'Each card shows a high-level summary: the card\'s <strong>net value</strong>, <strong>annual fee</strong>, and performance tags (MVP, Workhorse, or Deadweight). Cards with annual fees also have a <strong>CY</strong> toggle to switch between calendar year and card anniversary year \u2014 useful when deciding whether to keep a card at renewal.',
+    position: 'right',
     clickRequired: false
   },
+  // Flippable card back — detailed data
   {
     type: 'spotlight',
     phase: 'summary-tour',
-    id: 'card-config-btn',
-    target: '#cardConfigBtn',
-    title: 'Card Configuration \u2699\uFE0F',
-    content: 'Click here to configure each card\'s settings \u2014 point values, credits to track, and quarterly bonus categories.',
+    id: 'card-back',
+    target: '.flip-card',
+    title: 'Flip for Full Breakdown',
+    content: 'Click any card to <strong>flip it over</strong> and see the full breakdown: total spend, points earned, points value, credits used (with a dropdown for individual credits), annual fee, and net value. This is where all the detailed performance data lives.',
+    position: 'right',
+    clickRequired: false,
+    onShow: 'flip-first-card'
+  },
+  // Manage menu in the condensed nav bar — click to open Card Config
+  {
+    type: 'spotlight',
+    phase: 'summary-tour',
+    id: 'manage-menu',
+    target: '#manageBtn',
+    title: 'Manage Menu',
+    content: 'The <strong>Manage</strong> button is your hub for configuration:<br><br>\u2022 <strong>Card Mapping</strong> \u2014 match account numbers to reward cards<br>\u2022 <strong>Card Config</strong> \u2014 point values, credits, quarterly categories<br>\u2022 <strong>Manage Data</strong> \u2014 export, clear, or reset your data<br><br>Click here and we\'ll jump into <strong>Card Config</strong> so you can see how it works.',
     position: 'bottom',
     clickRequired: true,
     clickAction: 'navigate-card-config'
   },
 
-  // Phase 3: Card Config Tour - steps 9-14
+  // Phase 3: Card Config Tour
   {
     type: 'spotlight',
     phase: 'card-config-tour',
@@ -257,7 +307,7 @@ const TOUR_STEPS = [
     id: 'config-point-value',
     target: '#configPointValue',
     title: 'Point Valuation \u{1F4B0}',
-    content: 'This value represents how much each point or mile is worth when redeemed. It\u2019s based on commonly accepted valuations for your card\u2019s rewards program and is used to calculate the dollar value of the points you earn.<br><br><span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING TO PRO</span> Pro users will be able to edit point valuations to match their personal redemption strategy\u2014whether you value points at 1.0\u00A2 for cash back or 2.0\u00A2+ for premium travel redemptions.',
+    content: 'This value represents how much each point or mile is worth when redeemed. It\u2019s based on commonly accepted valuations for your card\u2019s rewards program and is used to calculate the dollar value of the points you earn.<br><br><span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">PRO</span> Pro users will be able to edit point valuations to match their personal redemption strategy\u2014whether you value points at 1.0\u00A2 for cash back or 2.0\u00A2+ for premium travel redemptions.',
     position: 'right',
     clickRequired: false
   },
@@ -267,7 +317,7 @@ const TOUR_STEPS = [
     id: 'config-credits-section',
     target: '#configCreditsSection',
     title: 'Statement Credits \u{1F4B3}',
-    content: 'Your statement credits are <strong>auto-detected</strong> from transactions (like streaming or airline incidentals). Others marked \u26A1 (like Uber Cash) require manual tracking.<br><br><span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING TO PRO</span> Toggle individual credits ON/OFF to customize your ROI calculation.',
+    content: 'Your statement credits are <strong>auto-detected</strong> from transactions (like streaming or airline incidentals). Others marked \u26A1 (like Uber Cash) require manual tracking.<br><br><span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">PRO</span> Toggle individual credits ON/OFF to customize your ROI calculation.',
     position: 'top',
     clickRequired: false
   },
@@ -305,7 +355,7 @@ const TOUR_STEPS = [
     onShow: 'setup-back-listener'
   },
 
-  // Phase 4: Transactions Tour - steps 15-19
+  // Phase 4: Transactions Tour
   {
     type: 'spotlight',
     phase: 'transactions-tour',
@@ -349,7 +399,7 @@ const TOUR_STEPS = [
     id: 'recategorize',
     target: '#transactionsBody .badge',
     title: 'Recategorize Transactions \u{1F3F7}\uFE0F',
-    content: '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">COMING TO PRO</span> You\'ll be able to recategorize spending categories and credits by clicking any badge. You can also add rules for specific merchants so they\'re always classified correctly.',
+    content: '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">PRO</span> You\'ll be able to recategorize spending categories and credits by clicking any badge. You can also add rules for specific merchants so they\'re always classified correctly.',
     position: 'right',
     clickRequired: false
   },
@@ -369,39 +419,31 @@ const TOUR_STEPS = [
     id: 'needs-review',
     target: '#needsReviewFilter',
     title: 'Needs Review \u26A0\uFE0F',
-    content: 'Transactions we couldn\'t confidently categorize appear here. Review them to improve accuracy \u2014 look for the \u26A0\uFE0F icon. Creating rules helps the app learn your preferences.',
+    content: 'Transactions we couldn\'t confidently categorize appear here. Review them to improve accuracy \u2014 look for the \u26A0\uFE0F icon.<br><br><span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">PRO</span> Creating rules and recategorizing transactions to improve accuracy is a Pro feature.',
     position: 'bottom',
     clickRequired: false
   },
 
-  // Phase 4b: Export Data - step 20
+  // Phase 4b: Card Scenarios spotlight (after transactions, before nav bar items)
   {
     type: 'spotlight',
     phase: 'transactions-tour',
-    id: 'export-data',
-    target: '#manageDataBtn',
-    title: 'Export & Manage Data \u{1F4BE}',
-    content: 'Click <strong>Manage Data</strong> to find <strong>Export Data</strong> \u2014 download a backup of your transactions and settings as CSV or JSON. You can also clear data by year or start completely fresh from here.',
+    id: 'card-scenarios',
+    target: '#cardScenariosTab',
+    title: 'Card Scenarios',
+    content: '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">PRO</span> Card Scenarios lets you model what happens if you <strong>add</strong>, <strong>remove</strong>, or <strong>swap</strong> a card in your wallet \u2014 using your actual spending data. It reroutes every transaction to show the real impact on points, credits, and net value. Powerful for deciding whether a new card is worth it or if it\'s time to cancel one.',
     position: 'bottom',
     clickRequired: false
   },
+
+  // Phase 4c: Nav bar items — Manage and New Upload
   {
     type: 'spotlight',
     phase: 'transactions-tour',
-    id: 'card-mapping',
-    target: '#configBtn',
-    title: 'Card Mapping \u2699\uFE0F',
-    content: 'Opens the page where you matched account numbers to reward cards. Come back here if you need to reassign a card or if you add a new card to your wallet.',
-    position: 'bottom',
-    clickRequired: false
-  },
-  {
-    type: 'spotlight',
-    phase: 'transactions-tour',
-    id: 'new-upload',
-    target: '#newUploadBtn',
-    title: 'New Upload \u{1F4C4}',
-    content: 'Upload additional transaction files here anytime. The app automatically detects and removes duplicates, so it\'s safe to upload overlapping date ranges. Your existing data and rules are preserved.',
+    id: 'manage-nav',
+    target: '#manageBtn',
+    title: 'Manage Your Data',
+    content: 'Remember: <strong>Manage</strong> is where you\'ll find Card Mapping, Card Config, and data management (export, clear, or reset). You can also upload new transaction files anytime using <strong>New Upload</strong> to the right \u2014 duplicates are automatically removed.',
     position: 'bottom',
     clickRequired: false
   },
@@ -414,11 +456,15 @@ const TOUR_STEPS = [
     title: 'You\'re All Set! \u{1F389}',
     content: `
       <p><strong>What to do next:</strong></p>
-      <ol style="margin:16px 0;line-height:2;text-align:left;">
-        <li>\u{1F4CA} <strong>Card Performance</strong> \u2014 See each card\u2019s ROI, rewards earned vs. annual fee, and whether it\u2019s paying for itself</li>
-        <li>\u{1F4CB} <strong>All Transactions</strong> \u2014 Filter by card, category, or date to see how your spending was classified</li>
-      </ol>
-      <p style="margin-top:12px;font-size:12px;color:#78716c;">Click the <strong>?</strong> button on any page for help, or to restart this tour.</p>
+      <p style="margin:12px 0 4px;text-align:left;">Head to the <strong>Summary</strong> page and flip any card to see its net value \u2014 how much it earns you (or costs you) after the annual fee.</p>
+      <div style="margin-top:16px;padding:12px 14px;background:#fef3c7;border-radius:8px;text-align:left;">
+        <p style="margin:0 0 6px;font-size:12px;font-weight:600;color:#92400e;">PRO</p>
+        <ul style="margin:0;padding-left:18px;line-height:1.8;font-size:13px;color:#78716c;">
+          <li>Fine-tune your <strong>point valuations</strong> and toggle <strong>credits</strong> on/off</li>
+          <li>Use <strong>Card Scenarios</strong> to see the net effect of adding, removing, or swapping a card</li>
+        </ul>
+      </div>
+      <p style="margin-top:12px;font-size:12px;color:#78716c;">Click <strong>Help</strong> on any page for guidance, or to restart this tour.</p>
     `,
     buttons: [{ text: 'Start Using the App', action: 'finish', primary: true }]
   }
@@ -605,6 +651,19 @@ function showTourSpotlight(step, retryCount = 0) {
     return;
   }
 
+  // Also retry if the target exists but isn't visible yet (zero dimensions)
+  const targetRect = target.getBoundingClientRect();
+  if (targetRect.width === 0 && targetRect.height === 0) {
+    if (retryCount < 5) {
+      setTimeout(() => showTourSpotlight(step, retryCount + 1), 300);
+      return;
+    }
+    console.warn('Tour target has zero dimensions after retries:', step.target);
+    state.tourStep++;
+    renderTourStep();
+    return;
+  }
+
   const overlay = document.getElementById('tourOverlay');
   const spotlight = document.getElementById('tourSpotlight');
   const tooltip = document.getElementById('tourTooltip');
@@ -681,6 +740,12 @@ function showTourSpotlight(step, retryCount = 0) {
       }, 300);
     };
     backBtn.addEventListener('click', backHandler);
+  } else if (step.onShow === 'flip-first-card') {
+    // Flip the first card to show the back side during this step
+    const firstCard = document.querySelector('.flip-card');
+    if (firstCard && !firstCard.classList.contains('flipped')) {
+      setTimeout(() => firstCard.classList.add('flipped'), 500);
+    }
   }
 
   // Function to position spotlight and tooltip, then reveal them
@@ -744,11 +809,14 @@ function showTourSpotlight(step, retryCount = 0) {
 function handleSpotlightClick(step) {
   if (step.clickAction === 'navigate-card-config') {
     document.getElementById('tourOverlay').classList.add('hidden');
+    // Close the manage dropdown before navigating
+    const manageDropdown = document.getElementById('manageDropdown');
+    if (manageDropdown) manageDropdown.classList.remove('open');
     showCardConfigEditor();
     setTimeout(() => {
       state.tourStep++;
       renderTourStep();
-    }, 300);
+    }, 500);
   } else if (step.clickAction === 'select-card') {
     // Allow user to select, then continue
     document.getElementById('tourOverlay').classList.add('hidden');
@@ -800,6 +868,9 @@ function hideTourOverlay() {
   document.getElementById('tourOverlay').classList.add('hidden');
   document.getElementById('tourSpotlight').classList.add('hidden');
   document.getElementById('tourTooltip').classList.add('hidden');
+  // Clean up any dropdowns opened by the tour
+  const manageDropdown = document.getElementById('manageDropdown');
+  if (manageDropdown) manageDropdown.classList.remove('open');
 }
 
 // Hide all tour UI
@@ -808,6 +879,9 @@ function hideTourUI() {
   document.getElementById('tourSpotlight').classList.add('hidden');
   document.getElementById('tourTooltip').classList.add('hidden');
   document.getElementById('tourModal').classList.add('hidden');
+  // Clean up any dropdowns opened by the tour
+  const manageDropdown = document.getElementById('manageDropdown');
+  if (manageDropdown) manageDropdown.classList.remove('open');
 }
 
 // Show skip confirmation

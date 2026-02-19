@@ -554,7 +554,7 @@ function hasValidProAccess() {
 // UTILITY FUNCTIONS
 // =============================================================================
 function normalize(str) {
-  return (str || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+  return (str || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
 }
 
 function extractLast4(account) {
@@ -1881,8 +1881,8 @@ async function processTransactions(transactions) {
     // This ensures payments, statement balance lines, etc. are always filtered out
     // even if the user previously confirmed them as a different category
     // Check both merchant and original statement fields
-    const normMerchant = (txn.merchant || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
-    const normOriginal = (txn.original || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+    const normMerchant = normalize(txn.merchant);
+    const normOriginal = normalize(txn.original);
     const combinedText = normMerchant + ' ' + normOriginal;
     const skipPatterns = SPECIFIC_CATEGORY_KEYWORDS['skip'] || [];
     let isSkipTransaction = false;
@@ -2114,7 +2114,43 @@ async function processTransactions(transactions) {
     );
     
     // Detect annual fee transactions — show on transactions page but with 0 points
-    const isAnnualFee = cls.subcategory === 'annual-fee';
+    // Safety net: if the skip-pattern check missed the annual fee (e.g., due to
+    // unexpected whitespace or encoding in the CSV), catch it here by checking
+    // the merchant text + amount against the card's known annual fee.
+    let isAnnualFee = cls.subcategory === 'annual-fee';
+    if (!isAnnualFee && card && txn.amount < 0) {
+      const normText = normalize(txn.merchant) + ' ' + normalize(txn.original);
+      const hasFeeKeyword = normText.includes('membership fee') ||
+                            normText.includes('annual fee') ||
+                            normText.includes('annual membership fee');
+      if (hasFeeKeyword) {
+        const feeAmount = Math.abs(txn.amount);
+        const knownFees = [];
+        if (card.annualFee > 0) knownFees.push(card.annualFee);
+        if (card.legacyAnnualFee > 0) knownFees.push(card.legacyAnnualFee);
+        if (knownFees.some(fee => Math.abs(feeAmount - fee) < 1)) {
+          isAnnualFee = true;
+          cls.subcategory = 'annual-fee';
+          cls.source = 'fallback-fee-detect';
+          cls.confidence = 100;
+          cls.reason = 'Annual membership fee (fallback detection)';
+          // Also store in detectedAnnualFees for downstream use
+          let txnYear;
+          if (txn.date.includes('-')) {
+            txnYear = parseInt(txn.date.split('-')[0]);
+          } else if (txn.date.includes('/')) {
+            txnYear = parseInt(txn.date.split('/')[2]);
+            if (txnYear < 100) txnYear += 2000;
+          } else {
+            txnYear = new Date().getFullYear();
+          }
+          if (!state.detectedAnnualFees[cardId]) state.detectedAnnualFees[cardId] = {};
+          if (!state.detectedAnnualFees[cardId][txnYear]) {
+            state.detectedAnnualFees[cardId][txnYear] = { amount: feeAmount, date: txn.date };
+          }
+        }
+      }
+    }
 
     // Map the subcategory to a card-effective category via hierarchy
     // BUT: If source is 'rule', user explicitly chose this category - don't remap

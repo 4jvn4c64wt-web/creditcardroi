@@ -422,11 +422,14 @@ const TOUR_STEPS = [
     title: 'You\'re All Set! \u{1F389}',
     content: `
       <p><strong>What to do next:</strong></p>
-      <ol style="margin:16px 0;line-height:2;text-align:left;">
-        <li><strong>Summary</strong> \u2014 Flip your cards to see detailed performance, use the CY toggle for annual fee decisions</li>
-        <li><strong>All Transactions</strong> \u2014 See how your spending was classified across all your cards</li>
-        <li><strong>Manage</strong> \u2014 Configure cards, export data, or upload new transactions anytime</li>
-      </ol>
+      <p style="margin:12px 0 4px;text-align:left;">Head to the <strong>Summary</strong> page and flip any card to see its net value \u2014 how much it earns you (or costs you) after the annual fee.</p>
+      <div style="margin-top:16px;padding:12px 14px;background:#fef3c7;border-radius:8px;text-align:left;">
+        <p style="margin:0 0 6px;font-size:12px;font-weight:600;color:#92400e;">PRO</p>
+        <ul style="margin:0;padding-left:18px;line-height:1.8;font-size:13px;color:#78716c;">
+          <li>Fine-tune your <strong>point valuations</strong> and toggle <strong>credits</strong> on/off</li>
+          <li>Use <strong>Card Scenarios</strong> to see the net effect of adding, removing, or swapping a card</li>
+        </ul>
+      </div>
       <p style="margin-top:12px;font-size:12px;color:#78716c;">Click <strong>Help</strong> on any page for guidance, or to restart this tour.</p>
     `,
     buttons: [{ text: 'Start Using the App', action: 'finish', primary: true }]

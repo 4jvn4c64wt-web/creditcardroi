@@ -1,6 +1,6 @@
 # Credit Card Value Tracker — Development Guide
 
-Last updated: February 2026
+Last updated: February 19, 2026
 
 This document is the single source of context for anyone (human or AI) making changes to the Credit Card Value Tracker codebase. Read the relevant section before touching any code.
 
@@ -128,7 +128,7 @@ The core application makes zero network requests. Fonts are loaded from Google F
 ### Core Logic (loaded by app.html and app-pro.html)
 | File | Lines | Purpose |
 |------|-------|---------|
-| `app-core.js` | ~8,735 | **Everything shared**: utilities, state, tier logic, classification wrappers, points calculation, credit detection, CSV parsing wrappers, all UI rendering, export/import, card config editor, card scenarios, data management, initCore() |
+| `app-core.js` | ~9,809 | **Everything shared**: utilities, state, tier logic, classification wrappers, points calculation, credit detection, CSV parsing wrappers, all UI rendering, export/import, card config editor, card scenarios, data management, initCore() |
 | `app.js` | ~264 | Free-tier wrapper: sets TIER_CONFIG='free', newsletter popup, upgrade modals, Card Scenarios pro gate, calls initCore() |
 | `app-pro.js` | ~28 | Pro-tier wrapper: validates license, sets TIER_CONFIG='pro', calls initCore() |
 
@@ -163,7 +163,7 @@ Each file registers one card into `window.CardTracker.cards[cardId]`. Files are 
 ### Supporting
 | File | Purpose |
 |------|---------|
-| `tutorial.js` (~905 lines) | Help system, guided tour, feature education tooltips |
+| `tutorial.js` (~978 lines) | Help system, guided tour, feature education tooltips |
 | `test-csv-parser-v2.js` | CSV parser tests (run with Node) |
 | `test-tier-gating.js` | Tier/Decision Pass logic tests (run with Node) |
 | `robots.txt`, `sitemap.xml` | SEO — sitemap includes index, insights.html, and individual insight articles |
@@ -201,12 +201,12 @@ Each file registers one card into `window.CardTracker.cards[cardId]`. Files are 
    ↓
 8. Summary aggregation: group by card → spend, points, credits, annual fee, net value
    ↓
-9. renderView() displays results (summary table, transaction list, monthly breakdown)
+9. renderView() displays results (summary, all transactions, card scenarios)
 ```
 
 ### Key Principle: processTransactions() Is the Only Calculator
 
-All views (summary, transactions, monthly, card year) derive from the same `processTransactions()` output. There are no parallel calculation paths. If the number is wrong, the bug is in processTransactions() or the functions it calls.
+All views (summary, transactions, card scenarios) derive from the same `processTransactions()` output. There are no parallel calculation paths. If the number is wrong, the bug is in processTransactions() or the functions it calls.
 
 ---
 
@@ -290,7 +290,7 @@ cell-phone → utilities → null (but cell-phone is its own earning category on
 
 This is the single source of truth for "how many points does this card earn on this category." Every view calls it. The `reason` string is the audit trail.
 
-**Location:** `app-core.js` ~line 935
+**Location:** `app-core.js` ~line 977
 
 ### Special Card Logic (in priority order within getMultiplier)
 
@@ -307,10 +307,10 @@ This is the single source of truth for "how many points does this card earn on t
 ### Annual Fee Calculation
 
 `getEffectiveAnnualFee(cardId, transactions)` handles:
-- **Detected fees from transaction data** — If the CSV contains an "annual membership fee" line, the actual amount and date are extracted and used. This is the most accurate path.
+- **Detected fees from transaction data** — Annual fees are detected in `processTransactions()` via a two-step pass: (1) text matching against skip patterns including "annual membership fee", "annual fee", and "membership fee", then (2) amount validation against the card definition's `annualFee` value. Both label and amount must match. When detected, fees appear as a subcategory of spend on the All Transactions page with a point value of 0. The actual amount and date are stored in `state.detectedAnnualFees` and used for the most accurate fee calculation.
 - **CSR legacy fee** — $550 before Oct 26, 2025; $795 after.
 - **Bilt fee start date** — No fee before Feb 7, 2026 for Obsidian/Palladium.
-- **Card definition fallback** — Uses `card.annualFee` if no fee detected.
+- **Card definition fallback** — Uses `card.annualFee` if no fee detected in transaction data.
 
 ### Card Year vs Calendar Year
 
@@ -360,30 +360,30 @@ Each card file registers into `window.CardTracker.cards` (or `window.CardTracker
   name: 'Chase Sapphire Reserve',        // Full display name
   shortName: 'CSR',                       // Abbreviated name for tables
   annualFee: 795,                         // Current annual fee
-  pointValue: 0.02,                       // Default cents per point
+  pointValue: 0.018,                      // Default cents per point
   baseRate: 1,                            // Multiplier for uncategorized spend
-  categories: ['chase-travel', 'travel', 'dining', 'flights-direct', 'hotels-direct', ...],
-  multipliers: { 'chase-travel': 10, 'dining': 3, 'flights-direct': 5, ... },
+  categories: ['chase-travel', 'dining', 'flights-direct', 'hotels-direct', 'lyft', ...],
+  multipliers: { 'chase-travel': 8, 'flights-direct': 4, 'hotels-direct': 4, 'dining': 3, 'lyft': 5 },
   credits: [
     { name: 'Travel Credit', amount: 300, keywords: ['TRAVEL CREDIT'], manual: false },
-    { name: 'Uber Cash', amount: 120, keywords: [], manual: true }
+    { name: 'Lyft Credit', amount: 120, keywords: [], manual: true }
   ],
-  
+
   // Optional: legacy support
   legacyCutoffDate: '2025-10-26',
   legacyAnnualFee: 550,
   legacy: { categories: [...], multipliers: {...} },
-  
+
   // Optional: special flags
   isBilt: true,                           // Enables Bilt-specific logic
   annualFeeStartDate: '2026-02-07',       // Fee didn't exist before this date
   lyftPartnershipStart: '2020-01-12',     // Chase Lyft partnership start
-  
+
   // Optional: streaming validation
   streamingKeywords: ['netflix', 'spotify', 'hulu', ...],
-  
+
   // Optional: annual bonus points
-  annualBonusPoints: 50000                // Points awarded on card anniversary
+  annualBonusPoints: 10000                // Points awarded on card anniversary
 }
 ```
 
@@ -438,6 +438,7 @@ Stored in localStorage with `ccTracker_` prefix. Loaded on page init with `safeL
 | `decisionPasses` | `ccTracker_decisionPasses` | Active Decision Pass keys |
 | `proAccess` | `ccTracker_proAccess` | Pro license key |
 | `dpBannersDismissed` | `ccTracker_dpBannersDismissed` | Dismissed upgrade banners |
+| `featureEducation` | `ccTracker_featureEducation` | Tracks which feature tutorials have been shown |
 
 ### Session State (reset on reload)
 
@@ -446,7 +447,7 @@ Stored in localStorage with `ccTracker_` prefix. Loaded on page init with `safeL
 | `transactions` | Working copy of raw transactions |
 | `results` | Output of processTransactions() |
 | `detectedAnnualFees` | Fees found in transaction data |
-| `activeView` | Current tab (summary/transactions/monthly) |
+| `activeView` | Current tab (summary/transactions/cardscenarios) |
 | `selectedYear` | Year filter |
 | `cardScenarios` | What-If wizard state |
 
@@ -530,20 +531,29 @@ The app has several sections that show/hide:
 - `uploadSection` — Initial CSV upload zone
 - `columnMappingSection` — Column confirmation step
 - `mappingSection` — Card number → card mapping
-- `resultsSection` — Main results view (tabs: summary, transactions, card scenarios)
-- `cardConfigSection` — Per-card configuration editor
+- `resultsSection` — Main results view with a shell topbar, details strip, and tab navigation
+- `cardConfigSection` — Per-card configuration editor (not a tab — shown/hidden separately via `showCardConfigEditor()`)
+
+### Shell Tabs
+
+Three tabs in the results view:
+- **Summary** (`data-view="summary"`) — Per-card ROI breakdown, credits, net value
+- **All Transactions** (`data-view="transactions"`) — Full transaction list with classification details, filters, and drill-down
+- **Card Scenarios** (`data-view="cardscenarios"`, `id="cardScenariosTab"`) — What-If wizard (pro-gated in free tier)
 
 ### Main Render Functions
 
 | Function | Location (~line) | Purpose |
 |----------|-----------------|---------|
-| `showMapping()` | 2182 | Card number mapping UI |
-| `showResults()` | 3300 | Sets up results view, year filter, metrics banner |
-| `renderView(view)` | 6154 | Switches between summary/transactions/monthly tabs |
-| `showCardConfigEditor()` | 2231 | Per-card config (point values, credits, quarterly categories, Bilt settings) |
-| `renderCardScenarios()` | 4521 | What-If calculator wizard |
-| `showCreditModal()` | 7267 | Reassign credit/refund classification |
-| `showCategoryModal()` | 7347 | Recategorize a transaction |
+| `showMapping()` | 2232 | Card number mapping UI |
+| `showCardConfigEditor()` | 2281 | Per-card config (point values, credits, quarterly categories, Bilt settings) |
+| `renderCardConfig()` | 2419 | Renders card config content (called inside `showCardConfigEditor()`) |
+| `showResults()` | 3350 | Sets up results view, year filter, metrics banner |
+| `renderCardScenarios()` | 5252 | What-If calculator wizard |
+| `renderDetailSection()` | 6391 | Transaction detail drill-down |
+| `renderView(view)` | 7122 | Switches between summary/transactions/cardscenarios tabs |
+| `showCreditModal()` | 8279 | Reassign credit/refund classification |
+| `showCategoryModal()` | 8359 | Recategorize a transaction |
 
 ### Badge Colors
 
@@ -552,13 +562,13 @@ Category badges compare across the user's wallet:
 - **Yellow** — Good, but a better card exists (within 60% of best)
 - **Red** — Another card would earn significantly more
 
-Logic is in `getCategoryBadgeStyle()` (~line 1688).
+Logic is in `getCategoryBadgeStyle()` (~line 1738).
 
 ---
 
 ## 13. Card Scenarios (What-If)
 
-The Card Scenarios feature is a multi-step wizard in `app-core.js` (~lines 4521–7100). The tab is visible in both free and pro tiers, but free users see a pro-gating modal instead of the wizard (handled in `app.js`).
+The Card Scenarios feature is a multi-step wizard in `app-core.js` (~lines 5252–7100). The tab is visible in both free and pro tiers, but free users see a pro-gating modal instead of the wizard (handled in `app.js`).
 
 ### Scenario Types
 - **Add a card** — "What if I got card X?"
@@ -873,27 +883,41 @@ Quick lookup for the most commonly needed functions in `app-core.js`:
 |----------|-------|---------|
 | `parseDateString()` | 72 | Unified date parsing (multiple formats) |
 | `generateTransactionId()` | 175 | Content-based deduplication IDs |
-| `normalize()` | 557 | Lowercase + strip non-alphanumeric |
-| `extractLast4()` | 561 | Get last 4 digits from account string |
-| `getCardCategories()` | 621 | Valid categories for a card (date-aware) |
-| `mapToCardCategory()` | 674 | Map generic category → card's earning category |
-| `getPointValue()` | 802 | Get point value (user-customizable) |
-| `getMultiplier()` | 935 | **THE** multiplier function |
-| `getEffectiveAnnualFee()` | 1297 | Annual fee (date/detection-aware) |
-| `getCardYearPeriod()` | 1413 | Card anniversary period |
-| `calculateCardYearMetrics()` | 1497 | Metrics for a card year window |
-| `getCategoryBadgeStyle()` | 1688 | Green/yellow/red badge logic |
-| `detectCredit()` | 1747 | Identify statement credits |
-| `processTransactions()` | 1821 | **MAIN PIPELINE** — classify, calculate, summarize |
-| `showMapping()` | 2182 | Card mapping UI |
-| `showCardConfigEditor()` | 2231 | Card config UI |
-| `showResults()` | 3300 | Results page setup |
-| `calculateOptimizationRate()` | 3448 | Wallet optimization measurement |
-| `computeBiltRouting()` | ~4164 | Cap-aware Bilt routing algorithm (sacrifice-cost sorting, rent cap enforcement) |
-| `renderCardScenarios()` | 4521 | What-If wizard |
-| `renderView()` | 6154 | Tab switching (summary/transactions/monthly) |
-| `showCategoryModal()` | 7347 | Transaction recategorization |
-| `exportAsJSON()` | 7756 | Full data export |
-| `handleFile()` | 7792 | CSV/JSON file upload handler |
-| `runProcessing()` | 8125 | Trigger full reprocessing |
-| `initCore()` | 8158 | Application initialization |
+| `normalize()` | 556 | Lowercase + strip non-alphanumeric |
+| `extractLast4()` | 560 | Get last 4 digits from account string |
+| `getCardCategories()` | 620 | Valid categories for a card (date-aware) |
+| `mapToCardCategory()` | 673 | Map generic category → card's earning category |
+| `getPointValue()` | 814 | Get point value (user-customizable) |
+| `isBiltCardConfigured()` | 850 | Checks if Bilt card has meaningful config |
+| `calculateBiltRentPoints()` | 870 | Bilt 2.0 rent point calculation with spend-ratio tiers |
+| `detectBiltRentPayments()` | 932 | Auto-detects or manually matches rent payments |
+| `getMultiplier()` | 977 | **THE** multiplier function |
+| `getEffectiveAnnualFee()` | 1344 | Annual fee (date/detection-aware) |
+| `getCardYearPeriod()` | 1463 | Card anniversary period |
+| `calculateCardYearMetrics()` | 1547 | Metrics for a card year window |
+| `getCategoryBadgeStyle()` | 1738 | Green/yellow/red badge logic |
+| `detectCredit()` | 1797 | Identify statement credits |
+| `processTransactions()` | 1871 | **MAIN PIPELINE** — classify, calculate, summarize |
+| `showMapping()` | 2232 | Card mapping UI |
+| `showCardConfigEditor()` | 2281 | Card config UI |
+| `renderCardConfig()` | 2419 | Card config content (inside showCardConfigEditor) |
+| `showResults()` | 3350 | Results page setup |
+| `calculateOptimizationRate()` | 3517 | Wallet optimization measurement |
+| `calculateAddCardValue()` | 3576 | Projects value of adding a new card |
+| `calculateRemoveCardValue()` | 3732 | Projects loss from cancelling a card |
+| `calculateSwapValue()` | 3901 | Net impact of replacing one card with another |
+| `computeBiltRouting()` | 4409 | Cap-aware Bilt routing algorithm (sacrifice-cost sorting, rent cap enforcement) |
+| `calculateCardScenariosNetImpact()` | 4880 | Final net impact including credits |
+| `renderCardScenarios()` | 5252 | What-If wizard |
+| `renderPointValueContent()` | 5728 | Flat table + optional rent points row |
+| `updatePointValueContent()` | 5772 | Live-updates rent points display |
+| `renderUnifiedSpendTable()` | 5799 | Spend allocation table for all scenario types |
+| `renderDetailSection()` | 6391 | Transaction detail drill-down |
+| `_updateBiltCashDisplay()` | 6886 | Updates Bilt Cash input constraints |
+| `renderView()` | 7122 | Tab switching (summary/transactions/cardscenarios) |
+| `showCreditModal()` | 8279 | Reassign credit/refund classification |
+| `showCategoryModal()` | 8359 | Transaction recategorization |
+| `exportAsJSON()` | 8768 | Full data export |
+| `handleFile()` | 8804 | CSV/JSON file upload handler |
+| `runProcessing()` | 9137 | Trigger full reprocessing |
+| `initCore()` | 9177 | Application initialization |

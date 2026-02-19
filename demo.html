@@ -103,6 +103,63 @@
     .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; cursor: pointer; }
     .modal-content { background: #fff; border-radius: 16px; padding: 32px; max-width: 420px; width: 90%; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.4); cursor: default; }
 
+    /* Summary card grid */
+    .summary-grid-container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+    .summary-grid-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+    .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+    @media (max-width: 1100px) { .summary-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); } }
+
+    /* Flip card */
+    .flip-card { perspective: 1200px; height: 280px; cursor: pointer; }
+    .flip-card-inner { position: relative; width: 100%; height: 100%; transition: transform 0.55s cubic-bezier(0.4, 0.0, 0.2, 1), box-shadow 0.55s ease; transform-style: preserve-3d; border-radius: 12px; }
+    .flip-card.flipped .flip-card-inner { transform: rotateY(180deg) scale(1.03); box-shadow: 0 24px 60px rgba(0,0,0,0.18), 0 8px 20px rgba(0,0,0,0.10); z-index: 10; }
+    .flip-card-front, .flip-card-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 12px; overflow: hidden; }
+    .flip-card-front { background: #ffffff; border: 1px solid #e8e5e0; box-shadow: 0 1px 3px rgba(0,0,0,0.08); display: flex; flex-direction: column; }
+    .flip-card-front.positive-border { border-top: 3px solid #22c55e; }
+    .flip-card-front.negative-border { border-top: 3px solid #ef4444; }
+    .flip-card-back { background: #4a3f35; transform: rotateY(180deg); color: #f5f0ea; display: flex; flex-direction: column; overflow-y: auto; }
+
+    /* Front face content */
+    .fc-front-body { flex: 1; padding: 20px 20px 0; display: flex; flex-direction: column; }
+    .fc-card-name { font-size: 17px; font-weight: 600; color: #1c1917; font-family: 'DM Sans', sans-serif; line-height: 1.25; }
+    .fc-tags { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; min-height: 22px; }
+    .fc-tag { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: default; }
+    .fc-tag-mvp { background: #fef9c3; color: #854d0e; }
+    .fc-tag-deadweight { background: #f1f5f9; color: #475569; }
+    .fc-tag-workhorse { background: #f3e8ff; color: #6b21a8; }
+    .fc-net-section { flex: 1; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; padding-left: 20px; }
+    .fc-net-label { font-size: 10px; font-weight: 600; color: #9e9b96; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 2px; }
+    .fc-net-value { font-size: 24px; font-weight: 700; font-family: 'DM Mono', monospace; }
+    .fc-net-value.positive { color: #166534; }
+    .fc-net-value.negative { color: #991b1b; }
+    .fc-bottom-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; border-top: 1px solid #e8e5e0; }
+    .fc-annual-fee { font-size: 12px; color: #9e9b96; }
+    .fc-flip-hint { font-size: 12px; color: #9e9b96; }
+
+    /* Back face content */
+    .fc-back-header { padding: 14px 16px 8px; border-bottom: 1px solid #5c5047; }
+    .fc-back-header-label { font-size: 10px; font-weight: 600; color: #c4b8aa; text-transform: uppercase; letter-spacing: 0.05em; }
+    .fc-back-card-name { font-size: 14px; font-weight: 600; color: #f5f0ea; margin-top: 2px; }
+    .fc-back-rows { flex: 1; padding: 0 16px; overflow-y: auto; }
+    .fc-back-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #5c5047; }
+    .fc-back-row:last-child { border-bottom: none; }
+    .fc-back-row-label { font-size: 12px; color: #c4b8aa; }
+    .fc-back-row-value { font-size: 14px; font-weight: 500; font-family: 'DM Mono', monospace; color: #f5f0ea; }
+    .fc-back-row-value.positive { color: #86efac; }
+    .fc-back-row-value.negative { color: #fca5a5; }
+    .fc-back-row.net-row .fc-back-row-value { font-size: 16px; font-weight: 700; }
+    .fc-back-row.credits-row { flex-wrap: wrap; cursor: default; }
+    .fc-credits-toggle { display: flex; justify-content: space-between; align-items: center; width: 100%; cursor: pointer; }
+    .fc-credits-arrow { font-size: 10px; margin-left: 4px; transition: transform 0.2s; color: #c4b8aa; }
+    .fc-credits-arrow.open { transform: rotate(180deg); }
+    .fc-credits-detail { width: 100%; padding: 6px 0 2px; display: none; }
+    .fc-credits-detail.open { display: block; }
+    .fc-credits-detail-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 11px; }
+    .fc-credits-detail-row-name { color: #c4b8aa; }
+    .fc-credits-detail-row-val { color: #f5f0ea; font-family: 'DM Mono', monospace; }
+    .fc-back-footer { padding: 8px 16px; text-align: center; }
+    .fc-back-flip-hint { font-size: 11px; color: #c4b8aa; }
+
     /* Stats footer */
     .stats-footer { background: transparent; border: none; border-radius: 0; padding: 12px 16px; font-size: 12px; color: #9e9b96; margin-top: 20px; }
 
@@ -191,34 +248,19 @@
       <div id="viewContainer">
         <!-- Summary View -->
         <div id="summaryView">
-          <div class="view-container">
-            <div class="card">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
-                <div>
-                  <h2 class="card-title" style="margin:0;">Card Performance Summary</h2>
-                  <p style="font-size:12px;color:#78716c;margin-top:4px;">Click column headers to sort</p>
-                </div>
-                <div style="display:flex;align-items:center;gap:8px;">
-                  <select class="form-select" style="min-width:120px;">
-                    <option selected>2025</option>
-                  </select>
-                </div>
+          <div class="summary-grid-container">
+            <div class="summary-grid-header">
+              <div>
+                <h2 style="font-size:18px;font-weight:600;margin:0;">Card Performance</h2>
+                <p style="font-size:12px;color:#78716c;margin-top:4px;">Click any card to see the full breakdown</p>
               </div>
-              <div style="overflow-x:auto;">
-                <table id="summaryTable">
-                  <thead><tr>
-                    <th>Card</th>
-                    <th class="text-right">Spend</th>
-                    <th class="text-right">Points</th>
-                    <th class="text-right">Pts Value</th>
-                    <th class="text-right">Credits</th>
-                    <th class="text-right">Ann. Fee</th>
-                    <th class="text-right">Net Value</th>
-                  </tr></thead>
-                  <tbody id="summaryBody"></tbody>
-                </table>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <select class="form-select" id="yearSelect" style="min-width:120px;">
+                  <option selected>2025</option>
+                </select>
               </div>
             </div>
+            <div class="summary-grid" id="summaryGrid"></div>
           </div>
         </div>
 
@@ -621,8 +663,6 @@ function getReason(t, card) {
 // RENDER
 // =========================================================================
 
-let currentSort = { column: 'netValue', direction: 'desc' };
-
 function renderSummary() {
   const metrics = calculateMetrics();
   const cards = Object.values(metrics).map(c => {
@@ -630,21 +670,22 @@ function renderSummary() {
     return { ...c, netValue };
   });
 
-  // Sort
-  cards.sort((a, b) => {
-    const aVal = a[currentSort.column] ?? a.cardName;
-    const bVal = b[currentSort.column] ?? b.cardName;
-    if (currentSort.column === 'cardName') {
-      return currentSort.direction === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+  // Sort by net value descending
+  cards.sort((a, b) => b.netValue - a.netValue);
+
+  // Determine tags
+  const maxNet = Math.max(...cards.map(c => c.netValue));
+  const txnCounts = {};
+  DEMO_TRANSACTIONS.forEach(t => {
+    if (!t.isAnnualFee && !t.isCredit) {
+      txnCounts[t.card] = (txnCounts[t.card] || 0) + 1;
     }
-    return currentSort.direction === 'asc' ? aVal - bVal : bVal - aVal;
   });
+  const maxTxnCard = Object.entries(txnCounts).sort((a, b) => b[1] - a[1])[0][0];
 
   // Update top metrics
-  let totalSpend = 0, totalPoints = 0, totalPtsValue = 0, totalCredits = 0, totalFees = 0;
+  let totalPtsValue = 0, totalCredits = 0, totalFees = 0;
   cards.forEach(c => {
-    totalSpend += c.spend;
-    totalPoints += c.points;
     totalPtsValue += c.pointsValue;
     totalCredits += c.credits;
     totalFees += c.annualFee;
@@ -664,90 +705,109 @@ function renderSummary() {
   netEl.textContent = (totalNet >= 0 ? '+' : '-') + fmt(totalNet);
   netEl.className = 'shell-details-item-value ' + (totalNet >= 0 ? 'positive' : 'negative');
 
-  // Render summary table
-  const tbody = document.getElementById('summaryBody');
-  tbody.innerHTML = cards.map(c => {
-    const netClass = c.netValue >= 0 ? 'positive-amount' : 'negative-amount';
+  // Render flip cards
+  const grid = document.getElementById('summaryGrid');
+  grid.innerHTML = cards.map(c => {
     const netSign = c.netValue >= 0 ? '+' : '-';
+    const netClass = c.netValue >= 0 ? 'positive' : 'negative';
+    const borderClass = c.netValue >= 0 ? 'positive-border' : 'negative-border';
 
-    // Points breakdown
-    const catEntries = Object.entries(c.pointsByCategory).sort((a, b) => b[1].points - a[1].points);
-    const ptsBreakdown = catEntries.length > 0
-      ? catEntries.map(([cat, data]) =>
-          `<div style="display:flex;justify-content:space-between;margin-bottom:2px;">
-            <span style="text-transform:capitalize;">${cat}</span>
-            <span style="font-weight:500;">${fmtNum(data.points)} pts</span>
-          </div>`
-        ).join('')
-      : '<div style="color:#78716c;">No breakdown</div>';
+    // Tags
+    let tagsHtml = '';
+    if (c.netValue === maxNet) {
+      tagsHtml += '<span class="fc-tag fc-tag-mvp">MVP</span>';
+    }
+    if (c.cardId === maxTxnCard && c.netValue !== maxNet) {
+      tagsHtml += '<span class="fc-tag fc-tag-workhorse">Workhorse</span>';
+    }
+    if (c.netValue < 0) {
+      tagsHtml += '<span class="fc-tag fc-tag-deadweight">Deadweight</span>';
+    }
 
-    // Credits breakdown
+    // Credits breakdown for back
     const creditTxns = DEMO_TRANSACTIONS.filter(t => t.card === c.cardId && t.isCredit);
-    const creditsBreakdown = creditTxns.length > 0
-      ? creditTxns.map(t =>
-          `<div style="display:flex;justify-content:space-between;margin-bottom:2px;">
-            <span>${t.creditName}</span>
-            <span style="font-weight:500;">${fmtPrecise(t.amount)}</span>
-          </div>`
-        ).join('')
-      : (c.annualFee > 0 ? '<div style="color:#78716c;">No credits detected</div>' : '');
+    let creditsRowHtml = '';
+    if (creditTxns.length > 0) {
+      const creditsDetailRows = creditTxns.map(t =>
+        `<div class="fc-credits-detail-row">
+          <span class="fc-credits-detail-row-name">${t.creditName}</span>
+          <span class="fc-credits-detail-row-val">${fmtPrecise(t.amount)}</span>
+        </div>`
+      ).join('');
 
-    return `<tr>
-      <td style="white-space:nowrap;">${c.cardName}</td>
-      <td class="text-right mono">${fmtPrecise(c.spend)}</td>
-      <td class="text-right mono">
-        <div class="detail-toggle" data-target="pts-${c.cardId}" style="cursor:pointer;display:flex;align-items:center;justify-content:flex-end;gap:4px;">
-          ${fmtNum(c.points)} <span class="toggle-arrow" style="font-size:10px;">&#9660;</span>
-        </div>
-        <div id="pts-${c.cardId}" class="detail-panel points-panel" style="display:none;">
-          ${ptsBreakdown}
-        </div>
-      </td>
-      <td class="text-right mono">${fmtPrecise(c.pointsValue)}</td>
-      <td class="text-right mono">
-        ${(creditTxns.length > 0 || c.annualFee > 0) ? `
-          <div class="detail-toggle" data-target="cr-${c.cardId}" style="cursor:pointer;display:flex;align-items:center;justify-content:flex-end;gap:4px;">
-            ${fmtPrecise(c.credits)} <span class="toggle-arrow" style="font-size:10px;">&#9660;</span>
+      creditsRowHtml = `
+        <div class="fc-back-row credits-row" onclick="event.stopPropagation();">
+          <div class="fc-credits-toggle" onclick="var d=this.nextElementSibling;var a=this.querySelector('.fc-credits-arrow');d.classList.toggle('open');a.classList.toggle('open');">
+            <div class="fc-back-row-label">Credits Used</div>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <span class="fc-back-row-value positive">${fmtPrecise(c.credits)}</span>
+              <span class="fc-credits-arrow">&#9660;</span>
+            </div>
           </div>
-          <div id="cr-${c.cardId}" class="detail-panel credits-panel" style="display:none;">
-            ${creditsBreakdown}
+          <div class="fc-credits-detail">
+            ${creditsDetailRows}
           </div>
-        ` : fmtPrecise(c.credits)}
-      </td>
-      <td class="text-right mono">${c.annualFee > 0 ? fmtPrecise(c.annualFee) : '$0'}</td>
-      <td class="text-right mono ${netClass}" style="font-weight:600;">${netSign}${fmtPrecise(Math.abs(c.netValue))}</td>
-    </tr>`;
+        </div>`;
+    } else {
+      creditsRowHtml = `
+        <div class="fc-back-row">
+          <div class="fc-back-row-label">Credits Used</div>
+          <div class="fc-back-row-value">${fmtPrecise(c.credits)}</div>
+        </div>`;
+    }
+
+    return `
+      <div class="flip-card" onclick="this.classList.toggle('flipped')">
+        <div class="flip-card-inner">
+          <div class="flip-card-front ${borderClass}">
+            <div class="fc-front-body">
+              <div class="fc-card-name">${c.cardName}</div>
+              <div class="fc-tags">${tagsHtml}</div>
+            </div>
+            <div class="fc-net-section">
+              <div class="fc-net-label">NET VALUE</div>
+              <div class="fc-net-value ${netClass}">${netSign}${fmt(c.netValue)}</div>
+            </div>
+            <div class="fc-bottom-row">
+              <div class="fc-annual-fee">${c.annualFee > 0 ? fmt(c.annualFee) + ' annual fee' : 'No annual fee'}</div>
+              <div class="fc-flip-hint">Click to flip</div>
+            </div>
+          </div>
+          <div class="flip-card-back">
+            <div class="fc-back-header">
+              <div class="fc-back-header-label">BREAKDOWN</div>
+              <div class="fc-back-card-name">${c.cardName}</div>
+            </div>
+            <div class="fc-back-rows">
+              <div class="fc-back-row">
+                <div class="fc-back-row-label">Total Spend</div>
+                <div class="fc-back-row-value">${fmtPrecise(c.spend)}</div>
+              </div>
+              <div class="fc-back-row">
+                <div class="fc-back-row-label">Points Earned</div>
+                <div class="fc-back-row-value">${fmtNum(c.points)}</div>
+              </div>
+              <div class="fc-back-row">
+                <div class="fc-back-row-label">Points Value</div>
+                <div class="fc-back-row-value positive">${fmtPrecise(c.pointsValue)}</div>
+              </div>
+              ${creditsRowHtml}
+              <div class="fc-back-row">
+                <div class="fc-back-row-label">Annual Fee</div>
+                <div class="fc-back-row-value${c.annualFee > 0 ? ' negative' : ''}">${c.annualFee > 0 ? '-' + fmtPrecise(c.annualFee) : '$0.00'}</div>
+              </div>
+              <div class="fc-back-row net-row">
+                <div class="fc-back-row-label">Net Value</div>
+                <div class="fc-back-row-value ${netClass}">${netSign}${fmtPrecise(Math.abs(c.netValue))}</div>
+              </div>
+            </div>
+            <div class="fc-back-footer">
+              <div class="fc-back-flip-hint">Click to flip back</div>
+            </div>
+          </div>
+        </div>
+      </div>`;
   }).join('');
-
-  // Column sorting
-  document.querySelectorAll('#summaryTable th').forEach(th => {
-    th.style.cursor = 'pointer';
-    th.onclick = () => {
-      const cols = ['cardName', 'spend', 'points', 'pointsValue', 'credits', 'annualFee', 'netValue'];
-      const idx = Array.from(th.parentElement.children).indexOf(th);
-      const col = cols[idx];
-      if (currentSort.column === col) {
-        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
-      } else {
-        currentSort = { column: col, direction: col === 'cardName' ? 'asc' : 'desc' };
-      }
-      renderSummary();
-    };
-  });
-
-  // Detail toggle click handlers
-  document.querySelectorAll('.detail-toggle').forEach(el => {
-    el.onclick = (e) => {
-      e.stopPropagation();
-      const targetId = el.getAttribute('data-target');
-      const panel = document.getElementById(targetId);
-      if (panel) {
-        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-        const arrow = el.querySelector('.toggle-arrow');
-        if (arrow) arrow.textContent = panel.style.display === 'none' ? '\u25BC' : '\u25B2';
-      }
-    };
-  });
 }
 
 function renderTransactions() {
@@ -845,6 +905,12 @@ document.querySelectorAll('.shell-tab').forEach(tab => {
 });
 
 function showTab(tab) {
+  // Card Scenarios just shows modal without changing active tab
+  if (tab === 'cardscenarios') {
+    document.getElementById('cardScenariosInfoModal').classList.remove('hidden');
+    return;
+  }
+
   // Update active tab
   document.querySelectorAll('.shell-tab').forEach(t => t.classList.remove('active'));
   document.querySelector(`.shell-tab[data-view="${tab}"]`).classList.add('active');
@@ -856,9 +922,6 @@ function showTab(tab) {
     document.getElementById('summaryView').classList.add('hidden');
     document.getElementById('transactionsView').classList.remove('hidden');
     renderTransactions();
-  } else if (tab === 'cardscenarios') {
-    // Show info modal
-    document.getElementById('cardScenariosInfoModal').classList.remove('hidden');
   }
 }
 

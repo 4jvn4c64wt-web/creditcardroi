@@ -1551,7 +1551,7 @@ function calculateCardYearMetrics(cardId, startDate, endDate, allTransactions) {
   // Filter transactions for this card within the date range
   const filteredTxns = allTransactions.filter(t => {
     if (t.cardId !== cardId) return false;
-    if (t.isPayment) return false;
+    if (t.isPayment || t.isAnnualFee) return false;
 
     const parsed = parseDateString(t.date);
     if (!parsed) return false;
@@ -1741,6 +1741,10 @@ function getCategoryBadgeStyle(txn, returnTooltip = false) {
     ? `\n\nClassification: ${txn.subcategory}${txn.subcategory !== txn.category ? ' → ' + txn.category : ''}\nConfidence: ${txn.confidence || 0}\nSource: ${txn.categorySource || 'unknown'}`
     : '';
 
+  if (txn.isAnnualFee) {
+    const style = 'background:#f3f4f6;color:#6b7280;'; // Gray for annual fees
+    return returnTooltip ? { style, tooltip: 'Annual membership fee — no points' + debugInfo } : style;
+  }
   if (txn.isPayment) {
     const style = 'background:#f3f4f6;color:#6b7280;'; // Gray for payments
     return returnTooltip ? { style, tooltip: 'Payment — not counted' + debugInfo } : style;
@@ -1886,29 +1890,53 @@ async function processTransactions(transactions) {
       if (combinedText.includes(pattern)) {
         // Detect annual fee transactions before skipping
         // Annual fees typically appear as negative amounts (charges) on statements
+        // We validate the amount against the card's known fee to avoid capturing
+        // unrelated charges (e.g., a country club membership) that happen to
+        // contain "annual membership fee" or "annual fee" in their description.
         if ((pattern === 'annual membership fee' || pattern === 'annual fee') && txn.amount < 0) {
           const cardId = state.cardMappings[txn.last4];
           if (cardId && cardId !== 'skip') {
-            // Extract year from transaction date
-            let txnYear;
-            if (txn.date.includes('-')) {
-              txnYear = parseInt(txn.date.split('-')[0]);
-            } else if (txn.date.includes('/')) {
-              txnYear = parseInt(txn.date.split('/')[2]);
-              if (txnYear < 100) txnYear += 2000; // Handle 2-digit years
-            } else {
-              txnYear = new Date().getFullYear();
-            }
+            const card = CARDS[cardId];
+            const feeAmount = Math.abs(txn.amount);
+            // Check if this amount matches a known annual fee for this card
+            const knownFees = [];
+            if (card && card.annualFee > 0) knownFees.push(card.annualFee);
+            if (card && card.legacyAnnualFee > 0) knownFees.push(card.legacyAnnualFee);
+            const isKnownCardFee = knownFees.some(fee => Math.abs(feeAmount - fee) < 1);
 
-            // Store detected fee with full date (use absolute value since fees are negative in CSV)
-            if (!state.detectedAnnualFees[cardId]) {
-              state.detectedAnnualFees[cardId] = {};
+            if (isKnownCardFee) {
+              // Extract year from transaction date
+              let txnYear;
+              if (txn.date.includes('-')) {
+                txnYear = parseInt(txn.date.split('-')[0]);
+              } else if (txn.date.includes('/')) {
+                txnYear = parseInt(txn.date.split('/')[2]);
+                if (txnYear < 100) txnYear += 2000; // Handle 2-digit years
+              } else {
+                txnYear = new Date().getFullYear();
+              }
+
+              // Store detected fee with full date (use absolute value since fees are negative in CSV)
+              if (!state.detectedAnnualFees[cardId]) {
+                state.detectedAnnualFees[cardId] = {};
+              }
+              // Store both amount and date for card year calculations
+              state.detectedAnnualFees[cardId][txnYear] = {
+                amount: feeAmount,
+                date: txn.date
+              };
+
+              // Classify as 'annual-fee' so it appears on the transactions page
+              // (but with 0 points — handled in the processing pipeline)
+              classifications[txn.id] = {
+                subcategory: 'annual-fee',
+                source: 'skip-pattern',
+                confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE,
+                reason: 'Annual membership fee'
+              };
+              isSkipTransaction = true;
+              break;
             }
-            // Store both amount and date for card year calculations
-            state.detectedAnnualFees[cardId][txnYear] = {
-              amount: Math.abs(txn.amount),
-              date: txn.date
-            };
           }
         }
 
@@ -2083,19 +2111,26 @@ async function processTransactions(transactions) {
       txn.monarchCategory?.toLowerCase().includes('credit card payment')
     );
     
+    // Detect annual fee transactions — show on transactions page but with 0 points
+    const isAnnualFee = cls.subcategory === 'annual-fee';
+
     // Map the subcategory to a card-effective category via hierarchy
     // BUT: If source is 'rule', user explicitly chose this category - don't remap
-    const cardCategory = (cls.source === 'rule' || !card) ? cls.subcategory : mapToCardCategory(cls.subcategory, cardId, txn.date);
-    
+    // Annual fee transactions keep their own category (no hierarchy rollup)
+    const cardCategory = isAnnualFee ? 'annual-fee' : (cls.source === 'rule' || !card) ? cls.subcategory : mapToCardCategory(cls.subcategory, cardId, txn.date);
+
     let multiplier = { rate: 1, reason: 'Card not mapped' };
     let creditMatch = null;
     let isRefund = false;
-    
+
     if (card) {
       // Build merchant description for PayPal wrapper detection
       const merchantDesc = (txn.merchant || '') + ' ' + (txn.original || '');
 
-      if (isPayment) {
+      if (isAnnualFee) {
+        // Annual fees: visible on transactions page but don't generate points
+        multiplier = { rate: 0, reason: 'Annual membership fee' };
+      } else if (isPayment) {
         // Payments: don't count, gray styling
         multiplier = { rate: 0, reason: 'Payment' };
       } else if (isCredit) {
@@ -2172,10 +2207,11 @@ async function processTransactions(transactions) {
       isCredit,
       isPayment,
       isRefund,
+      isAnnualFee,
       creditMatch: creditMatchName
     };
   });
-  
+
   // Calculate summary
   const byCard = {};
   for (const txn of processed) {
@@ -2189,8 +2225,11 @@ async function processTransactions(transactions) {
         spend: 0, points: 0, pointsValue: 0, credits: 0, count: 0
       };
     }
-    if (txn.isCredit && txn.creditMatch) byCard[cid].credits += Math.abs(txn.amount);
-    else {
+    if (txn.isAnnualFee) {
+      // Annual fees are visible in the table but don't count toward spend or points
+    } else if (txn.isCredit && txn.creditMatch) {
+      byCard[cid].credits += Math.abs(txn.amount);
+    } else {
       byCard[cid].spend += Math.abs(txn.amount);
       byCard[cid].points += txn.points;
       byCard[cid].pointsValue += txn.pointsValue;
@@ -3518,7 +3557,7 @@ function calculateOptimizationRate() {
   if (!state.results || !state.results.processed) return 85;
   const year = state.cardScenarios.selectedYear || state.selectedYear;
   const txns = state.results.processed.filter(t => {
-    if (t.isPayment || t.isCredit) return false;
+    if (t.isPayment || t.isCredit || t.isAnnualFee) return false;
     if (year) return getYearFromDateString(t.date) === year;
     return true;
   });
@@ -3580,7 +3619,7 @@ function calculateAddCardValue(newCardId, year) {
   const newPV = getPointValue(newCardId);
 
   const txns = state.results.processed.filter(t =>
-    !t.isPayment && !t.isCredit && !t.isRefund && t.cardId && t.cardId !== 'skip' &&
+    !t.isPayment && !t.isCredit && !t.isRefund && !t.isAnnualFee && t.cardId && t.cardId !== 'skip' &&
     t.cardId !== newCardId && CARDS[t.cardId] &&
     getYearFromDateString(t.date) === year
   );
@@ -3740,14 +3779,14 @@ function calculateRemoveCardValue(removeCardId, year) {
   const walletCardIds = getActiveCardIds().filter(id => id !== removeCardId);
 
   const txns = state.results.processed.filter(t =>
-    !t.isPayment && !t.isCredit && !t.isRefund && t.cardId === removeCardId &&
+    !t.isPayment && !t.isCredit && !t.isRefund && !t.isAnnualFee && t.cardId === removeCardId &&
     getYearFromDateString(t.date) === year
   );
 
   // Annualization factor — use all non-payment transactions for the year (account-wide)
   // so months where this card wasn't used but other cards were are not treated as missing data
   const allYearTxns = state.results.processed.filter(t =>
-    !t.isPayment && !t.isCredit && !t.isRefund &&
+    !t.isPayment && !t.isCredit && !t.isRefund && !t.isAnnualFee &&
     getYearFromDateString(t.date) === year
   );
   const months = new Set();
@@ -3919,7 +3958,7 @@ function calculateSwapValue(removeCardId, addCardId, year) {
 
   // Annualization factor — use all non-payment transactions for the year
   const allYearTxns = state.results.processed.filter(t =>
-    !t.isPayment && !t.isCredit && !t.isRefund &&
+    !t.isPayment && !t.isCredit && !t.isRefund && !t.isAnnualFee &&
     getYearFromDateString(t.date) === year
   );
   const months = new Set();
@@ -3929,7 +3968,7 @@ function calculateSwapValue(removeCardId, addCardId, year) {
 
   // === Component 1: Removed card spending redistribution ===
   const removeTxns = state.results.processed.filter(t =>
-    !t.isPayment && !t.isCredit && !t.isRefund && t.cardId === removeCardId &&
+    !t.isPayment && !t.isCredit && !t.isRefund && !t.isAnnualFee && t.cardId === removeCardId &&
     getYearFromDateString(t.date) === year
   );
 
@@ -4136,7 +4175,7 @@ function calculateSwapValue(removeCardId, addCardId, year) {
   // === Component 2: Additional shifts to new card from existing cards ===
   // Excludes removed card transactions (handled in Component 1)
   const addTxns = state.results.processed.filter(t =>
-    !t.isPayment && !t.isCredit && !t.isRefund && t.cardId && t.cardId !== 'skip' &&
+    !t.isPayment && !t.isCredit && !t.isRefund && !t.isAnnualFee && t.cardId && t.cardId !== 'skip' &&
     t.cardId !== addCardId && t.cardId !== removeCardId && CARDS[t.cardId] &&
     getYearFromDateString(t.date) === year
   );
@@ -4323,14 +4362,14 @@ function calculateSwapValue(removeCardId, addCardId, year) {
 function getAnnualizedCardSpend(cardId, year) {
   if (!state.results || !state.results.processed) return { factor: 1, categories: {}, subcategories: {} };
   const txns = state.results.processed.filter(t =>
-    t.cardId === cardId && !t.isPayment && !t.isCredit && !t.isRefund &&
+    t.cardId === cardId && !t.isPayment && !t.isCredit && !t.isRefund && !t.isAnnualFee &&
     getYearFromDateString(t.date) === year
   );
 
   // Determine annualization factor — use all non-payment transactions for the year (account-wide)
   // so months where this card wasn't used but other cards were are not treated as missing data
   const allYearTxns = state.results.processed.filter(t =>
-    !t.isPayment && !t.isCredit && !t.isRefund &&
+    !t.isPayment && !t.isCredit && !t.isRefund && !t.isAnnualFee &&
     getYearFromDateString(t.date) === year
   );
   const months = new Set();
@@ -5166,7 +5205,7 @@ function calculateCardScenariosNetImpact() {
 function getCurrentWalletValue(year) {
   if (!state.results || !state.results.processed) return 0;
   const txns = state.results.processed.filter(t => {
-    if (t.isPayment) return false;
+    if (t.isPayment || t.isAnnualFee) return false;
     if (year) return getYearFromDateString(t.date) === year;
     return true;
   });
@@ -7153,7 +7192,7 @@ function renderView(view) {
     
     // Recalculate totals for filtered transactions
     const filteredTotals = filteredProcessed.reduce((acc, t) => {
-      if (!t.isPayment) {
+      if (!t.isPayment && !t.isAnnualFee) {
         if (t.isCredit && !t.isRefund) {
           acc.credits += Math.abs(t.amount);
         } else if (!t.isCredit) {
@@ -7182,7 +7221,9 @@ function renderView(view) {
           pointsByCategory: {} // Track points by category for breakdown
         };
       }
-      if (t.isCredit && !t.isRefund) {
+      if (t.isAnnualFee) {
+        // Annual fees are visible but don't count toward spend or points
+      } else if (t.isCredit && !t.isRefund) {
         cardMap[t.cardId].credits += Math.abs(t.amount);
       } else if (!t.isCredit) {
         cardMap[t.cardId].spend += Math.abs(t.amount);
@@ -7946,7 +7987,7 @@ function renderView(view) {
 
       // Update top metrics based on filtered transactions
       const filteredTotals = txns.reduce((acc, t) => {
-        if (!t.isPayment) {
+        if (!t.isPayment && !t.isAnnualFee) {
           if (t.isCredit && !t.isRefund) {
             acc.credits += Math.abs(t.amount);
           } else if (!t.isCredit) {
@@ -8094,21 +8135,21 @@ function renderView(view) {
       document.getElementById('txnPage')?.addEventListener('change', renderTransactions);
       
       document.getElementById('transactionsBody').innerHTML = pageTxns.map(t => {
-        // Determine amount color: gray for payments, green for credits, red for charges
+        // Determine amount color: gray for payments/annual fees, green for credits, red for charges
         let amountColor = '#b91c1c'; // red for charges
         let amountWeight = '500';
-        if (t.isPayment) {
-          amountColor = '#9ca3af'; // gray for payments
+        if (t.isPayment || t.isAnnualFee) {
+          amountColor = '#9ca3af'; // gray for payments and annual fees
           amountWeight = '400';
         } else if (t.isCredit) {
           amountColor = '#059669'; // green for credits/refunds
           amountWeight = '600';
         }
-        
+
         // Determine points display
         let pointsDisplay = '—';
         let pointsColor = '#1c1917';
-        if (t.isPayment) {
+        if (t.isPayment || t.isAnnualFee) {
           pointsDisplay = '—';
         } else if (t.isRefund || (t.isCredit && t.creditMatch)) {
           // Both refunds and statement credits show negative points
@@ -8117,10 +8158,12 @@ function renderView(view) {
         } else if (!t.isCredit) {
           pointsDisplay = formatNumber(t.points);
         }
-        
+
         // Multiplier display
         let multiDisplay = '—';
-        if (!t.isCredit && !t.isPayment) {
+        if (t.isAnnualFee) {
+          multiDisplay = '—';
+        } else if (!t.isCredit && !t.isPayment) {
           multiDisplay = t.multiplier + 'x';
         } else if (t.isRefund || (t.isCredit && t.creditMatch)) {
           // Show negative multiplier for refunds and credits
@@ -8130,12 +8173,12 @@ function renderView(view) {
         // Get badge style and tooltip
         const badgeInfo = getCategoryBadgeStyle(t, true);
         
-        return `<tr style="${t.isPayment ? 'opacity:0.6;' : ''}">
+        return `<tr style="${(t.isPayment || t.isAnnualFee) ? 'opacity:0.6;' : ''}">
         <td style="white-space:nowrap;font-size:12px;">${escapeHtml(t.date)}</td>
         <td style="max-width:180px;"><div style="font-weight:500;">${escapeHtml(t.merchant)}</div></td>
         <td style="font-size:12px;">${escapeHtml(t.cardName)}</td>
         <td>
-          ${isCardEditable(t.cardId, 'category') ? `
+          ${isCardEditable(t.cardId, 'category') && !t.isAnnualFee ? `
           <span class="badge category-badge"
                 data-txn-id="${escapeHtml(t.id)}" data-merchant="${escapeHtml(t.merchant)}" data-current-cat="${escapeHtml(t.category)}" data-card-id="${escapeHtml(t.cardId)}"
                 style="cursor:pointer;${badgeInfo.style}" title="${escapeHtml(badgeInfo.tooltip)} — Click to change">
@@ -8676,7 +8719,8 @@ function buildExportData() {
     pointsValue: t.pointsValue,
     isPayment: t.isPayment,
     isCredit: t.isCredit,
-    isRefund: t.isRefund
+    isRefund: t.isRefund,
+    isAnnualFee: t.isAnnualFee || false
   }));
 
   return {

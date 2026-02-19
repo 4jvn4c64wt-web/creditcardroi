@@ -5606,8 +5606,9 @@ function renderStep4Add() {
         spend: r.actualSpend, impact: (newVal - sourceVal) * r.actualSpend, routeReason: r.routeReason
       };
     }).filter(r => {
-      // Always show rows shifting to a Bilt card (even $0 impact) since that spend
-      // generates Bilt Cash → rent points. For non-Bilt destinations, hide near-zero rows.
+      // Always show non-rent rows shifting to a Bilt card (even $0 impact) since that
+      // spend generates Bilt Cash. Hide rent rows at $0 — rent is shown in the subtotal.
+      if (r.subcategory === 'rent' && Math.abs(r.impact) < 0.005) return false;
       const destIsBilt = CARDS[wi.addCardId]?.isBilt;
       return Math.abs(r.impact) >= 0.005 || destIsBilt;
     });
@@ -5983,6 +5984,8 @@ function renderStep4Remove() {
   // generates Bilt Cash → rent points. For non-Bilt destinations, hide near-zero rows.
   const removeNormalizedRows = rows
     .filter(r => {
+      // Hide rent rows at $0 — rent impact is shown in the subtotal line.
+      if (r.subcategory === 'rent' && Math.abs(r.valueChange) < 0.005) return false;
       const destIsBilt = r.bestCardId && CARDS[r.bestCardId]?.isBilt;
       return Math.abs(r.valueChange) >= 0.005 || destIsBilt;
     })
@@ -6130,8 +6133,9 @@ function renderStep4Swap() {
   // Normalize removeRows + addRows for grouped rendering
   const swapNormalizedRows = [];
   for (const r of removeRows) {
-    // Always show rows shifting to a Bilt card (even $0 impact) since that spend
-    // generates Bilt Cash → rent points. For non-Bilt destinations, hide near-zero rows.
+    // Hide rent rows at $0 — rent impact is shown in the subtotal line.
+    if (r.subcategory === 'rent' && Math.abs(r.valueChange) < 0.005) continue;
+    // Always show non-rent rows shifting to a Bilt card (even $0 impact).
     const destIsBilt = r.bestCardId && CARDS[r.bestCardId]?.isBilt;
     if (Math.abs(r.valueChange) < 0.005 && !destIsBilt) continue;
     swapNormalizedRows.push({
@@ -6141,6 +6145,7 @@ function renderStep4Swap() {
     });
   }
   for (const r of addRows) {
+    if (r.subcategory === 'rent' && Math.abs(r.additionalValue) < 0.005) continue;
     const destIsBilt = CARDS[wi.addCardId]?.isBilt;
     if (Math.abs(r.additionalValue) < 0.005 && !destIsBilt) continue;
     swapNormalizedRows.push({

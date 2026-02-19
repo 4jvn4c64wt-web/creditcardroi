@@ -3,6 +3,7 @@
 // =============================================================================
 
 // Context-sensitive help content for each page/view
+// Sections with `pro: true` are only shown when window.TIER_CONFIG === 'pro'
 const HELP_CONTENT = {
   summary: {
     title: 'Summary Page Help',
@@ -10,7 +11,7 @@ const HELP_CONTENT = {
       {
         icon: '\u{1F4CA}',
         title: 'Card Performance Cards',
-        text: 'Each card shows net value, annual fee, and a performance tag on the front. <strong>Click any card to flip it</strong> and see the full breakdown: spend, points, credits (with dropdown), and net value.'
+        text: 'Each card shows net value, annual fee, and a performance tag on the front. <strong>Click any card to flip it</strong> and see the full breakdown: spend, points earned, credits, and net value.'
       },
       {
         icon: '\u{1F4B0}',
@@ -19,13 +20,14 @@ const HELP_CONTENT = {
       },
       {
         icon: '\u{1F4C5}',
-        title: 'Year Filter & Card Year',
-        text: 'Filter results by year. "All Years" shows combined totals with annual fees counted once per card. Use the <strong>CY</strong> toggle on each card to switch between Calendar Year (Jan\u2013Dec) and Card Year (anniversary date). Card Year is more useful when deciding whether to keep a card at renewal, since some credits and fees reset on the anniversary.'
+        title: 'Year Filter',
+        text: 'Filter results by year using the dropdown. "All Years" shows combined totals with annual fees counted once per card.'
       },
       {
-        icon: '\u26A1',
-        title: 'Manual Credits',
-        text: 'Credits marked with \u26A1 (like Uber Cash) aren\'t auto-detected. Go to Card Config (under Manage) to mark which months you\'ve claimed them.'
+        icon: '\u{1F4C5}',
+        title: 'Card Year (CY) Toggle',
+        text: 'Use the <strong>CY</strong> toggle on each card to switch between Calendar Year (Jan\u2013Dec) and Card Year (anniversary date). Card Year is more useful when deciding whether to keep a card at renewal, since some credits and fees reset on the anniversary.',
+        pro: true
       }
     ]
   },
@@ -35,32 +37,34 @@ const HELP_CONTENT = {
       {
         icon: '\u{1F9E9}',
         title: 'How Classification Works',
-        text: 'The app automatically categorizes each transaction (e.g., restaurants \u2192 Dining, CVS \u2192 Drugstore) using the merchant name, your bank\'s category label, and built-in rules. This determines which point multiplier applies for each card. When the app isn\'t confident, it flags the transaction for your review.'
-      },
-      {
-        icon: '\u{1F3F7}\uFE0F',
-        title: 'Recategorize Transactions',
-        text: '<strong>Click any category badge</strong> to change how a transaction is classified. This affects point calculations. You can set rules to apply to all similar merchants.'
+        text: 'The app automatically categorizes each transaction (e.g., restaurants \u2192 Dining, CVS \u2192 Drugstore) using the merchant name, your bank\'s category label, and built-in rules. This determines which point multiplier applies for each card.'
       },
       {
         icon: '\u{1F50D}',
         title: 'Filters',
-        text: 'Filter by year, month, card, or category. Use "Credits" to see statement credits, or <strong>"Needs Review"</strong> to see transactions we couldn\'t confidently classify.'
-      },
-      {
-        icon: '\u26A0\uFE0F',
-        title: 'Needs Review',
-        text: 'Transactions marked with \u26A0\uFE0F have low confidence. Click the category badge to correct them \u2014 this improves accuracy and creates rules for similar transactions.'
+        text: 'Filter by year, month, card, or category. Use "Credits" to see statement credits, or <strong>"Needs Review"</strong> to see transactions the app couldn\'t confidently classify.'
       },
       {
         icon: '\u{1F4DD}',
         title: 'Reason Column',
-        text: 'Shows why each transaction was classified the way it was. "User-defined rule" means you set it manually.'
+        text: 'Shows why each transaction was classified the way it was. "User-defined rule" means you (or a rule you created) set it manually.'
       },
       {
         icon: '\u21A9\uFE0F',
         title: 'Refunds & Credits',
         text: 'Refunds subtract points (shown in red). Statement credits also subtract points but still count toward your ROI.'
+      },
+      {
+        icon: '\u{1F3F7}\uFE0F',
+        title: 'Recategorize Transactions',
+        text: '<strong>Click any category badge</strong> to change how a transaction is classified. This affects point calculations. You can also set rules to apply to all similar merchants.',
+        pro: true
+      },
+      {
+        icon: '\u26A0\uFE0F',
+        title: 'Needs Review',
+        text: 'Transactions flagged with \u26A0\uFE0F have low confidence. Click the category badge to correct them \u2014 this improves accuracy and creates rules for similar transactions.',
+        pro: true
       }
     ]
   },
@@ -86,6 +90,36 @@ const HELP_CONTENT = {
         icon: '\u{1F4C5}',
         title: 'Year Selection',
         text: 'Use the year dropdown to configure categories and credits for different years. Each year can have different quarterly selections.'
+      }
+    ]
+  },
+  cardscenarios: {
+    title: 'Card Scenarios Help',
+    sections: [
+      {
+        icon: '\u{1F52E}',
+        title: 'What Card Scenarios Does',
+        text: 'Model the financial impact of changing your wallet. Choose <strong>Add</strong>, <strong>Remove</strong>, or <strong>Swap</strong> a card, pick a year of spending data, and the engine reroutes every transaction to show the net effect on points, credits, and annual fees.'
+      },
+      {
+        icon: '\u{1F4B3}',
+        title: 'How Spending Is Rerouted',
+        text: 'When you add a card, the engine checks each transaction: if the new card earns more than the card you actually used, that spending shifts to the new card. When you remove a card, its spending shifts to whichever remaining card earns the most for each category.'
+      },
+      {
+        icon: '\u{1F39A}\uFE0F',
+        title: 'Optimization Rate Slider',
+        text: 'In practice, nobody routes every purchase to the optimal card 100% of the time. The slider adjusts what percentage of shiftable spending actually moves. It defaults to your real-world rate (calculated from your data), but you can adjust it.'
+      },
+      {
+        icon: '\u{1F4CA}',
+        title: 'Result Breakdown',
+        text: 'The result shows: Credits gained or lost, Point value change from rerouted spending, Annual fee of the new or removed card, and the combined Estimated Net Impact. You can expand each section to see the per-category detail.'
+      },
+      {
+        icon: '\u26A0\uFE0F',
+        title: 'Key Assumptions',
+        text: 'Scenarios assume your spending patterns stay the same and that shiftable spending goes to the best-earning card. Bilt scenarios account for rent points and Bilt Cash redemption. Results are estimates \u2014 actual value depends on real-world card usage habits.'
       }
     ]
   }
@@ -115,6 +149,8 @@ function showHelp(context = null) {
   if (!context) {
     if (document.getElementById('cardConfigSection').classList.contains('hidden') === false) {
       context = 'cardConfig';
+    } else if (state.activeView === 'cardscenarios') {
+      context = 'cardscenarios';
     } else if (state.activeView === 'transactions') {
       context = 'transactions';
     } else {
@@ -125,9 +161,12 @@ function showHelp(context = null) {
   const help = HELP_CONTENT[context];
   if (!help) return;
 
+  const isPro = window.TIER_CONFIG === 'pro';
+  const sections = help.sections.filter(s => !s.pro || isPro);
+
   document.getElementById('helpModalContent').innerHTML = `
     <h4 style="font-size:15px;font-weight:600;margin-bottom:16px;color:#78716c;">${help.title}</h4>
-    ${help.sections.map(s => `
+    ${sections.map(s => `
       <div style="margin-bottom:16px;padding:12px;background:#fafaf9;border-radius:8px;">
         <div style="font-weight:600;margin-bottom:6px;">${s.icon} ${s.title}</div>
         <div style="font-size:13px;color:#57534e;line-height:1.5;">${s.text}</div>

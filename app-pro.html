@@ -13,7 +13,7 @@
     body { font-family: 'DM Sans', 'IBM Plex Sans', -apple-system, sans-serif; background: #f7f6f3; color: #1c1917; min-height: 100vh; line-height: 1.5; }
     .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
     .header { margin-bottom: 32px; }
-    .container:has(> #resultsSection:not(.hidden)) > #appHeader { display: none !important; }
+    .container:has(> #resultsSection:not(.hidden)) > #appHeader, .container:has(> #cardConfigSection:not(.hidden)) > #appHeader, .container:has(> #mappingSection:not(.hidden)) > #appHeader { display: none !important; }
     .header h1 { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 8px; }
     .header p { font-size: 14px; color: #78716c; }
     .card { background: #fff; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #e7e5e4; }
@@ -84,6 +84,8 @@
     /* ============================================= */
     #resultsSection { margin-left: -24px; margin-right: -24px; width: calc(100% + 48px); }
     @media (min-width: 1449px) { #resultsSection { margin-left: calc(-1 * (100vw - 1400px) / 2 - 24px); margin-right: calc(-1 * (100vw - 1400px) / 2 - 24px); width: 100vw; } }
+    .settings-topbar-wrap { margin-left: -24px; margin-right: -24px; width: calc(100% + 48px); }
+    @media (min-width: 1449px) { .settings-topbar-wrap { margin-left: calc(-1 * (100vw - 1400px) / 2 - 24px); margin-right: calc(-1 * (100vw - 1400px) / 2 - 24px); width: 100vw; } }
     .shell-topbar { background: #fff; border-bottom: 1px solid #e8e5e0; padding: 14px 0; }
     .shell-topbar-inner { max-width: 1400px; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
     .shell-topbar-left { display: flex; align-items: center; gap: 0; }
@@ -372,49 +374,77 @@
     </div>
 
     <!-- Card Mapping Section -->
-    <div id="mappingSection" class="card hidden">
-      <h2 class="card-title">Card Mapping</h2>
-      
-      <!-- Contextual guidance banner -->
-      <div id="guidanceMappingSection" class="guidance-banner" style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1px solid #93c5fd;border-radius:8px;padding:16px;margin-bottom:16px;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
-          <div>
-            <div style="font-weight:600;margin-bottom:8px;color:#1e40af;">🎯 Match your accounts to rewards cards</div>
-            <div style="font-size:13px;color:#1e3a8a;line-height:1.5;">
-              Each account from your CSV is shown by its last 4 digits. Select which credit card it belongs to so we can apply the correct earning rates.
-              <br><br>
-              <strong>Tip:</strong> Use "Skip" for checking/savings accounts or cards you don't want to track. You can also map multiple card numbers to the same card (useful after card replacement due to fraud or expiration).
+    <div id="mappingSection" class="hidden">
+      <div class="settings-topbar-wrap">
+        <div class="shell-topbar">
+          <div class="shell-topbar-inner">
+            <div class="shell-topbar-left">
+              <div class="shell-title-block">
+                <div class="shell-title">Credit Card Value Tracker <span style="display:inline-block;font-size:11px;font-weight:600;background:#1c1917;color:#fff;padding:2px 8px;border-radius:9999px;vertical-align:middle;letter-spacing:0.04em;position:relative;top:-1px;margin-left:4px;">PRO</span></div>
+              </div>
+            </div>
+            <div class="shell-topbar-right">
+              <button class="btn btn-secondary" id="backFromMapping">← Back to Summary</button>
             </div>
           </div>
-          <button id="dismissMappingGuidance" style="background:none;border:none;color:#1e40af;cursor:pointer;font-size:18px;padding:0;line-height:1;">&times;</button>
         </div>
       </div>
+      <div class="card" style="margin-top:24px;">
+        <h2 class="card-title">Card Mapping</h2>
 
-      <div id="mappingRows"></div>
-      <div style="margin-top:20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-        <button class="btn btn-primary" id="processBtn" disabled>Process Transactions</button>
-        <button class="btn btn-secondary" id="backFromMapping">← Back to Summary</button>
-        <span id="mappingError" style="font-size:13px;color:#dc2626;"></span>
+        <!-- Contextual guidance banner -->
+        <div id="guidanceMappingSection" class="guidance-banner" style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1px solid #93c5fd;border-radius:8px;padding:16px;margin-bottom:16px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+            <div>
+              <div style="font-weight:600;margin-bottom:8px;color:#1e40af;">🎯 Match your accounts to rewards cards</div>
+              <div style="font-size:13px;color:#1e3a8a;line-height:1.5;">
+                Each account from your CSV is shown by its last 4 digits. Select which credit card it belongs to so we can apply the correct earning rates.
+                <br><br>
+                <strong>Tip:</strong> Use "Skip" for checking/savings accounts or cards you don't want to track. You can also map multiple card numbers to the same card (useful after card replacement due to fraud or expiration).
+              </div>
+            </div>
+            <button id="dismissMappingGuidance" style="background:none;border:none;color:#1e40af;cursor:pointer;font-size:18px;padding:0;line-height:1;">&times;</button>
+          </div>
+        </div>
+
+        <div id="mappingRows"></div>
+        <div style="margin-top:20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+          <button class="btn btn-primary" id="processBtn" disabled>Process Transactions</button>
+          <span id="mappingError" style="font-size:13px;color:#dc2626;"></span>
+        </div>
       </div>
     </div>
 
     <!-- Card Config Section -->
-    <div id="cardConfigSection" class="card hidden">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-        <h2 class="card-title" style="margin:0;">Card Configuration</h2>
-        <button class="btn btn-secondary" id="helpBtnCardConfig" style="padding:6px 12px;">Help</button>
+    <div id="cardConfigSection" class="hidden">
+      <div class="settings-topbar-wrap">
+        <div class="shell-topbar">
+          <div class="shell-topbar-inner">
+            <div class="shell-topbar-left">
+              <div class="shell-title-block">
+                <div class="shell-title">Credit Card Value Tracker <span style="display:inline-block;font-size:11px;font-weight:600;background:#1c1917;color:#fff;padding:2px 8px;border-radius:9999px;vertical-align:middle;letter-spacing:0.04em;position:relative;top:-1px;margin-left:4px;">PRO</span></div>
+              </div>
+            </div>
+            <div class="shell-topbar-right">
+              <button class="btn btn-secondary" id="helpBtnCardConfig">Help</button>
+              <button class="btn btn-secondary" id="backToSummary">← Back to Summary</button>
+            </div>
+          </div>
+        </div>
       </div>
-      
-      <div style="margin-bottom:16px;display:flex;align-items:center;gap:8px;">
-        <select id="configCardSelect" class="form-select" style="min-width:250px;"></select>
-        <span id="cardMappingInfo" class="help-icon tooltip tooltip-multiline" data-tooltip="" style="display:none;">?</span>
-      </div>
-      
-      <div id="cardConfigContent"></div>
-      
-      <div id="cardConfigButtons" style="margin-top:20px;display:flex;gap:12px;">
-        <button class="btn btn-primary" id="saveCardConfig">Save Changes</button>
-        <button class="btn btn-secondary" id="backToSummary">← Back to Summary</button>
+      <div class="card" style="margin-top:24px;">
+        <h2 class="card-title">Card Configuration</h2>
+
+        <div style="margin-bottom:16px;display:flex;align-items:center;gap:8px;">
+          <select id="configCardSelect" class="form-select" style="min-width:250px;"></select>
+          <span id="cardMappingInfo" class="help-icon tooltip tooltip-multiline" data-tooltip="" style="display:none;">?</span>
+        </div>
+
+        <div id="cardConfigContent"></div>
+
+        <div id="cardConfigButtons" style="margin-top:20px;display:flex;gap:12px;">
+          <button class="btn btn-primary" id="saveCardConfig">Save Changes</button>
+        </div>
       </div>
     </div>
 

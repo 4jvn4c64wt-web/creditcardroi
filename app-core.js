@@ -4080,10 +4080,6 @@ function calculateSwapValue(removeCardId, addCardId, year) {
   }
 
   // Apply computeBiltRouting for candidates where both Bilt and non-Bilt destinations exist
-  console.log('[DEBUG calculateSwapValue Comp1] biltCandidates:', biltCandidates.length,
-    'walletBiltCard:', walletBiltCard,
-    biltCandidates.map(c => ({ sub: c.sub, spend: (c.spend * annualizationFactor).toFixed(0), sacrifice: (c.altRate * c.altPV - c.biltRate * c.biltPV).toFixed(4), bilt: c.biltName, alt: c.altName })));
-
   if (biltCandidates.length > 0 && walletBiltCard) {
     const result = computeBiltRouting(biltCandidates, walletBiltCard, monthlyRent, biltCashPlan, customRedemption, existingBiltSpend);
     component1BiltSpend = result.cumulativeBiltSpend;
@@ -4437,11 +4433,6 @@ function computeBiltRouting(candidates, biltCardId, monthlyRent, biltCashPlan, c
   // Pre-load existing Bilt spend toward the cap
   let cumulativeBiltSpend = existingBiltSpend || 0;
 
-  console.log('[DEBUG computeBiltRouting]', {
-    candidateCount: candidates.length, annualBiltSpendCap, rentUpliftPerDollar,
-    existingBiltSpend: existingBiltSpend || 0, biltCashPlan, monthlyRent, biltPV
-  });
-
   // Step C: For each category, calculate sacrifice cost
   const categorized = candidates.map(c => {
     const biltBaseVal = c.biltRate * c.biltPV;
@@ -4455,9 +4446,6 @@ function computeBiltRouting(candidates, biltCardId, monthlyRent, biltCashPlan, c
 
   // Step D: Sort alt-wins by sacrifice cost ascending (cheapest sacrifice first)
   altWins.sort((a, b) => a.sacrificeCost - b.sacrificeCost);
-
-  console.log('[DEBUG computeBiltRouting] biltWins:', biltWins.map(c => ({ sub: c.sub, spend: c.spend, sacrifice: c.sacrificeCost })));
-  console.log('[DEBUG computeBiltRouting] altWins:', altWins.map(c => ({ sub: c.sub, spend: c.spend, sacrifice: c.sacrificeCost, netBenefit: rentUpliftPerDollar - c.sacrificeCost })));
 
   const routes = [];
 
@@ -4897,66 +4885,17 @@ function calculateCardScenariosNetImpact() {
   let rentMotivatedImpact = 0;
   let rentMotivatedRows = [];
 
-  // Spending shifts
-  for (const [key, amount] of Object.entries(wi.shiftAmounts)) {
-    if (amount <= 0) continue;
-    const parts = key.split('|');
-    // For add scenario: key = 'sourceCardId|sourceCategory'
-    // For remove scenario: key = 'sourceCategory'
-    // The row data is needed to compute values - we re-derive from the rows
-  }
-
-  // Re-derive from rows for accuracy
+  // Derive spending impact directly from the calculation functions.
+  // These correctly build the hypothetical wallet and compute value changes,
+  // unlike the old shiftAmounts-based loop which required manual population.
   const year = wi.selectedYear;
-  const _today = new Date();
-  const sampleDate = `${_today.getFullYear()}-${String(_today.getMonth()+1).padStart(2,'0')}-${String(_today.getDate()).padStart(2,'0')}`;
 
-  if (wi.scenarioType === 'add' || wi.scenarioType === 'swap') {
-    const addRows = wi.addCardId ? getAddCardShiftRows(wi.addCardId, year) : [];
-    for (const row of addRows) {
-      const key = `${row.sourceCardId}|${row.sourceCategory}`;
-      const amount = wi.shiftAmounts[key] || 0;
-      if (amount <= 0) continue;
-      const oldValue = amount * row.sourceRate * row.sourcePointValue;
-      const newValue = amount * row.newRate * row.newPointValue;
-      spendingImpact += (newValue - oldValue);
-    }
-  }
-
-  if (wi.scenarioType === 'remove' || wi.scenarioType === 'swap') {
-    const swapExtras = wi.scenarioType === 'swap' && wi.addCardId ? [wi.addCardId] : undefined;
-    const removeRows = wi.removeCardId ? getRemoveCardShiftRows(wi.removeCardId, year, swapExtras) : [];
-
-    // Pre-compute best base-rate value among remaining cards for unshifted spending
-    const remainingCards = getActiveCardIds().filter(id => id !== wi.removeCardId);
-    if (swapExtras) swapExtras.forEach(id => { if (!remainingCards.includes(id) && CARDS[id]) remainingCards.push(id); });
-    let bestBaseValue = 0;
-    for (const cid of remainingCards) {
-      const card = CARDS[cid];
-      if (card) {
-        const baseVal = (card.baseRate || 1) * getPointValue(cid);
-        if (baseVal > bestBaseValue) bestBaseValue = baseVal;
-      }
-    }
-
-    for (const row of removeRows) {
-      const key = `remove|${row.sourceCategory}`;
-      const shiftedAmount = wi.shiftAmounts[key] || 0;
-      const unshifted = row.actualSpend - shiftedAmount;
-      // All spending on removed card loses its current value
-      const lostValue = row.actualSpend * row.sourceRate * row.sourcePointValue;
-      // Rent: only Bilt destinations earn on rent, no base-rate fallback for unshifted
-      if (row.sourceCategory === 'rent') {
-        const rentDestGain = row.actualSpend * row.bestRate * row.bestPointValue;
-        spendingImpact += (rentDestGain - lostValue);
-        continue;
-      }
-      // Shifted portion earns best-destination value
-      const shiftedGain = shiftedAmount * row.bestRate * row.bestPointValue;
-      // Unshifted portion falls to catch-all base rate
-      const unshiftedGain = unshifted > 0 ? unshifted * bestBaseValue : 0;
-      spendingImpact += (shiftedGain + unshiftedGain - lostValue);
-    }
+  if (wi.scenarioType === 'add') {
+    const addResult = calculateAddCardValue(wi.addCardId, year);
+    spendingImpact = addResult.totalGain;
+  } else if (wi.scenarioType === 'remove') {
+    const removeResult = calculateRemoveCardValue(wi.removeCardId, year);
+    spendingImpact = removeResult.totalChange;
   }
 
   // Credits for added card
@@ -5092,12 +5031,8 @@ function calculateCardScenariosNetImpact() {
       rentMotivatedImpact = swapResult.rentMotivatedImpact || 0;
       rentMotivatedRows = swapResult.rentMotivatedRows || [];
 
-      // Fix: use swapResult.totalSpendChange for spendingImpact.
-      // The addRows/removeRows loops above (lines 4914-4960) use getAddCardShiftRows()
-      // which doesn't exclude the removed card from the wallet, so it computes wrong
-      // shift rows for swap scenarios (especially Bilt-to-Bilt swaps). calculateSwapValue()
-      // correctly builds the hypothetical wallet (minus removed, plus added), so its
-      // totalSpendChange is the accurate spending impact.
+      // Use swapResult.totalSpendChange — calculateSwapValue() correctly builds the
+      // hypothetical wallet (minus removed, plus added) for accurate spending impact.
       spendingImpact = swapResult.totalSpendChange;
     } else if (wi.scenarioType === 'add') {
       finalBiltSpend = currentBiltSpend;
@@ -5118,16 +5053,11 @@ function calculateCardScenariosNetImpact() {
   // Rent points: $3 Bilt Cash = 100 Bilt Points, capped at 1 point per $1 rent
   // Max useful Bilt Cash for rent = monthlyRent × 0.03 × 12
 
-  // Rent cap: max non-rent Bilt spend that generates useful rent points
+  // Rent cap: max non-rent Bilt spend that generates useful rent points.
+  // Used for display (rent cap usage %) but does NOT cap Bilt Cash earned —
+  // all Bilt spend earns 4% Bilt Cash regardless. Rent points are capped
+  // downstream via maxBiltCashForRent and the 1pt/$1-rent ceiling.
   const annualBiltSpendCap = monthlyRent * 0.75 * 12;
-
-  // Defensive: cap Bilt spend at rent cap to prevent overstatement of rent points.
-  // computeBiltRouting biltWins route unconditionally past the cap, so actual routed
-  // spend can exceed the cap. Cap both final and current for consistent deltas.
-  if (annualBiltSpendCap > 0) {
-    finalBiltSpend = Math.min(finalBiltSpend, annualBiltSpendCap);
-    currentBiltSpend = Math.min(currentBiltSpend, annualBiltSpendCap);
-  }
 
   const finalBiltCashEarned = finalBiltSpend * 0.04;
   const currentBiltCashEarned = currentBiltSpend * 0.04;
@@ -5183,15 +5113,8 @@ function calculateCardScenariosNetImpact() {
   const rentPointsValueDelta = finalRentPointsValue - currentRentPointsValue;
   const biltCashRemainingDelta = finalBiltCashRemaining - currentBiltCashRemaining;
 
-  // Rent cap usage for display (annualBiltSpendCap computed earlier, finalBiltSpend already capped)
+  // Rent cap usage for display (can exceed 100% if Bilt spend > cap)
   const rentCapUsedPct = annualBiltSpendCap > 0 ? Math.min(100, (finalBiltSpend / annualBiltSpendCap) * 100) : 0;
-
-  console.log('[DEBUG] Bilt:', {
-    biltCashPlan, currentBiltSpend, finalBiltSpend,
-    finalBiltCashEarned, finalBiltCashRedeemed,
-    finalRentPointsAnnual, finalRentPointsValue,
-    finalBiltCashRemaining, rentCapUsedPct, rentMotivatedImpact
-  });
 
   const creditsImpact = addCreditsTotal - removeCreditsTotal;
   const feeImpact = removeFee - addFee;
@@ -5682,7 +5605,12 @@ function renderStep4Add() {
         sourceRate: r.sourceRate, destCardName: cardName, destRate: r.newRate,
         spend: r.actualSpend, impact: (newVal - sourceVal) * r.actualSpend, routeReason: r.routeReason
       };
-    }).filter(r => Math.abs(r.impact) >= 0.005 || (r.routeReason && r.routeReason.includes('Rent uplift')));
+    }).filter(r => {
+      // Always show rows shifting to a Bilt card (even $0 impact) since that spend
+      // generates Bilt Cash → rent points. For non-Bilt destinations, hide near-zero rows.
+      const destIsBilt = CARDS[wi.addCardId]?.isBilt;
+      return Math.abs(r.impact) >= 0.005 || destIsBilt;
+    });
     baseTotal = addNormalizedRows.reduce((s, r) => s + r.impact, 0);
   } else {
     addNormalizedRows = rows.map(r => ({
@@ -6051,8 +5979,13 @@ function renderStep4Remove() {
     <div id="cardscenariosRemoveRewardsDetail" style="margin-top:12px;">`;
 
   // Normalize rows for grouped rendering
+  // Always show rows shifting to a Bilt card (even $0 impact) since that spend
+  // generates Bilt Cash → rent points. For non-Bilt destinations, hide near-zero rows.
   const removeNormalizedRows = rows
-    .filter(r => Math.abs(r.valueChange) >= 0.005 || (r.routeReason && r.routeReason.includes('Rent uplift')))
+    .filter(r => {
+      const destIsBilt = r.bestCardId && CARDS[r.bestCardId]?.isBilt;
+      return Math.abs(r.valueChange) >= 0.005 || destIsBilt;
+    })
     .map(r => ({
       subcategory: r.subcategory, sourceCardId: wi.removeCardId, sourceCardName: cardName,
       sourceRate: r.sourceRate, destCardName: r.bestCardName, destRate: r.bestRate,

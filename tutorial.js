@@ -346,11 +346,21 @@ const TOUR_STEPS = [
   {
     type: 'spotlight',
     phase: 'card-config-tour',
-    id: 'back-to-results',
+    id: 'config-save',
     target: '#cardConfigButtons',
-    title: 'Save & Continue',
-    content: 'If you made any changes, click <strong>Save Changes</strong> first. Then click <strong>\u2190 Back to Summary</strong> to continue.',
+    title: 'Save Your Changes',
+    content: 'If you made any changes, click <strong>Save Changes</strong> to apply them. On the next step we\'ll head back to the top of the page.',
     position: 'right',
+    clickRequired: false
+  },
+  {
+    type: 'spotlight',
+    phase: 'card-config-tour',
+    id: 'back-to-results',
+    target: '#backToSummary',
+    title: 'Back to Summary',
+    content: 'Click <strong>\u2190 Back to Summary</strong> to return to your results and continue the tour.',
+    position: 'bottom',
     clickRequired: false,
     onShow: 'setup-back-listener'
   },

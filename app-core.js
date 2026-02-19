@@ -5091,6 +5091,14 @@ function calculateCardScenariosNetImpact() {
       // Extract rent-motivated impact for display reallocation
       rentMotivatedImpact = swapResult.rentMotivatedImpact || 0;
       rentMotivatedRows = swapResult.rentMotivatedRows || [];
+
+      // Fix: use swapResult.totalSpendChange for spendingImpact.
+      // The addRows/removeRows loops above (lines 4914-4960) use getAddCardShiftRows()
+      // which doesn't exclude the removed card from the wallet, so it computes wrong
+      // shift rows for swap scenarios (especially Bilt-to-Bilt swaps). calculateSwapValue()
+      // correctly builds the hypothetical wallet (minus removed, plus added), so its
+      // totalSpendChange is the accurate spending impact.
+      spendingImpact = swapResult.totalSpendChange;
     } else if (wi.scenarioType === 'add') {
       finalBiltSpend = currentBiltSpend;
       if (CARDS[wi.addCardId]?.isBilt) {

@@ -187,7 +187,7 @@
   <div class="container">
     <!-- Demo banner -->
     <div class="demo-banner">
-      <div class="demo-banner-text"><strong>This is a demo with sample data.</strong> Ready to try it with your own transactions?</div>
+      <div class="demo-banner-text"><strong>Like what you see?</strong> This is a demo with sample data. Upload your own transactions and find out which cards are earning their keep.</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <a href="app.html" class="btn btn-primary" style="font-size:13px;padding:8px 16px;">Launch Tracker (Free)</a>
         <a href="index.html" class="btn btn-secondary" style="font-size:13px;padding:8px 16px;">Back to Home</a>
@@ -213,7 +213,6 @@
             <button class="shell-expand-btn" id="shellExpandBtn" title="Show breakdown">+</button>
           </div>
           <div class="shell-topbar-right">
-            <button class="btn btn-secondary" id="demoUpgradeBtn" style="color:#059669;border-color:#bbf7d0;" title="Unlock editing, full history, and more">Upgrade to Pro</button>
             <button class="btn btn-secondary" id="demoHelpBtn" title="How the tracker works">Help</button>
             <div class="manage-dropdown-wrap">
               <button class="btn btn-secondary" id="demoManageBtn" aria-expanded="false">Manage</button>
@@ -406,19 +405,6 @@
         </p>
         <p style="font-size:13px;color:#78716c;margin-bottom:20px;">This feature is available to <strong>Pro</strong> users.</p>
         <button id="closeCardScenariosInfo" class="btn btn-secondary" style="width:100%;justify-content:center;">Got it</button>
-      </div>
-    </div>
-
-    <!-- Demo Upgrade Modal -->
-    <div id="demoUpgradeModal" class="modal-overlay hidden">
-      <div class="modal-content" style="max-width:420px;">
-        <div style="font-size:40px;margin-bottom:12px;">&#128640;</div>
-        <h3 style="font-size:20px;font-weight:600;margin:0 0 8px;">Upgrade to Pro</h3>
-        <p style="font-size:14px;color:#57534e;line-height:1.6;margin-bottom:16px;">
-          Pro unlocks editing, full transaction history, custom point valuations, credit tracking, and more. Upload your own data in the full tracker to get started.
-        </p>
-        <a href="app.html" class="btn btn-primary" style="width:100%;justify-content:center;margin-bottom:10px;text-decoration:none;">Launch Tracker (Free)</a>
-        <button id="closeDemoUpgrade" class="btn btn-secondary" style="width:100%;justify-content:center;">Got it</button>
       </div>
     </div>
 
@@ -1229,17 +1215,6 @@ function renderDemoCardConfig() {
 // =========================================================================
 // MODAL HANDLERS (Upgrade, Help, Manage Data)
 // =========================================================================
-
-// Upgrade
-document.getElementById('demoUpgradeBtn').addEventListener('click', function() {
-  document.getElementById('demoUpgradeModal').classList.remove('hidden');
-});
-document.getElementById('closeDemoUpgrade').addEventListener('click', function() {
-  document.getElementById('demoUpgradeModal').classList.add('hidden');
-});
-document.getElementById('demoUpgradeModal').addEventListener('click', function(e) {
-  if (e.target === this) this.classList.add('hidden');
-});
 
 // Help
 document.getElementById('demoHelpBtn').addEventListener('click', function() {

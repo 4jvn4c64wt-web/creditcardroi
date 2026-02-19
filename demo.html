@@ -95,6 +95,15 @@
     .shell-nav-inner { max-width: 1400px; margin: 0 auto; padding: 0 24px; display: flex; gap: 8px; padding-top: 4px; padding-bottom: 4px; flex-wrap: wrap; }
     .shell-tab { padding: 8px 16px; border-radius: 6px; border: none; background: transparent; font-size: 14px; font-weight: 500; cursor: pointer; color: #78716c; font-family: inherit; }
     .shell-tab.active { background: #1c1917; color: #fff; }
+    .manage-dropdown-wrap { position: relative; display: inline-block; }
+    .manage-dropdown { position: absolute; top: 100%; right: 0; margin-top: 8px; background: #fff; border: 1px solid #e7e5e4; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.10); min-width: 200px; z-index: 200; padding: 4px 0; display: none; }
+    .manage-dropdown.open { display: block; }
+    .manage-dropdown-item { display: block; width: 100%; text-align: left; padding: 10px 16px; border: none; background: none; cursor: pointer; font-size: 13px; font-family: inherit; color: #1c1917; }
+    .manage-dropdown-item:hover { background: #f5f5f4; }
+    .manage-dropdown-item + .manage-dropdown-item { border-top: 1px solid #f5f5f4; }
+    .settings-topbar-wrap { margin-left: -24px; margin-right: -24px; width: calc(100% + 48px); }
+    @media (min-width: 1449px) { .settings-topbar-wrap { margin-left: calc(-1 * (100vw - 1400px) / 2 - 24px); margin-right: calc(-1 * (100vw - 1400px) / 2 - 24px); width: 100vw; } }
+    .demo-readonly { opacity: 0.6; pointer-events: none; }
 
     /* Content container under shell */
     .view-container { max-width: 1400px; margin: 0 auto; padding: 24px; }
@@ -102,6 +111,63 @@
     /* Info modal */
     .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; cursor: pointer; }
     .modal-content { background: #fff; border-radius: 16px; padding: 32px; max-width: 420px; width: 90%; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.4); cursor: default; }
+
+    /* Summary card grid */
+    .summary-grid-container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+    .summary-grid-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+    .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+    @media (max-width: 1100px) { .summary-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); } }
+
+    /* Flip card */
+    .flip-card { perspective: 1200px; height: 280px; cursor: pointer; }
+    .flip-card-inner { position: relative; width: 100%; height: 100%; transition: transform 0.55s cubic-bezier(0.4, 0.0, 0.2, 1), box-shadow 0.55s ease; transform-style: preserve-3d; border-radius: 12px; }
+    .flip-card.flipped .flip-card-inner { transform: rotateY(180deg) scale(1.03); box-shadow: 0 24px 60px rgba(0,0,0,0.18), 0 8px 20px rgba(0,0,0,0.10); z-index: 10; }
+    .flip-card-front, .flip-card-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 12px; overflow: hidden; }
+    .flip-card-front { background: #ffffff; border: 1px solid #e8e5e0; box-shadow: 0 1px 3px rgba(0,0,0,0.08); display: flex; flex-direction: column; }
+    .flip-card-front.positive-border { border-top: 3px solid #22c55e; }
+    .flip-card-front.negative-border { border-top: 3px solid #ef4444; }
+    .flip-card-back { background: #4a3f35; transform: rotateY(180deg); color: #f5f0ea; display: flex; flex-direction: column; overflow-y: auto; }
+
+    /* Front face content */
+    .fc-front-body { flex: 1; padding: 20px 20px 0; display: flex; flex-direction: column; }
+    .fc-card-name { font-size: 17px; font-weight: 600; color: #1c1917; font-family: 'DM Sans', sans-serif; line-height: 1.25; }
+    .fc-tags { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; min-height: 22px; }
+    .fc-tag { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: default; }
+    .fc-tag-mvp { background: #fef9c3; color: #854d0e; }
+    .fc-tag-deadweight { background: #f1f5f9; color: #475569; }
+    .fc-tag-workhorse { background: #f3e8ff; color: #6b21a8; }
+    .fc-net-section { flex: 1; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; padding-left: 20px; }
+    .fc-net-label { font-size: 10px; font-weight: 600; color: #9e9b96; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 2px; }
+    .fc-net-value { font-size: 24px; font-weight: 700; font-family: 'DM Mono', monospace; }
+    .fc-net-value.positive { color: #166534; }
+    .fc-net-value.negative { color: #991b1b; }
+    .fc-bottom-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; border-top: 1px solid #e8e5e0; }
+    .fc-annual-fee { font-size: 12px; color: #9e9b96; }
+    .fc-flip-hint { font-size: 12px; color: #9e9b96; }
+
+    /* Back face content */
+    .fc-back-header { padding: 14px 16px 8px; border-bottom: 1px solid #5c5047; }
+    .fc-back-header-label { font-size: 10px; font-weight: 600; color: #c4b8aa; text-transform: uppercase; letter-spacing: 0.05em; }
+    .fc-back-card-name { font-size: 14px; font-weight: 600; color: #f5f0ea; margin-top: 2px; }
+    .fc-back-rows { flex: 1; padding: 0 16px; overflow-y: auto; }
+    .fc-back-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #5c5047; }
+    .fc-back-row:last-child { border-bottom: none; }
+    .fc-back-row-label { font-size: 12px; color: #c4b8aa; }
+    .fc-back-row-value { font-size: 14px; font-weight: 500; font-family: 'DM Mono', monospace; color: #f5f0ea; }
+    .fc-back-row-value.positive { color: #86efac; }
+    .fc-back-row-value.negative { color: #fca5a5; }
+    .fc-back-row.net-row .fc-back-row-value { font-size: 16px; font-weight: 700; }
+    .fc-back-row.credits-row { flex-wrap: wrap; cursor: default; }
+    .fc-credits-toggle { display: flex; justify-content: space-between; align-items: center; width: 100%; cursor: pointer; }
+    .fc-credits-arrow { font-size: 10px; margin-left: 4px; transition: transform 0.2s; color: #c4b8aa; }
+    .fc-credits-arrow.open { transform: rotate(180deg); }
+    .fc-credits-detail { width: 100%; padding: 6px 0 2px; display: none; }
+    .fc-credits-detail.open { display: block; }
+    .fc-credits-detail-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 11px; }
+    .fc-credits-detail-row-name { color: #c4b8aa; }
+    .fc-credits-detail-row-val { color: #f5f0ea; font-family: 'DM Mono', monospace; }
+    .fc-back-footer { padding: 8px 16px; text-align: center; }
+    .fc-back-flip-hint { font-size: 11px; color: #c4b8aa; }
 
     /* Stats footer */
     .stats-footer { background: transparent; border: none; border-radius: 0; padding: 12px 16px; font-size: 12px; color: #9e9b96; margin-top: 20px; }
@@ -121,7 +187,7 @@
   <div class="container">
     <!-- Demo banner -->
     <div class="demo-banner">
-      <div class="demo-banner-text"><strong>This is a demo with sample data.</strong> Ready to try it with your own transactions?</div>
+      <div class="demo-banner-text"><strong>Like what you see?</strong> This is a demo with sample data. Upload your own transactions and find out which cards are earning their keep.</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <a href="app.html" class="btn btn-primary" style="font-size:13px;padding:8px 16px;">Launch Tracker (Free)</a>
         <a href="index.html" class="btn btn-secondary" style="font-size:13px;padding:8px 16px;">Back to Home</a>
@@ -147,8 +213,16 @@
             <button class="shell-expand-btn" id="shellExpandBtn" title="Show breakdown">+</button>
           </div>
           <div class="shell-topbar-right">
-            <a href="app.html" class="btn btn-primary" style="font-size:13px;padding:8px 16px;">Launch Tracker (Free)</a>
-            <a href="index.html" class="btn btn-secondary" style="font-size:13px;padding:8px 16px;">Back to Home</a>
+            <button class="btn btn-secondary" id="demoHelpBtn" title="How the tracker works">Help</button>
+            <div class="manage-dropdown-wrap">
+              <button class="btn btn-secondary" id="demoManageBtn" aria-expanded="false">Manage</button>
+              <div class="manage-dropdown" id="demoManageDropdown" role="menu">
+                <button class="manage-dropdown-item" id="demoCardMappingBtn" role="menuitem">Card Mapping</button>
+                <button class="manage-dropdown-item" id="demoCardConfigBtn" role="menuitem">Card Config</button>
+                <button class="manage-dropdown-item" id="demoManageDataBtn" role="menuitem">Manage Data</button>
+              </div>
+            </div>
+            <a href="app.html" class="btn btn-primary" style="font-size:13px;padding:8px 16px;" title="Import your own CSV">New Upload</a>
           </div>
         </div>
       </div>
@@ -191,34 +265,19 @@
       <div id="viewContainer">
         <!-- Summary View -->
         <div id="summaryView">
-          <div class="view-container">
-            <div class="card">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
-                <div>
-                  <h2 class="card-title" style="margin:0;">Card Performance Summary</h2>
-                  <p style="font-size:12px;color:#78716c;margin-top:4px;">Click column headers to sort</p>
-                </div>
-                <div style="display:flex;align-items:center;gap:8px;">
-                  <select class="form-select" style="min-width:120px;">
-                    <option selected>2025</option>
-                  </select>
-                </div>
+          <div class="summary-grid-container">
+            <div class="summary-grid-header">
+              <div>
+                <h2 style="font-size:18px;font-weight:600;margin:0;">Card Performance</h2>
+                <p style="font-size:12px;color:#78716c;margin-top:4px;">Click any card to see the full breakdown</p>
               </div>
-              <div style="overflow-x:auto;">
-                <table id="summaryTable">
-                  <thead><tr>
-                    <th>Card</th>
-                    <th class="text-right">Spend</th>
-                    <th class="text-right">Points</th>
-                    <th class="text-right">Pts Value</th>
-                    <th class="text-right">Credits</th>
-                    <th class="text-right">Ann. Fee</th>
-                    <th class="text-right">Net Value</th>
-                  </tr></thead>
-                  <tbody id="summaryBody"></tbody>
-                </table>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <select class="form-select" id="yearSelect" style="min-width:120px;">
+                  <option selected>2025</option>
+                </select>
               </div>
             </div>
+            <div class="summary-grid" id="summaryGrid"></div>
           </div>
         </div>
 
@@ -259,6 +318,83 @@
       </div>
     </div>
 
+    <!-- Card Mapping Section (Demo - read only) -->
+    <div id="demoMappingSection" class="hidden">
+      <div class="settings-topbar-wrap">
+        <div class="shell-topbar">
+          <div class="shell-topbar-inner">
+            <div class="shell-topbar-left">
+              <div class="shell-title-block">
+                <div class="shell-title">Credit Card Value Tracker <span style="display:inline-block;font-size:11px;font-weight:600;background:#3b82f6;color:#fff;padding:2px 8px;border-radius:9999px;vertical-align:middle;letter-spacing:0.04em;position:relative;top:-1px;margin-left:4px;">DEMO</span></div>
+              </div>
+            </div>
+            <div class="shell-topbar-right">
+              <button class="btn btn-secondary" id="backFromDemoMapping">&larr; Back to Summary</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:24px;">
+        <h2 class="card-title">Card Mapping</h2>
+        <p style="font-size:13px;color:#78716c;margin-bottom:16px;">In the full tracker, you map your CSV account numbers to reward cards. Below are the demo card assignments (read-only).</p>
+        <div class="demo-readonly">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+            <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;min-width:80px;">&#9679;&#9679;&#9679;&#9679; 4892</span>
+            <span style="color:#78716c;">&rarr;</span>
+            <select class="form-select" disabled style="min-width:250px;"><option>Chase Sapphire Reserve</option></select>
+            <span class="badge badge-green">Mapped</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+            <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;min-width:80px;">&#9679;&#9679;&#9679;&#9679; 7103</span>
+            <span style="color:#78716c;">&rarr;</span>
+            <select class="form-select" disabled style="min-width:250px;"><option>American Express Gold</option></select>
+            <span class="badge badge-green">Mapped</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+            <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;min-width:80px;">&#9679;&#9679;&#9679;&#9679; 2156</span>
+            <span style="color:#78716c;">&rarr;</span>
+            <select class="form-select" disabled style="min-width:250px;"><option>Chase Freedom Flex</option></select>
+            <span class="badge badge-green">Mapped</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+            <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;min-width:80px;">&#9679;&#9679;&#9679;&#9679; 9381</span>
+            <span style="color:#78716c;">&rarr;</span>
+            <select class="form-select" disabled style="min-width:250px;"><option>Amazon Prime Rewards Visa</option></select>
+            <span class="badge badge-green">Mapped</span>
+          </div>
+        </div>
+        <div style="margin-top:20px;">
+          <button class="btn btn-primary demo-readonly" disabled>Process Transactions</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card Config Section (Demo - read only) -->
+    <div id="demoCardConfigSection" class="hidden">
+      <div class="settings-topbar-wrap">
+        <div class="shell-topbar">
+          <div class="shell-topbar-inner">
+            <div class="shell-topbar-left">
+              <div class="shell-title-block">
+                <div class="shell-title">Credit Card Value Tracker <span style="display:inline-block;font-size:11px;font-weight:600;background:#3b82f6;color:#fff;padding:2px 8px;border-radius:9999px;vertical-align:middle;letter-spacing:0.04em;position:relative;top:-1px;margin-left:4px;">DEMO</span></div>
+              </div>
+            </div>
+            <div class="shell-topbar-right">
+              <button class="btn btn-secondary" id="backFromDemoConfig">&larr; Back to Summary</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:24px;">
+        <h2 class="card-title">Card Configuration</h2>
+        <p style="font-size:13px;color:#78716c;margin-bottom:16px;">In the full tracker, you can edit these settings. Below is the demo card configuration (read-only).</p>
+        <div style="margin-bottom:16px;">
+          <select id="demoConfigCardSelect" class="form-select" style="min-width:250px;"></select>
+        </div>
+        <div id="demoCardConfigContent"></div>
+      </div>
+    </div>
+
     <!-- Card Scenarios Info Modal -->
     <div id="cardScenariosInfoModal" class="modal-overlay hidden">
       <div class="modal-content">
@@ -272,11 +408,39 @@
       </div>
     </div>
 
-    <!-- Bottom CTA -->
-    <div class="demo-banner" style="margin-top:32px;">
-      <div class="demo-banner-text"><strong>Like what you see?</strong> Upload your own transactions and find out which cards are earning their keep.</div>
-      <a href="app.html" class="btn btn-primary" style="font-size:13px;padding:8px 16px;">Launch Tracker (Free)</a>
+    <!-- Demo Help Modal -->
+    <div id="demoHelpModal" class="modal-overlay hidden">
+      <div class="modal-content" style="max-width:480px;text-align:left;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <h3 style="font-size:18px;font-weight:600;margin:0;">How It Works</h3>
+          <button id="closeDemoHelp" style="background:none;border:none;font-size:20px;cursor:pointer;color:#78716c;">&times;</button>
+        </div>
+        <div style="font-size:14px;color:#57534e;line-height:1.7;">
+          <p style="margin-bottom:12px;">The Credit Card Value Tracker calculates the <strong>net value</strong> of each card in your wallet by comparing what you earn against what you pay.</p>
+          <div style="margin-bottom:12px;padding:12px;background:#f5f5f4;border-radius:8px;font-size:13px;">
+            <strong>Net Value</strong> = Points Value + Credits Used &minus; Annual Fee
+          </div>
+          <p style="margin-bottom:8px;"><strong>Points Value</strong> &mdash; Each transaction earns points based on category multipliers (e.g., 3x dining). Points are valued at a per-point rate (cpp).</p>
+          <p style="margin-bottom:8px;"><strong>Credits Used</strong> &mdash; Statement credits (travel credits, dining credits, etc.) offset the annual fee.</p>
+          <p style="margin-bottom:12px;"><strong>Annual Fee</strong> &mdash; The yearly cost of holding the card.</p>
+          <p>A positive net value means the card earns more than it costs. A negative net value means you're paying more than you're getting back.</p>
+        </div>
+      </div>
     </div>
+
+    <!-- Demo Manage Data Modal -->
+    <div id="demoManageDataModal" class="modal-overlay hidden">
+      <div class="modal-content">
+        <div style="font-size:40px;margin-bottom:12px;">&#128190;</div>
+        <h3 style="font-size:20px;font-weight:600;margin:0 0 8px;">Manage Data</h3>
+        <p style="font-size:14px;color:#57534e;line-height:1.6;margin-bottom:16px;">
+          In the full tracker, you can export your data as CSV or JSON backup, clear transactions by year, or start fresh. Upload your own transactions to unlock data management.
+        </p>
+        <a href="app.html" class="btn btn-primary" style="width:100%;justify-content:center;margin-bottom:10px;text-decoration:none;">Launch Tracker (Free)</a>
+        <button id="closeDemoManageData" class="btn btn-secondary" style="width:100%;justify-content:center;">Got it</button>
+      </div>
+    </div>
+
   </div>
 
 <script>
@@ -621,8 +785,6 @@ function getReason(t, card) {
 // RENDER
 // =========================================================================
 
-let currentSort = { column: 'netValue', direction: 'desc' };
-
 function renderSummary() {
   const metrics = calculateMetrics();
   const cards = Object.values(metrics).map(c => {
@@ -630,21 +792,22 @@ function renderSummary() {
     return { ...c, netValue };
   });
 
-  // Sort
-  cards.sort((a, b) => {
-    const aVal = a[currentSort.column] ?? a.cardName;
-    const bVal = b[currentSort.column] ?? b.cardName;
-    if (currentSort.column === 'cardName') {
-      return currentSort.direction === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+  // Sort by net value descending
+  cards.sort((a, b) => b.netValue - a.netValue);
+
+  // Determine tags
+  const maxNet = Math.max(...cards.map(c => c.netValue));
+  const txnCounts = {};
+  DEMO_TRANSACTIONS.forEach(t => {
+    if (!t.isAnnualFee && !t.isCredit) {
+      txnCounts[t.card] = (txnCounts[t.card] || 0) + 1;
     }
-    return currentSort.direction === 'asc' ? aVal - bVal : bVal - aVal;
   });
+  const maxTxnCard = Object.entries(txnCounts).sort((a, b) => b[1] - a[1])[0][0];
 
   // Update top metrics
-  let totalSpend = 0, totalPoints = 0, totalPtsValue = 0, totalCredits = 0, totalFees = 0;
+  let totalPtsValue = 0, totalCredits = 0, totalFees = 0;
   cards.forEach(c => {
-    totalSpend += c.spend;
-    totalPoints += c.points;
     totalPtsValue += c.pointsValue;
     totalCredits += c.credits;
     totalFees += c.annualFee;
@@ -664,90 +827,109 @@ function renderSummary() {
   netEl.textContent = (totalNet >= 0 ? '+' : '-') + fmt(totalNet);
   netEl.className = 'shell-details-item-value ' + (totalNet >= 0 ? 'positive' : 'negative');
 
-  // Render summary table
-  const tbody = document.getElementById('summaryBody');
-  tbody.innerHTML = cards.map(c => {
-    const netClass = c.netValue >= 0 ? 'positive-amount' : 'negative-amount';
+  // Render flip cards
+  const grid = document.getElementById('summaryGrid');
+  grid.innerHTML = cards.map(c => {
     const netSign = c.netValue >= 0 ? '+' : '-';
+    const netClass = c.netValue >= 0 ? 'positive' : 'negative';
+    const borderClass = c.netValue >= 0 ? 'positive-border' : 'negative-border';
 
-    // Points breakdown
-    const catEntries = Object.entries(c.pointsByCategory).sort((a, b) => b[1].points - a[1].points);
-    const ptsBreakdown = catEntries.length > 0
-      ? catEntries.map(([cat, data]) =>
-          `<div style="display:flex;justify-content:space-between;margin-bottom:2px;">
-            <span style="text-transform:capitalize;">${cat}</span>
-            <span style="font-weight:500;">${fmtNum(data.points)} pts</span>
-          </div>`
-        ).join('')
-      : '<div style="color:#78716c;">No breakdown</div>';
+    // Tags
+    let tagsHtml = '';
+    if (c.netValue === maxNet) {
+      tagsHtml += '<span class="fc-tag fc-tag-mvp">MVP</span>';
+    }
+    if (c.cardId === maxTxnCard && c.netValue !== maxNet) {
+      tagsHtml += '<span class="fc-tag fc-tag-workhorse">Workhorse</span>';
+    }
+    if (c.netValue < 0) {
+      tagsHtml += '<span class="fc-tag fc-tag-deadweight">Deadweight</span>';
+    }
 
-    // Credits breakdown
+    // Credits breakdown for back
     const creditTxns = DEMO_TRANSACTIONS.filter(t => t.card === c.cardId && t.isCredit);
-    const creditsBreakdown = creditTxns.length > 0
-      ? creditTxns.map(t =>
-          `<div style="display:flex;justify-content:space-between;margin-bottom:2px;">
-            <span>${t.creditName}</span>
-            <span style="font-weight:500;">${fmtPrecise(t.amount)}</span>
-          </div>`
-        ).join('')
-      : (c.annualFee > 0 ? '<div style="color:#78716c;">No credits detected</div>' : '');
+    let creditsRowHtml = '';
+    if (creditTxns.length > 0) {
+      const creditsDetailRows = creditTxns.map(t =>
+        `<div class="fc-credits-detail-row">
+          <span class="fc-credits-detail-row-name">${t.creditName}</span>
+          <span class="fc-credits-detail-row-val">${fmtPrecise(t.amount)}</span>
+        </div>`
+      ).join('');
 
-    return `<tr>
-      <td style="white-space:nowrap;">${c.cardName}</td>
-      <td class="text-right mono">${fmtPrecise(c.spend)}</td>
-      <td class="text-right mono">
-        <div class="detail-toggle" data-target="pts-${c.cardId}" style="cursor:pointer;display:flex;align-items:center;justify-content:flex-end;gap:4px;">
-          ${fmtNum(c.points)} <span class="toggle-arrow" style="font-size:10px;">&#9660;</span>
-        </div>
-        <div id="pts-${c.cardId}" class="detail-panel points-panel" style="display:none;">
-          ${ptsBreakdown}
-        </div>
-      </td>
-      <td class="text-right mono">${fmtPrecise(c.pointsValue)}</td>
-      <td class="text-right mono">
-        ${(creditTxns.length > 0 || c.annualFee > 0) ? `
-          <div class="detail-toggle" data-target="cr-${c.cardId}" style="cursor:pointer;display:flex;align-items:center;justify-content:flex-end;gap:4px;">
-            ${fmtPrecise(c.credits)} <span class="toggle-arrow" style="font-size:10px;">&#9660;</span>
+      creditsRowHtml = `
+        <div class="fc-back-row credits-row" onclick="event.stopPropagation();">
+          <div class="fc-credits-toggle" onclick="var d=this.nextElementSibling;var a=this.querySelector('.fc-credits-arrow');d.classList.toggle('open');a.classList.toggle('open');">
+            <div class="fc-back-row-label">Credits Used</div>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <span class="fc-back-row-value positive">${fmtPrecise(c.credits)}</span>
+              <span class="fc-credits-arrow">&#9660;</span>
+            </div>
           </div>
-          <div id="cr-${c.cardId}" class="detail-panel credits-panel" style="display:none;">
-            ${creditsBreakdown}
+          <div class="fc-credits-detail">
+            ${creditsDetailRows}
           </div>
-        ` : fmtPrecise(c.credits)}
-      </td>
-      <td class="text-right mono">${c.annualFee > 0 ? fmtPrecise(c.annualFee) : '$0'}</td>
-      <td class="text-right mono ${netClass}" style="font-weight:600;">${netSign}${fmtPrecise(Math.abs(c.netValue))}</td>
-    </tr>`;
+        </div>`;
+    } else {
+      creditsRowHtml = `
+        <div class="fc-back-row">
+          <div class="fc-back-row-label">Credits Used</div>
+          <div class="fc-back-row-value">${fmtPrecise(c.credits)}</div>
+        </div>`;
+    }
+
+    return `
+      <div class="flip-card" onclick="this.classList.toggle('flipped')">
+        <div class="flip-card-inner">
+          <div class="flip-card-front ${borderClass}">
+            <div class="fc-front-body">
+              <div class="fc-card-name">${c.cardName}</div>
+              <div class="fc-tags">${tagsHtml}</div>
+            </div>
+            <div class="fc-net-section">
+              <div class="fc-net-label">NET VALUE</div>
+              <div class="fc-net-value ${netClass}">${netSign}${fmt(c.netValue)}</div>
+            </div>
+            <div class="fc-bottom-row">
+              <div class="fc-annual-fee">${c.annualFee > 0 ? fmt(c.annualFee) + ' annual fee' : 'No annual fee'}</div>
+              <div class="fc-flip-hint">Click to flip</div>
+            </div>
+          </div>
+          <div class="flip-card-back">
+            <div class="fc-back-header">
+              <div class="fc-back-header-label">BREAKDOWN</div>
+              <div class="fc-back-card-name">${c.cardName}</div>
+            </div>
+            <div class="fc-back-rows">
+              <div class="fc-back-row">
+                <div class="fc-back-row-label">Total Spend</div>
+                <div class="fc-back-row-value">${fmtPrecise(c.spend)}</div>
+              </div>
+              <div class="fc-back-row">
+                <div class="fc-back-row-label">Points Earned</div>
+                <div class="fc-back-row-value">${fmtNum(c.points)}</div>
+              </div>
+              <div class="fc-back-row">
+                <div class="fc-back-row-label">Points Value</div>
+                <div class="fc-back-row-value positive">${fmtPrecise(c.pointsValue)}</div>
+              </div>
+              ${creditsRowHtml}
+              <div class="fc-back-row">
+                <div class="fc-back-row-label">Annual Fee</div>
+                <div class="fc-back-row-value${c.annualFee > 0 ? ' negative' : ''}">${c.annualFee > 0 ? '-' + fmtPrecise(c.annualFee) : '$0.00'}</div>
+              </div>
+              <div class="fc-back-row net-row">
+                <div class="fc-back-row-label">Net Value</div>
+                <div class="fc-back-row-value ${netClass}">${netSign}${fmtPrecise(Math.abs(c.netValue))}</div>
+              </div>
+            </div>
+            <div class="fc-back-footer">
+              <div class="fc-back-flip-hint">Click to flip back</div>
+            </div>
+          </div>
+        </div>
+      </div>`;
   }).join('');
-
-  // Column sorting
-  document.querySelectorAll('#summaryTable th').forEach(th => {
-    th.style.cursor = 'pointer';
-    th.onclick = () => {
-      const cols = ['cardName', 'spend', 'points', 'pointsValue', 'credits', 'annualFee', 'netValue'];
-      const idx = Array.from(th.parentElement.children).indexOf(th);
-      const col = cols[idx];
-      if (currentSort.column === col) {
-        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
-      } else {
-        currentSort = { column: col, direction: col === 'cardName' ? 'asc' : 'desc' };
-      }
-      renderSummary();
-    };
-  });
-
-  // Detail toggle click handlers
-  document.querySelectorAll('.detail-toggle').forEach(el => {
-    el.onclick = (e) => {
-      e.stopPropagation();
-      const targetId = el.getAttribute('data-target');
-      const panel = document.getElementById(targetId);
-      if (panel) {
-        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-        const arrow = el.querySelector('.toggle-arrow');
-        if (arrow) arrow.textContent = panel.style.display === 'none' ? '\u25BC' : '\u25B2';
-      }
-    };
-  });
 }
 
 function renderTransactions() {
@@ -845,6 +1027,12 @@ document.querySelectorAll('.shell-tab').forEach(tab => {
 });
 
 function showTab(tab) {
+  // Card Scenarios just shows modal without changing active tab
+  if (tab === 'cardscenarios') {
+    document.getElementById('cardScenariosInfoModal').classList.remove('hidden');
+    return;
+  }
+
   // Update active tab
   document.querySelectorAll('.shell-tab').forEach(t => t.classList.remove('active'));
   document.querySelector(`.shell-tab[data-view="${tab}"]`).classList.add('active');
@@ -856,9 +1044,6 @@ function showTab(tab) {
     document.getElementById('summaryView').classList.add('hidden');
     document.getElementById('transactionsView').classList.remove('hidden');
     renderTransactions();
-  } else if (tab === 'cardscenarios') {
-    // Show info modal
-    document.getElementById('cardScenariosInfoModal').classList.remove('hidden');
   }
 }
 
@@ -867,6 +1052,190 @@ document.getElementById('closeCardScenariosInfo').addEventListener('click', func
   document.getElementById('cardScenariosInfoModal').classList.add('hidden');
 });
 document.getElementById('cardScenariosInfoModal').addEventListener('click', function(e) {
+  if (e.target === this) this.classList.add('hidden');
+});
+
+// =========================================================================
+// MANAGE DROPDOWN
+// =========================================================================
+
+document.getElementById('demoManageBtn').addEventListener('click', function(e) {
+  e.stopPropagation();
+  const dd = document.getElementById('demoManageDropdown');
+  dd.classList.toggle('open');
+  this.setAttribute('aria-expanded', dd.classList.contains('open'));
+});
+document.addEventListener('click', function() {
+  document.getElementById('demoManageDropdown').classList.remove('open');
+  document.getElementById('demoManageBtn').setAttribute('aria-expanded', 'false');
+});
+
+// =========================================================================
+// VIEW SWITCHING (Summary <-> Card Mapping / Card Config)
+// =========================================================================
+
+function showDemoSection(section) {
+  document.getElementById('demoManageDropdown').classList.remove('open');
+  document.getElementById('resultsSection').classList.add('hidden');
+  document.getElementById('demoMappingSection').classList.add('hidden');
+  document.getElementById('demoCardConfigSection').classList.add('hidden');
+  document.getElementById(section).classList.remove('hidden');
+}
+
+function backToSummary() {
+  document.getElementById('demoMappingSection').classList.add('hidden');
+  document.getElementById('demoCardConfigSection').classList.add('hidden');
+  document.getElementById('resultsSection').classList.remove('hidden');
+}
+
+document.getElementById('demoCardMappingBtn').addEventListener('click', function() {
+  showDemoSection('demoMappingSection');
+});
+document.getElementById('demoCardConfigBtn').addEventListener('click', function() {
+  showDemoSection('demoCardConfigSection');
+  renderDemoCardConfig();
+});
+document.getElementById('backFromDemoMapping').addEventListener('click', backToSummary);
+document.getElementById('backFromDemoConfig').addEventListener('click', backToSummary);
+
+// =========================================================================
+// CARD CONFIG (Demo - read only)
+// =========================================================================
+
+const DEMO_CARD_CONFIG = {
+  'chase-sapphire-reserve': {
+    categories: [
+      { name: 'Chase Travel Portal', mult: '8x' },
+      { name: 'Lyft', mult: '5x' },
+      { name: 'Flights (direct)', mult: '4x' },
+      { name: 'Hotels (direct)', mult: '4x' },
+      { name: 'Dining', mult: '3x' },
+      { name: 'Other', mult: '1x' }
+    ],
+    credits: [
+      { name: 'Travel Credit', amount: 300 },
+      { name: 'Peloton', amount: 120 }
+    ]
+  },
+  'amex-gold': {
+    categories: [
+      { name: 'Dining', mult: '4x' },
+      { name: 'Grocery (US supermarkets)', mult: '4x' },
+      { name: 'Flights (direct)', mult: '3x' },
+      { name: 'Other', mult: '1x' }
+    ],
+    credits: [
+      { name: 'Dining Credit', amount: 120 },
+      { name: 'Resy Credit', amount: 100 },
+      { name: 'Dunkin Credit', amount: 84 }
+    ]
+  },
+  'chase-freedom-flex': {
+    categories: [
+      { name: 'Quarterly Categories', mult: '5x' },
+      { name: 'Dining', mult: '3x' },
+      { name: 'Drugstore', mult: '3x' },
+      { name: 'Other', mult: '1x' }
+    ],
+    credits: []
+  },
+  'amazon-prime': {
+    categories: [
+      { name: 'Amazon', mult: '5x' },
+      { name: 'Whole Foods', mult: '5x' },
+      { name: 'Gas stations', mult: '2x' },
+      { name: 'Transit', mult: '2x' },
+      { name: 'Dining', mult: '2x' },
+      { name: 'Other', mult: '1x' }
+    ],
+    credits: []
+  }
+};
+
+// Populate card config dropdown
+(function() {
+  const sel = document.getElementById('demoConfigCardSelect');
+  for (const [id, card] of Object.entries(DEMO_CARDS)) {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = card.name;
+    sel.appendChild(opt);
+  }
+  sel.addEventListener('change', renderDemoCardConfig);
+})();
+
+function renderDemoCardConfig() {
+  const cardId = document.getElementById('demoConfigCardSelect').value;
+  const card = DEMO_CARDS[cardId];
+  const config = DEMO_CARD_CONFIG[cardId];
+  if (!card || !config) return;
+
+  const creditsHtml = config.credits.length > 0
+    ? config.credits.map(cr =>
+        `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f5f5f4;">
+          <span style="font-size:13px;">${cr.name}</span>
+          <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:500;">$${cr.amount.toLocaleString()}</span>
+        </div>`
+      ).join('')
+    : '<div style="font-size:13px;color:#78716c;padding:8px 0;">No credits for this card</div>';
+
+  const categoriesHtml = config.categories.map(cat =>
+    `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f5f5f4;">
+      <span style="font-size:13px;">${cat.name}</span>
+      <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:600;">${cat.mult}</span>
+    </div>`
+  ).join('');
+
+  document.getElementById('demoCardConfigContent').innerHTML = `
+    <div class="demo-readonly">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;">
+        <div style="background:#f5f5f4;border-radius:8px;padding:16px;">
+          <div style="font-size:11px;font-weight:600;color:#9e9b96;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Annual Fee</div>
+          <div style="font-family:'DM Mono',monospace;font-size:20px;font-weight:700;">${card.annualFee > 0 ? '$' + card.annualFee : '$0'}</div>
+        </div>
+        <div style="background:#f5f5f4;border-radius:8px;padding:16px;">
+          <div style="font-size:11px;font-weight:600;color:#9e9b96;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Point Value</div>
+          <div style="font-family:'DM Mono',monospace;font-size:20px;font-weight:700;">${(card.pointValue * 100).toFixed(1)}&cent; per point</div>
+        </div>
+      </div>
+      <div style="margin-bottom:20px;">
+        <h3 style="font-size:14px;font-weight:600;margin-bottom:8px;">Category Multipliers</h3>
+        ${categoriesHtml}
+      </div>
+      <div>
+        <h3 style="font-size:14px;font-weight:600;margin-bottom:8px;">Statement Credits</h3>
+        ${creditsHtml}
+      </div>
+    </div>
+    <div style="margin-top:20px;">
+      <button class="btn btn-primary demo-readonly" disabled>Save Changes</button>
+    </div>`;
+}
+
+// =========================================================================
+// MODAL HANDLERS (Upgrade, Help, Manage Data)
+// =========================================================================
+
+// Help
+document.getElementById('demoHelpBtn').addEventListener('click', function() {
+  document.getElementById('demoHelpModal').classList.remove('hidden');
+});
+document.getElementById('closeDemoHelp').addEventListener('click', function() {
+  document.getElementById('demoHelpModal').classList.add('hidden');
+});
+document.getElementById('demoHelpModal').addEventListener('click', function(e) {
+  if (e.target === this) this.classList.add('hidden');
+});
+
+// Manage Data
+document.getElementById('demoManageDataBtn').addEventListener('click', function() {
+  document.getElementById('demoManageDropdown').classList.remove('open');
+  document.getElementById('demoManageDataModal').classList.remove('hidden');
+});
+document.getElementById('closeDemoManageData').addEventListener('click', function() {
+  document.getElementById('demoManageDataModal').classList.add('hidden');
+});
+document.getElementById('demoManageDataModal').addEventListener('click', function(e) {
   if (e.target === this) this.classList.add('hidden');
 });
 

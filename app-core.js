@@ -1869,6 +1869,9 @@ function detectCredit(merchant, originalStatement, cardId, txnId, txnDate = null
   if (excludeKeywords.some(kw => upper.includes(kw))) return null;
 
   // Check each credit's keywords for a match
+  // Rule: the text must also contain "CREDIT" to distinguish statement credits
+  // from merchant refunds (e.g., a StubHub refund vs. the StubHub statement credit)
+  const hasCredit = upper.includes('CREDIT') && !upper.includes('CREDIT CARD');
   for (const credit of credits) {
     // Skip manual credits (they have no keywords to match)
     if (credit.manual || !credit.keywords || credit.keywords.length === 0) continue;
@@ -1876,6 +1879,9 @@ function detectCredit(merchant, originalStatement, cardId, txnId, txnDate = null
     // Check if any keyword matches
     for (const kw of credit.keywords) {
       if (upper.includes(kw)) {
+        // Keyword matched, but require "CREDIT" in the text to confirm this is
+        // a statement credit and not a merchant refund
+        if (!hasCredit) continue;
         // Found a match! Return with disabled status
         const isDisabled = disabled.includes(credit.name);
         return { name: credit.name, disabled: isDisabled };

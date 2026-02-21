@@ -212,7 +212,8 @@ function generateSourceFormatHash(headers) {
 // =============================================================================
 // CARD DEFINITIONS (loaded from individual card files via CardTracker namespace)
 // =============================================================================
-const SKIP_ACCOUNTS = ['checking', 'savings', 'sofi', 'bank', 'venmo'];
+const SKIP_ACCOUNTS = ['checking', 'savings', 'sofi', 'bank', 'venmo',
+                       'retirement', 'investment', 'brokerage', 'ira', '401k', '403b', 'pension'];
 
 const CARDS = window.CardTracker.cards;
 
@@ -616,15 +617,16 @@ function parseCombinedAccountField(value) {
 
   const trimmed = value.trim();
 
-  // Try to extract last 4 digits
-  const last4Match = trimmed.match(/\(?\.{0,3}(\d{4})\)?\s*$/);
+  // Try to extract last 4 digits — require closing paren so non-card
+  // accounts like "RETIREMENT PLAN (...9891-GDC)" don't produce a false last4
+  const last4Match = trimmed.match(/\(?\.{0,3}(\d{4})\)\s*$/);
   const cardNumber = last4Match ? last4Match[1] : null;
 
   // Get account type (everything before the number pattern)
   let accountType = null;
   if (cardNumber) {
     // Remove the last4 pattern to get the account name/type
-    accountType = trimmed.replace(/\s*\(?\.{0,3}\d{4}\)?\s*$/, '').trim();
+    accountType = trimmed.replace(/\s*\(?\.{0,3}\d{4}\)\s*$/, '').trim();
   } else {
     // No card number found - entire value is the account type
     accountType = trimmed;

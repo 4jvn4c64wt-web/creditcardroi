@@ -9052,6 +9052,7 @@ async function handleFile(file) {
       }
 
       // Restore proAccess only if activatedAt is less than 365 days old
+      let importedProValid = false;
       if (backup.proAccess && backup.proAccess.key && backup.proAccess.activatedAt) {
         const elapsed = Date.now() - backup.proAccess.activatedAt;
         if (elapsed <= 365 * 24 * 60 * 60 * 1000) {
@@ -9062,8 +9063,24 @@ async function handleFile(file) {
             lastVerified: backup.proAccess.lastVerified || backup.proAccess.activatedAt
           };
           safeLocalStorageSet('ccTracker_proAccess', state.proAccess);
+          importedProValid = true;
         }
         // If expired, silently skip — no error shown
+      }
+
+      // If proAccess was restored, verify with Gumroad before redirecting
+      if (importedProValid && proNeedsReverification()) {
+        showLoading(true, 'Verifying Pro access...');
+        const result = await verifyGumroadLicense(state.proAccess.key);
+        showLoading(false);
+        if (result.success) {
+          updateProLastVerified();
+        } else {
+          // Verification failed — remove proAccess, continue as free
+          state.proAccess = null;
+          localStorage.removeItem('ccTracker_proAccess');
+          importedProValid = false;
+        }
       }
 
       showLoading(false);
@@ -9072,9 +9089,15 @@ async function handleFile(file) {
       // Mark tour as complete since this is a returning user
       state.tourComplete = true;
       safeLocalStorageSet('ccTracker_tourComplete', true);
-      
+
       alert(`Backup restored successfully!\n\n${txnCount} transactions and all settings have been restored.`);
-      
+
+      // Redirect to Pro if imported proAccess is valid
+      if (importedProValid && window.TIER_CONFIG !== 'pro') {
+        window.location.href = 'app-pro.html';
+        return;
+      }
+
       // Run processing
       if (state.transactions.length > 0) {
         await runProcessing();

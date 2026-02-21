@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; form-action 'none'; base-uri 'self';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.gumroad.com; form-action 'none'; base-uri 'self';">
   <title>Credit Card Value Tracker — Pro</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💳</text></svg>">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -699,6 +699,37 @@
       </div>
     </div>
   </div>
+
+    <!-- Connectivity Modal (shown when re-verification fails) -->
+    <div id="proVerifyModal" class="loading-overlay" style="display:none;cursor:default;">
+      <div class="loading-modal" style="cursor:default;max-width:420px;text-align:center;">
+        <h3 style="font-size:20px;font-weight:600;margin:0 0 12px;">Verification Required</h3>
+        <p style="font-size:14px;color:#57534e;line-height:1.6;margin-bottom:20px;">
+          We weren't able to verify your Pro access. Please open the tracker from a device with an internet connection to continue.
+        </p>
+        <button id="proVerifyOK" class="btn btn-primary" style="width:100%;justify-content:center;">OK</button>
+      </div>
+    </div>
+
+    <!-- Subscription Expired Modal -->
+    <div id="proExpiredModal" class="loading-overlay" style="display:none;cursor:default;">
+      <div class="loading-modal" style="cursor:default;max-width:440px;text-align:center;">
+        <h3 style="font-size:20px;font-weight:600;margin:0 0 12px;">Your Pro subscription has expired</h3>
+        <p style="font-size:14px;color:#57534e;line-height:1.6;margin-bottom:20px;">
+          Renew your subscription to continue accessing Pro features.
+        </p>
+        <a href="https://creditcardvalue.gumroad.com/l/snzsfy" target="_blank" class="btn btn-primary" style="width:100%;justify-content:center;margin-bottom:16px;text-decoration:none;">Renew Pro &rarr;</a>
+        <div style="border-top:1px solid #e7e5e4;padding-top:14px;margin-bottom:14px;">
+          <div style="font-size:12px;font-weight:500;color:#78716c;margin-bottom:8px;">Already have a new key?</div>
+          <div style="display:flex;gap:6px;">
+            <input type="text" id="expiredKeyInput" placeholder="License key" class="form-select" style="flex:1;font-size:12px;padding:6px 8px;">
+            <button class="btn btn-secondary" id="expiredActivateBtn" style="font-size:12px;padding:6px 12px;">Activate</button>
+          </div>
+          <div id="expiredKeyError" style="font-size:11px;color:#dc2626;margin-top:4px;display:none;"></div>
+        </div>
+        <button id="expiredReturnFree" class="btn btn-secondary" style="width:100%;justify-content:center;">Return to Free</button>
+      </div>
+    </div>
 
 <!-- Extracted data files (each registers into window.CardTracker namespace) -->
 <script src="merchants.js"></script>

@@ -497,6 +497,32 @@ function isValidLicenseKeyFormat(key) {
   return /^[A-Za-z0-9-]{8,35}$/.test(trimmed);
 }
 
+// Gumroad product ID for Pro license verification
+const GUMROAD_PRODUCT_ID = 'SDGgCnivv6gTTHfVRfUBxQ==';
+
+/**
+ * Verify a license key against Gumroad's API
+ * @param {string} key - The license key to verify
+ * @returns {Promise<{success: boolean}>}
+ */
+async function verifyGumroadLicense(key) {
+  try {
+    const body = new URLSearchParams({
+      product_id: GUMROAD_PRODUCT_ID,
+      license_key: key.trim(),
+      increment_uses_count: 'false'
+    });
+    const response = await fetch('https://api.gumroad.com/v2/licenses/verify', {
+      method: 'POST',
+      body: body
+    });
+    const data = await response.json();
+    return { success: data.success === true };
+  } catch (e) {
+    return { success: false };
+  }
+}
+
 /**
  * Activate a Decision Pass for a specific card
  * @param {string} key - The license key
@@ -524,30 +550,49 @@ function activateDecisionPass(key, cardId) {
 }
 
 /**
- * Activate Pro access
+ * Activate Pro access (called after Gumroad verification succeeds)
  * @param {string} key - The license key
  * @returns {boolean} True if activation succeeded
  */
 function activateProAccess(key) {
-  if (!isValidLicenseKeyFormat(key)) return false;
-
-  // Test keys (TESTPRO-xxxx) work just like real keys
+  const now = Date.now();
   state.proAccess = {
     key: key.trim(),
-    activatedAt: Date.now()
+    activatedAt: now,
+    lastVerified: now
   };
   safeLocalStorageSet('ccTracker_proAccess', state.proAccess);
   return true;
 }
 
 /**
- * Check if Pro access is currently valid
+ * Check if Pro access is currently valid (365 days from activatedAt)
  * @returns {boolean}
  */
 function hasValidProAccess() {
   if (!state.proAccess) return false;
   const elapsed = Date.now() - state.proAccess.activatedAt;
   return elapsed <= 365 * 24 * 60 * 60 * 1000; // 365 days
+}
+
+/**
+ * Check if Pro re-verification is needed (lastVerified > 7 days ago)
+ * @returns {boolean}
+ */
+function proNeedsReverification() {
+  if (!state.proAccess || !state.proAccess.lastVerified) return true;
+  const elapsed = Date.now() - state.proAccess.lastVerified;
+  return elapsed > 7 * 24 * 60 * 60 * 1000; // 7 days
+}
+
+/**
+ * Update lastVerified timestamp on successful Gumroad re-verification
+ */
+function updateProLastVerified() {
+  if (state.proAccess) {
+    state.proAccess.lastVerified = Date.now();
+    safeLocalStorageSet('ccTracker_proAccess', state.proAccess);
+  }
 }
 
 // =============================================================================
@@ -8779,7 +8824,8 @@ function buildExportData() {
     biltConfig: state.biltConfig,
     columnMappings: state.columnMappings,
     customAnnualBonusPoints: state.customAnnualBonusPoints,
-    streamingCredits: state.streamingCredits
+    streamingCredits: state.streamingCredits,
+    proAccess: state.proAccess || undefined
   };
 }
 
@@ -9003,6 +9049,21 @@ async function handleFile(file) {
       if (backup.customAnnualBonusPoints) {
         state.customAnnualBonusPoints = backup.customAnnualBonusPoints;
         safeLocalStorageSet('ccTracker_annualBonusPoints', backup.customAnnualBonusPoints);
+      }
+
+      // Restore proAccess only if activatedAt is less than 365 days old
+      if (backup.proAccess && backup.proAccess.key && backup.proAccess.activatedAt) {
+        const elapsed = Date.now() - backup.proAccess.activatedAt;
+        if (elapsed <= 365 * 24 * 60 * 60 * 1000) {
+          // Preserve original activatedAt, carry over lastVerified as-is
+          state.proAccess = {
+            key: backup.proAccess.key,
+            activatedAt: backup.proAccess.activatedAt,
+            lastVerified: backup.proAccess.lastVerified || backup.proAccess.activatedAt
+          };
+          safeLocalStorageSet('ccTracker_proAccess', state.proAccess);
+        }
+        // If expired, silently skip — no error shown
       }
 
       showLoading(false);
@@ -9512,7 +9573,8 @@ async function initCore() {
             // Set up Pro access
             const testPro = {
               key: 'TESTPRO-SWITCH',
-              activatedAt: Date.now()
+              activatedAt: Date.now(),
+              lastVerified: Date.now()
             };
             state.proAccess = testPro;
             state.decisionPasses = [];
@@ -9549,9 +9611,9 @@ async function initCore() {
 
     // Gate export: require at least one active Decision Pass or Pro
     if (window.TIER_CONFIG !== 'pro' && getActiveDecisionPasses().length === 0) {
-      const comingSoonModal = document.getElementById('comingSoonModal');
-      if (comingSoonModal) {
-        comingSoonModal.classList.remove('hidden');
+      const upgradeModal = document.getElementById('upgradeModal');
+      if (upgradeModal) {
+        upgradeModal.classList.remove('hidden');
       }
       return;
     }

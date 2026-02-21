@@ -107,7 +107,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // --- Pro purchase button → opens Gumroad in new tab ---
   document.getElementById('upgradeChoicePro').addEventListener('click', () => {
-    window.open('https://creditcardvalue.gumroad.com/l/snzsfy', '_blank');
+    window.open('https://creditcardvalue.gumroad.com/l/mrmeii', '_blank');
   });
 
   // --- Pro key activation (Gumroad API verification) ---

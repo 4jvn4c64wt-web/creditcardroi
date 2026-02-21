@@ -1,6 +1,6 @@
 # Credit Card Value Tracker — Development Guide
 
-Last updated: February 21, 2026
+Last updated: February 22, 2026
 
 This document is the single source of context for anyone (human or AI) making changes to the Credit Card Value Tracker codebase. Read the relevant section before touching any code.
 
@@ -297,7 +297,7 @@ This is the single source of truth for "how many points does this card earn on t
 ### Special Card Logic (in priority order within getMultiplier)
 
 1. **Cash+ quarterly categories** — User-selected 5% and 2% categories per quarter/year. Walks hierarchy to match.
-2. **CFF quarterly rotating categories** — Stored historical data with PayPal December-only handling and merchant-keyword bonuses.
+2. **CFF quarterly rotating categories** — Stored historical data with PayPal December-only handling and merchant-keyword bonuses. Merchant-keyword entries also match when the transaction's category exactly equals the entry's key (supports manual recategorization via the category modal).
 3. **Bilt cards (legacy vs 2.0)** — Before Feb 7, 2026: flat 3x dining, 2x travel, 1x else. After: card-specific rates with rent ratio calculation (housing-only) or Bilt Cash flexible option. **Bilt Cash (4%) is a flat rebate on ALL non-rent spend on any Bilt card. It is completely independent of points/multipliers — do not mix or combine them.** See Section 13 for how Bilt Cash is handled in scenarios.
 4. **Chase Lyft partnership** — Date-dependent: CSR had 10x before April 2025, 5x after. CFU had 5x before, 2x after.
 5. **CSR legacy rates** — Before Oct 26, 2025: 10x Chase Travel, 3x dining, 3x all travel. After: new rate structure.
@@ -808,6 +808,8 @@ For quarters with merchant-specific bonuses (like McDonald's), use:
 ```
 
 For PayPal quarters, include `isPaypal: true` and optionally `decemberOnly: true`.
+
+**Important:** `getCardCategories()` dynamically derives CFF's valid categories from `cffQuarterlyData`, so adding new quarterly entries automatically makes those categories available in the recategorization modal. No separate list to maintain.
 
 ---
 

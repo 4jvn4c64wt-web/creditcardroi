@@ -47,7 +47,7 @@ window.CardTracker.cffQuarterlyData = {
     { key: 'fitness', label: 'Fitness Clubs & Gym Memberships', rate: 5 },
     { key: 'spa-self-care', label: 'Self-Care & Spa Services', rate: 5 },
     { key: 'cruise', label: 'Norwegian Cruise Line', rate: 5, merchantKeywords: ['norwegian cruise', 'ncl '] },
-    { key: 'tax', label: 'Tax Preparation', rate: 5, monthOnly: 3, merchantKeywords: ['turbotax', 'h&r block', 'hrblock', 'taxact', 'taxslayer', 'jackson hewitt', 'liberty tax'] },
+    { key: 'tax', label: 'Tax Preparation', rate: 5, monthOnly: 3, merchantKeywords: ['turbotax', 'h&r block', 'hrblock', 'taxact', 'taxslayer', 'jackson hewitt', 'liberty tax', 'freetaxusa'] },
     { key: 'insurance', label: 'Insurance', rate: 5, monthOnly: 3 }
   ],
 

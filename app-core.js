@@ -677,17 +677,18 @@ function getCardCategories(cardId, txnDate = null) {
   }
   
   // Special handling for Chase Freedom Flex (quarterly rotating 5% categories)
-  // Show ALL possible quarterly categories so user can always recategorize
+  // Dynamically derive all possible quarterly categories from cffQuarterlyData
+  // so new quarterly entries are automatically available for recategorization
   if (cardId === 'chase-freedom-flex') {
-    const allQuarterlyOptions = [
-      'amazon', 'car-rentals', 'charity', 'chase-travel', 'dining', 'ebay', 
-      'ev-charging', 'fitness', 'gas', 'grocery', 'home-improvement', 'hotels', 
-      'internet-cable-phone', 'live-entertainment', 'lowes', 'mcdonalds', 
-      'movie-theaters', 'paypal', 'pet-stores', 'spa-self-care', 'streaming', 
-      'target', 'walmart', 'whole-foods', 'wholesale-clubs'
-    ];
     const baseCats = ['chase-travel', 'dining', 'drugstore'];
-    return [...new Set([...baseCats, ...allQuarterlyOptions, 'other'])];
+    const CFF_DATA = window.CardTracker.cffQuarterlyData || {};
+    const allQuarterlyKeys = new Set();
+    for (const entries of Object.values(CFF_DATA)) {
+      for (const entry of entries) {
+        allQuarterlyKeys.add(entry.key);
+      }
+    }
+    return [...new Set([...baseCats, ...allQuarterlyKeys, 'other'])];
   }
 
   // Special handling for CSR legacy (before Oct 26, 2025)
@@ -1109,9 +1110,10 @@ function getMultiplier(cardId, category, txnDate = null, merchantDesc = '') {
         continue;
       }
 
-      // Merchant-keyword entries: match by merchant description only
+      // Merchant-keyword entries: match by merchant description or exact category match
       // These are merchant-specific bonuses (McDonald's, Norwegian Cruise Line, etc.)
-      // that should NOT fall through to broad category matching
+      // Primary match: merchant description keywords
+      // Fallback: if user manually categorized as this entry's key, honor the override
       if (entry.merchantKeywords) {
         let matched = false;
         for (const kw of entry.merchantKeywords) {
@@ -1120,7 +1122,11 @@ function getMultiplier(cardId, category, txnDate = null, merchantDesc = '') {
         if (matched) {
           return { rate: entry.rate, reason: `${entry.rate}% ${entry.label} (${year} ${quarter} bonus)` };
         }
-        continue; // No keyword match - skip this entry entirely
+        // Also match if category was manually assigned to exactly this entry's key
+        if (category === entry.key) {
+          return { rate: entry.rate, reason: `${entry.rate}% ${entry.label} (${year} ${quarter} bonus)` };
+        }
+        continue; // No keyword or category match - skip this entry entirely
       }
 
       // Category-based: walk up the transaction's category hierarchy to find a match
@@ -8642,7 +8648,8 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
   // For Freedom Flex, filter to only show base + selected quarterly categories for this transaction's quarter
   if (cardId === 'chase-freedom-flex') {
     const baseCats = ['chase-travel', 'dining', 'drugstore'];
-    const allowedCats = [...new Set([...baseCats, ...cffSelected, 'other'])];
+    const cffQuarterlyCats = cffEntries.map(e => e.key);
+    const allowedCats = [...new Set([...baseCats, ...cffQuarterlyCats, 'other'])];
     // Also include current category if not in list
     if (currentCategory && !allowedCats.includes(currentCategory)) {
       allowedCats.push(currentCategory);

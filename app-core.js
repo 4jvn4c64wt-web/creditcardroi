@@ -498,7 +498,7 @@ function isValidLicenseKeyFormat(key) {
 }
 
 // Gumroad product ID for Pro license verification
-const GUMROAD_PRODUCT_ID = 'SDGgCnivv6gTTHfVRfUBxQ==';
+const GUMROAD_PRODUCT_ID = 'n2AyVcNGOfmk5sAwn4jObw==';
 
 /**
  * Verify a license key against Gumroad's API

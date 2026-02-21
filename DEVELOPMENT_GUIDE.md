@@ -74,7 +74,7 @@ Everything runs locally in the browser. Transaction data never leaves the user's
 **Freemium tiers:**
 - **Free** (`app.html` → `app.js`): Read-only analysis, 12 months of data
 - **Decision Pass** ($12): Unlocks editing for one card for 7 days (currently greyed out / "Coming Soon")
-- **Pro** (`app-pro.html` → `app-pro.js`): Full editing, 6 years of data, What-If scenarios ($24/year)
+- **Pro** (`app-pro.html` → `app-pro.js`): Full editing, 6 years of data, What-If scenarios ($14/year suggested, pay what you think is fair)
 
 ---
 

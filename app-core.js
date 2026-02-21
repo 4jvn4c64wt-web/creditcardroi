@@ -3529,19 +3529,20 @@ function showResults(results, isNewUpload = false) {
   const actionableLowConf = getVisibleLowConfidenceTransactions(results.processed);
   const lowConfidenceCount = actionableLowConf.length;
 
-  // Stats footer - include low-confidence count (only for tiers that can act on them)
-  const lowConfBadge = lowConfidenceCount > 0
-    ? `<span style="color:#b45309;"> • ${lowConfidenceCount} need review</span>`
-    : '';
+  // Stats footer - include low-confidence count on Pro only, with link to filter
   const isPro = window.TIER_CONFIG === 'pro';
+  const lowConfBadge = (isPro && lowConfidenceCount > 0)
+    ? ` • <a href="#" class="needs-review-link" style="color:#b45309;text-decoration:underline;text-underline-offset:2px;cursor:pointer;">${lowConfidenceCount} need review</a>`
+    : '';
   const tierBadge = isPro
     ? `<span style="background:#1c1917;color:#fff;font-size:10px;font-weight:600;padding:1px 6px;border-radius:9999px;letter-spacing:0.04em;">PRO</span>`
     : `<span style="background:#f59e0b;color:#fff;font-size:10px;font-weight:600;padding:1px 6px;border-radius:9999px;letter-spacing:0.04em;">BETA</span>`;
   const tierMessage = isPro
     ? 'Thanks for supporting the tracker! Feedback welcome:'
     : 'This tool is in beta — features may change and bugs may exist. Feedback welcome:';
+  const txnCount = results.processed ? results.processed.length : 0;
   document.getElementById('statsFooter').innerHTML = `
-    <strong>Stats:</strong> ${Object.keys(state.merchantCache).length} merchants cached •
+    <strong>Stats:</strong> ${txnCount} transactions •
     ${results.cards.length} cards tracked${lowConfBadge}
     <div style="margin-top:10px;padding-top:10px;border-top:1px dashed #d6d3d1;">
       ${tierBadge}
@@ -3549,6 +3550,19 @@ function showResults(results, isNewUpload = false) {
     </div>
   `;
   initFeedbackEmail();
+
+  // "need review" link in stats footer → switch to transactions with Needs Review filter
+  const needsReviewLink = document.querySelector('.needs-review-link');
+  if (needsReviewLink) {
+    needsReviewLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      renderView('transactions');
+      setTimeout(() => {
+        const cb = document.getElementById('filterNeedsReview');
+        if (cb) { cb.checked = true; cb.dispatchEvent(new Event('change')); }
+      }, 100);
+    });
+  }
 
   renderView('summary');
 

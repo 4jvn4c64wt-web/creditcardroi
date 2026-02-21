@@ -7995,9 +7995,11 @@ function renderView(view) {
       </div>
       </div>`;
     
-    // Close modal when clicking outside
-    document.getElementById('creditModal').addEventListener('click', () => {
-      document.getElementById('creditModal').classList.add('hidden');
+    // Close modal when clicking outside (on the backdrop overlay, not inside the content)
+    document.getElementById('creditModal').addEventListener('click', (e) => {
+      if (e.target === document.getElementById('creditModal')) {
+        document.getElementById('creditModal').classList.add('hidden');
+      }
     });
     
     // Clear filters button

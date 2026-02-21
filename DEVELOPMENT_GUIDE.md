@@ -1,6 +1,6 @@
 # Credit Card Value Tracker — Development Guide
 
-Last updated: February 19, 2026
+Last updated: February 21, 2026
 
 This document is the single source of context for anyone (human or AI) making changes to the Credit Card Value Tracker codebase. Read the relevant section before touching any code.
 
@@ -73,8 +73,8 @@ Everything runs locally in the browser. Transaction data never leaves the user's
 
 **Freemium tiers:**
 - **Free** (`app.html` → `app.js`): Read-only analysis, 12 months of data
-- **Decision Pass** ($5): Unlocks editing for one card for 7 days
-- **Pro** (`app-pro.html` → `app-pro.js`): Full editing, 6 years of data, What-If scenarios ($12/year)
+- **Decision Pass** ($12): Unlocks editing for one card for 7 days (currently greyed out / "Coming Soon")
+- **Pro** (`app-pro.html` → `app-pro.js`): Full editing, 6 years of data, What-If scenarios ($14/year suggested, pay what you think is fair)
 
 ---
 
@@ -107,9 +107,11 @@ window.CardTracker.csvParser      → detectCSVFormat, showColumnMapping, parseC
 window.CardTracker.cffQuarterlyData → CFF quarterly bonus history
 ```
 
-### No Network Calls
+### No Network Calls (with one exception)
 
-The core application makes zero network requests. Fonts are loaded from Google Fonts. Analytics (Cloudflare Web Analytics) are passive. There is no API, no backend, no LLM calls during normal operation.
+The core application makes zero network requests for its primary functionality. Fonts are loaded from Google Fonts. Analytics (Cloudflare Web Analytics) are passive. There is no API, no backend, no LLM calls during normal operation.
+
+**Exception — Gumroad license verification:** `app.js` makes one POST to `https://api.gumroad.com/v2/licenses/verify` at Pro activation. `app-pro.js` makes the same call at most once every 7 days for re-verification (when `lastVerified` is more than 7 days old). This is the only network call made by the application logic. Both pages include `connect-src https://api.gumroad.com` in their Content Security Policy.
 
 ---
 
@@ -436,7 +438,7 @@ Stored in localStorage with `ccTracker_` prefix. Loaded on page init with `safeL
 | `columnMappings` | `ccTracker_columnMappings` | Remembered CSV column mappings by shape |
 | `savedTransactions` | `ccTracker_transactions` | All raw transactions |
 | `decisionPasses` | `ccTracker_decisionPasses` | Active Decision Pass keys |
-| `proAccess` | `ccTracker_proAccess` | Pro license key |
+| `proAccess` | `ccTracker_proAccess` | Pro license: `{ key, activatedAt, lastVerified }`. `activatedAt` never changes after initial activation (not on re-verification, not on import). `lastVerified` is rolling — updates on every successful Gumroad API response. Excluded from clear/reset. Included in export/import: `activatedAt` expiry (365 days) checked on import, `lastVerified` carried over as-is so the 7-day re-verification window transfers correctly. |
 | `dpBannersDismissed` | `ccTracker_dpBannersDismissed` | Dismissed upgrade banners |
 | `featureEducation` | `ccTracker_featureEducation` | Tracks which feature tutorials have been shown |
 
@@ -473,6 +475,14 @@ If you add a new persistent state field, you must update **all** of these locati
 
 Decision Passes are per-card temporary upgrades stored in `state.decisionPasses`. They last 7 days.
 
+### Pro Validation (two independent checks)
+
+On every load of `app-pro.html`, `app-pro.js` runs two checks in order before calling `initCore()`:
+
+1. **Re-verification (`lastVerified`)** — Controls how often the app phones home to Gumroad. If `lastVerified` is more than 7 days ago, the app calls `verifyGumroadLicense()`. On success, `lastVerified` updates to now and the app proceeds. On failure (API returns `success: false` or network error), a non-dismissable "Verification Required" modal appears with an OK button that redirects to `app.html`. If `lastVerified` is within 7 days, no API call is made.
+
+2. **Subscription expiry (`activatedAt`)** — Controls the absolute 365-day subscription window. `activatedAt` never changes after initial activation. If more than 365 days have elapsed, a non-dismissable "Your Pro subscription has expired" modal appears with: a "Renew Pro" button (opens Gumroad checkout), a license key input + Activate button (for users who already renewed), and a "Return to Free" button (redirects to `app.html`).
+
 ### Key Functions
 
 | Function | Purpose |
@@ -482,6 +492,10 @@ Decision Passes are per-card temporary upgrades stored in `state.decisionPasses`
 | `applyTierDateFiltering(transactions)` | Limit data window by tier |
 | `pruneTransactionsForStorage(transactions)` | Trim old data before saving |
 | `isNeedsReviewVisible(t, dpLookup)` | Should low-confidence flag show? |
+| `verifyGumroadLicense(key)` | POST to Gumroad API, returns `{ success }` |
+| `proNeedsReverification()` | Is `lastVerified` more than 7 days old? |
+| `updateProLastVerified()` | Update `lastVerified` to now |
+| `hasValidProAccess()` | Is `activatedAt` within 365 days? |
 
 ### Special Cases
 
@@ -869,7 +883,7 @@ These are non-negotiable and should guide every decision:
 
 **The smallest safe change.** When fixing a bug or adding a feature, change as few lines as possible. Prefer surgical edits over wholesale rewrites.
 
-**Privacy first.** No data leaves the browser. No network calls for core functionality. localStorage only.
+**Privacy first.** No data leaves the browser. No network calls for core functionality. localStorage only. The sole exception is the Gumroad license verification call at Pro activation and at most once every 7 days for re-verification — no user data is sent, only the license key.
 
 **Evidence-based choices.** Prefer shipping a working solution and gathering real user feedback over speculating about what users might want.
 
@@ -883,7 +897,12 @@ Quick lookup for the most commonly needed functions in `app-core.js`:
 |----------|-------|---------|
 | `parseDateString()` | 72 | Unified date parsing (multiple formats) |
 | `generateTransactionId()` | 175 | Content-based deduplication IDs |
-| `normalize()` | 556 | Lowercase + strip non-alphanumeric |
+| `verifyGumroadLicense()` | 506 | POST to Gumroad API to verify a license key |
+| `activateProAccess()` | 545 | Store proAccess with key, activatedAt, lastVerified |
+| `hasValidProAccess()` | 557 | Check if activatedAt is within 365 days |
+| `proNeedsReverification()` | 564 | Check if lastVerified is more than 7 days old |
+| `updateProLastVerified()` | 573 | Update lastVerified to current timestamp |
+| `normalize()` | 580 | Lowercase + strip non-alphanumeric |
 | `extractLast4()` | 560 | Get last 4 digits from account string |
 | `getCardCategories()` | 620 | Valid categories for a card (date-aware) |
 | `mapToCardCategory()` | 673 | Map generic category → card's earning category |

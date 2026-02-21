@@ -69,33 +69,12 @@ function showNewsletterPopup(delayMs) {
 
 document.addEventListener('DOMContentLoaded', async () => {
 
-  // --- Coming Soon modal handlers ---
-  (function() {
-    var u = 'creditcardvaluetracker';
-    var d = 'gmail';
-    var t = 'com';
-    var addr = u + '\u0040' + d + '.' + t;
-    var el = document.getElementById('comingSoonEmail');
-    if (el) {
-      el.textContent = addr;
-      el.onclick = function() {
-        window.location.href = 'mai' + 'lto:' + addr + '?subject=' + encodeURIComponent('Feature Request — Credit Card Value Tracker');
-      };
-    }
-  })();
-  document.getElementById('closeComingSoon').addEventListener('click', () => {
-    document.getElementById('comingSoonModal').classList.add('hidden');
-  });
-  document.getElementById('comingSoonModal').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
-  });
-
-  // --- Decision Pass banner links → open coming-soon modal (delegated) ---
+  // --- Upgrade links → open upgrade modal directly (delegated) ---
   document.addEventListener('click', (e) => {
     const link = e.target.closest('.dp-upgrade-link');
     if (link) {
       e.preventDefault();
-      document.getElementById('comingSoonModal').classList.remove('hidden');
+      document.getElementById('upgradeModal').classList.remove('hidden');
     }
   });
 
@@ -113,9 +92,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // --- Upgrade button opens coming-soon modal ---
+  // --- Upgrade button opens upgrade modal directly ---
   document.getElementById('upgradeBtn').addEventListener('click', () => {
-    document.getElementById('comingSoonModal').classList.remove('hidden');
+    document.getElementById('upgradeModal').classList.remove('hidden');
   });
 
   // --- Close upgrade modal ---
@@ -126,110 +105,37 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
   });
 
-  // --- Purchase buttons → open detail modals ---
-  document.getElementById('upgradeChoiceDP').addEventListener('click', () => {
-    document.getElementById('upgradeModal').classList.add('hidden');
-    document.getElementById('dpInfoModal').classList.remove('hidden');
-  });
+  // --- Pro purchase button → opens Gumroad in new tab ---
   document.getElementById('upgradeChoicePro').addEventListener('click', () => {
-    document.getElementById('upgradeModal').classList.add('hidden');
-    document.getElementById('proInfoModal').classList.remove('hidden');
+    window.open('https://creditcardvalue.gumroad.com/l/snzsfy', '_blank');
   });
 
-  // --- Close detail modals ---
-  document.getElementById('closeDPInfoModal').addEventListener('click', () => {
-    document.getElementById('dpInfoModal').classList.add('hidden');
-  });
-  document.getElementById('dpInfoModal').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
-  });
-  document.getElementById('closeProInfoModal').addEventListener('click', () => {
-    document.getElementById('proInfoModal').classList.add('hidden');
-  });
-  document.getElementById('proInfoModal').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
-  });
+  // --- Pro key activation (Gumroad API verification) ---
+  document.getElementById('proActivateBtn').addEventListener('click', async () => {
+    const key = document.getElementById('proKeyInput').value.trim();
+    const errorEl = document.getElementById('proKeyError');
+    const btn = document.getElementById('proActivateBtn');
 
-  // --- Decision Pass key activation - Step 1: validate key and show card selector ---
-  document.getElementById('dpActivateBtn').addEventListener('click', () => {
-    const key = document.getElementById('dpKeyInput').value.trim();
-    const errorEl = document.getElementById('dpKeyError');
-
-    if (!isValidLicenseKeyFormat(key)) {
-      errorEl.textContent = 'Invalid key format. Keys are 8-35 characters (letters, numbers, hyphens).';
-      errorEl.style.display = 'block';
-      return;
-    }
-
-    // Test keys (TESTDP-xxxx) bypass duplicate check
-    const isTestKey = /^TESTDP-/i.test(key);
-    if (!isTestKey && state.decisionPasses.some(dp => dp.key === key)) {
-      errorEl.textContent = 'This key has already been activated.';
+    if (!key) {
+      errorEl.textContent = 'Please enter a license key.';
       errorEl.style.display = 'block';
       return;
     }
 
     errorEl.style.display = 'none';
+    btn.disabled = true;
+    btn.textContent = 'Verifying...';
 
-    // Populate card selector with mapped cards
-    const cardSelect = document.getElementById('dpCardSelect');
-    const mappedCardIds = [...new Set(Object.values(state.cardMappings))].filter(id => id !== 'skip');
-    const allCardIds = mappedCardIds.length > 0 ? mappedCardIds : Object.keys(CARDS).filter(id => id !== 'skip');
-    cardSelect.innerHTML = '<option value="">Select a card...</option>' + allCardIds.map(id => {
-      const card = CARDS[id];
-      if (!card) return '';
-      const alreadyHasDP = hasActiveDecisionPass(id);
-      const label = alreadyHasDP ? `${escapeHtml(card.name)} (already upgraded)` : escapeHtml(card.name);
-      return `<option value="${escapeHtml(id)}" ${alreadyHasDP ? 'disabled' : ''}>${label}</option>`;
-    }).join('');
+    const result = await verifyGumroadLicense(key);
 
-    document.getElementById('dpCardSelector').style.display = 'block';
-  });
-
-  // --- Decision Pass key activation - Step 2: confirm card and activate ---
-  document.getElementById('dpConfirmActivation').addEventListener('click', () => {
-    const key = document.getElementById('dpKeyInput').value.trim();
-    const cardId = document.getElementById('dpCardSelect').value;
-    const errorEl = document.getElementById('dpKeyError');
-
-    if (!cardId) {
-      errorEl.textContent = 'Please select a card.';
-      errorEl.style.display = 'block';
-      return;
-    }
-
-    const success = activateDecisionPass(key, cardId);
-    if (success) {
-      document.getElementById('upgradeModal').classList.add('hidden');
-      if (state.results) renderView(state.activeView);
-      const configSection = document.getElementById('cardConfigSection');
-      if (configSection && !configSection.classList.contains('hidden')) {
-        const currentConfigCard = document.getElementById('configCardSelect')?.value;
-        if (currentConfigCard) showCardConfigEditor(currentConfigCard);
-      }
-    } else {
-      errorEl.textContent = 'Activation failed. Please check your key and try again.';
-      errorEl.style.display = 'block';
-    }
-  });
-
-  // --- Pro key activation ---
-  document.getElementById('proActivateBtn').addEventListener('click', () => {
-    const key = document.getElementById('proKeyInput').value.trim();
-    const errorEl = document.getElementById('proKeyError');
-
-    if (!isValidLicenseKeyFormat(key)) {
-      errorEl.textContent = 'Invalid key format. Keys are 8-35 characters (letters, numbers, hyphens).';
-      errorEl.style.display = 'block';
-      return;
-    }
-
-    const success = activateProAccess(key);
-    if (success) {
+    if (result.success) {
+      activateProAccess(key);
       document.getElementById('upgradeModal').classList.add('hidden');
       window.location.href = 'app-pro.html';
     } else {
-      errorEl.textContent = 'Activation failed. Please check your key and try again.';
+      btn.disabled = false;
+      btn.textContent = 'Activate';
+      errorEl.textContent = 'Invalid license key. Please check your key and try again.';
       errorEl.style.display = 'block';
     }
   });
@@ -248,7 +154,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
       document.getElementById('cardScenariosProUpgrade').addEventListener('click', function() {
         csModal.classList.add('hidden');
-        document.getElementById('comingSoonModal').classList.remove('hidden');
+        document.getElementById('upgradeModal').classList.remove('hidden');
       });
       csModal.addEventListener('click', function(e) {
         if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');

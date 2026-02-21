@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; form-action https://buttondown.com; base-uri 'self';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.gumroad.com; form-action https://buttondown.com; base-uri 'self';">
   <title>Credit Card Value Tracker</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💳</text></svg>">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -630,18 +630,6 @@
       </div>
     </div>
 
-    <!-- COMING SOON: Remove this entire modal block to restore direct upgrade flow -->
-    <div id="comingSoonModal" class="loading-overlay hidden" style="cursor:pointer;">
-      <div class="loading-modal" style="cursor:default;max-width:420px;text-align:center;">
-        <div style="font-size:40px;margin-bottom:12px;">🚀</div>
-        <h3 style="font-size:20px;font-weight:600;margin:0 0 8px;">More Features Coming Soon</h3>
-        <p style="font-size:14px;color:#57534e;line-height:1.6;margin-bottom:20px;">
-          New features to help you get even more out of your tracker are coming soon. Expect custom point valuations, editable spending categories, credit tracking, and more. Let me know what features you would like to see at <span id="comingSoonEmail" style="color:#2563eb;cursor:pointer;text-decoration:underline;"></span>.
-        </p>
-        <button id="closeComingSoon" class="btn btn-secondary" style="width:100%;justify-content:center;">Got it</button>
-      </div>
-    </div>
-
     <!-- Card Scenarios Pro Gate Modal -->
     <div id="cardScenariosProModal" class="loading-overlay hidden" style="cursor:pointer;">
       <div class="loading-modal" style="cursor:default;max-width:420px;text-align:center;">
@@ -666,46 +654,32 @@
           The free tracker shows 1 year of read-only data for all your cards. Upgrade to unlock editing, full history, and more.
         </p>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-          <!-- Decision Pass -->
-          <div style="border:2px solid #bbf7d0;border-radius:12px;padding:20px;display:flex;flex-direction:column;">
-            <div style="font-size:13px;font-weight:600;color:#059669;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Decision Pass</div>
-            <div style="font-family:'IBM Plex Mono',monospace;font-size:24px;font-weight:700;margin-bottom:4px;">$12 <span style="font-size:13px;font-weight:400;color:#78716c;">one-time</span></div>
-            <div style="font-size:13px;font-weight:500;color:#057a55;margin-bottom:10px;">Make your annual fee decision</div>
-            <ul style="font-size:12px;color:#44403c;list-style:none;padding:0;margin:0 0 14px 0;flex:1;">
-              <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span>Unlock 1 card for 7 days</li>
-              <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span>Full transaction history (not just 1 year)</li>
-              <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span>Edit categories &amp; card settings</li>
-              <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span>Card Year anniversary toggle</li>
-              <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span>Export your data</li>
+          <!-- Decision Pass (Coming Soon — greyed out) -->
+          <div style="border:2px solid #e7e5e4;border-radius:12px;padding:20px;display:flex;flex-direction:column;opacity:0.5;pointer-events:none;">
+            <div style="font-size:13px;font-weight:600;color:#a8a29e;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Decision Pass</div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:24px;font-weight:700;color:#a8a29e;margin-bottom:4px;">$12 <span style="font-size:13px;font-weight:400;color:#a8a29e;">one-time</span></div>
+            <div style="font-size:13px;font-weight:500;color:#a8a29e;margin-bottom:10px;">Make your annual fee decision</div>
+            <ul style="font-size:12px;color:#a8a29e;list-style:none;padding:0;margin:0 0 14px 0;flex:1;">
+              <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;font-weight:600;">&#10003;</span>Unlock 1 card for 7 days</li>
+              <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;font-weight:600;">&#10003;</span>Full transaction history (not just 1 year)</li>
+              <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;font-weight:600;">&#10003;</span>Edit categories &amp; card settings</li>
+              <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;font-weight:600;">&#10003;</span>Card Year anniversary toggle</li>
+              <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;font-weight:600;">&#10003;</span>Export your data</li>
             </ul>
-            <button id="upgradeChoiceDP" class="btn btn-primary" style="width:100%;justify-content:center;margin-bottom:10px;">Get Decision Pass — $12</button>
-            <div style="border-top:1px solid #e7e5e4;padding-top:10px;">
-              <div style="font-size:11px;font-weight:500;color:#78716c;margin-bottom:5px;">Already have a key?</div>
-              <div style="display:flex;gap:6px;">
-                <input type="text" id="dpKeyInput" placeholder="License key" class="form-select" style="flex:1;font-size:12px;padding:6px 8px;">
-                <button class="btn btn-secondary" id="dpActivateBtn" style="font-size:12px;padding:6px 12px;">Activate</button>
-              </div>
-              <div id="dpKeyError" style="font-size:11px;color:#dc2626;margin-top:4px;display:none;"></div>
-              <div id="dpCardSelector" style="display:none;margin-top:8px;">
-                <div style="font-size:12px;font-weight:500;margin-bottom:4px;">Which card?</div>
-                <select id="dpCardSelect" class="form-select" style="width:100%;margin-bottom:6px;font-size:12px;padding:6px 8px;"></select>
-                <button class="btn btn-primary" id="dpConfirmActivation" style="width:100%;justify-content:center;font-size:12px;padding:6px 12px;">Activate Decision Pass</button>
-              </div>
-            </div>
+            <button class="btn btn-secondary" disabled style="width:100%;justify-content:center;margin-bottom:10px;cursor:not-allowed;">Coming Soon</button>
           </div>
           <!-- Pro -->
-          <div style="border:2px solid #e7e5e4;border-radius:12px;padding:20px;display:flex;flex-direction:column;">
+          <div style="border:2px solid #1c1917;border-radius:12px;padding:20px;display:flex;flex-direction:column;">
             <div style="font-size:13px;font-weight:600;color:#1c1917;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Pro</div>
-            <div style="font-family:'IBM Plex Mono',monospace;font-size:24px;font-weight:700;margin-bottom:4px;">$24 <span style="font-size:13px;font-weight:400;color:#78716c;">/ year</span></div>
-            <div style="font-size:13px;font-weight:500;color:#57534e;margin-bottom:10px;">Track your whole portfolio</div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:24px;font-weight:700;margin-bottom:4px;">$14 <span style="font-size:13px;font-weight:400;color:#78716c;">/ year suggested</span></div>
+            <div style="font-size:13px;font-weight:500;color:#57534e;margin-bottom:10px;">Pay what you think is fair</div>
             <ul style="font-size:12px;color:#44403c;list-style:none;padding:0;margin:0 0 14px 0;flex:1;">
-              <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span>Everything in Decision Pass</li>
-              <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span>All cards, unlimited history</li>
-              <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span>Edit all categories &amp; settings</li>
+              <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span>All cards, 6 years of history</li>
+              <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span>Edit categories, credits &amp; card settings</li>
               <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span>Export all data</li>
-              <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span>Scenario calculator <span style="color:#a8a29e;">(coming soon)</span></li>
+              <li style="padding:3px 0;padding-left:18px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span>Scenario calculator</li>
             </ul>
-            <button id="upgradeChoicePro" class="btn btn-primary" style="width:100%;justify-content:center;margin-bottom:10px;background:#1c1917;">Get Pro — $24/year</button>
+            <button id="upgradeChoicePro" class="btn btn-primary" style="width:100%;justify-content:center;margin-bottom:10px;background:#1c1917;">Get Pro</button>
             <div style="border-top:1px solid #e7e5e4;padding-top:10px;">
               <div style="font-size:11px;font-weight:500;color:#78716c;margin-bottom:5px;">Already have a key?</div>
               <div style="display:flex;gap:6px;">
@@ -715,75 +689,6 @@
               <div id="proKeyError" style="font-size:11px;color:#dc2626;margin-top:4px;display:none;"></div>
             </div>
           </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Decision Pass Detail Modal -->
-    <div id="dpInfoModal" class="loading-overlay hidden" style="cursor:pointer;">
-      <div class="loading-modal" style="cursor:default;max-width:500px;text-align:left;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-          <h3 style="font-size:18px;font-weight:600;margin:0;">Decision Pass</h3>
-          <button id="closeDPInfoModal" style="background:none;border:none;font-size:20px;cursor:pointer;color:#78716c;">&times;</button>
-        </div>
-        <div style="background:#ecfdf5;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin-bottom:16px;">
-          <div style="font-weight:600;color:#059669;margin-bottom:8px;">How it works</div>
-          <div style="font-size:13px;color:#057a55;line-height:1.6;">
-            Decision Pass plugs directly into your free tracker. Pick one card, and for 7 days you get full editing access — recategorize transactions, tweak card settings, toggle Card Year view, and export data. You'll also see that card's complete transaction history, not just the last year.
-          </div>
-        </div>
-        <div style="font-size:13px;color:#44403c;line-height:1.7;margin-bottom:16px;">
-          <div style="font-weight:600;margin-bottom:8px;">What you unlock:</div>
-          <ul style="list-style:none;padding:0;margin:0;">
-            <li style="padding:4px 0;padding-left:22px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span><strong>Full history</strong> — see every transaction, not just the last 12 months</li>
-            <li style="padding:4px 0;padding-left:22px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span><strong>Edit categories</strong> — fix miscategorized transactions for accurate ROI</li>
-            <li style="padding:4px 0;padding-left:22px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span><strong>Card settings</strong> — adjust point values, credits, anniversary bonus</li>
-            <li style="padding:4px 0;padding-left:22px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span><strong>Card Year toggle</strong> — view ROI by anniversary year instead of calendar year</li>
-            <li style="padding:4px 0;padding-left:22px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span><strong>Export</strong> — download your data as CSV or JSON</li>
-          </ul>
-        </div>
-        <div style="background:#f5f5f4;border-radius:8px;padding:12px 16px;margin-bottom:16px;">
-          <div style="font-size:12px;color:#57534e;line-height:1.5;">
-            <strong>Perfect timing:</strong> Use it right before your annual fee hits. Upload your full year of statements, activate the pass on that card, and see exactly whether the card pays for itself.
-          </div>
-        </div>
-        <div style="text-align:center;">
-          <a id="dpGumroadLink" href="#" target="_blank" class="btn btn-primary" style="width:100%;justify-content:center;font-size:15px;padding:12px;">Buy Decision Pass — $12</a>
-          <p style="font-size:11px;color:#a8a29e;margin-top:8px;">One-time payment. You'll receive a license key to activate here.</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Pro Detail Modal -->
-    <div id="proInfoModal" class="loading-overlay hidden" style="cursor:pointer;">
-      <div class="loading-modal" style="cursor:default;max-width:500px;text-align:left;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-          <h3 style="font-size:18px;font-weight:600;margin:0;">Pro</h3>
-          <button id="closeProInfoModal" style="background:none;border:none;font-size:20px;cursor:pointer;color:#78716c;">&times;</button>
-        </div>
-        <div style="background:#fafaf9;border:1px solid #e7e5e4;border-radius:8px;padding:16px;margin-bottom:16px;">
-          <div style="font-weight:600;margin-bottom:8px;">Everything, unlocked</div>
-          <div style="font-size:13px;color:#57534e;line-height:1.6;">
-            Pro opens a separate experience with zero restrictions. Every card, every transaction, full editing, full history — plus advanced features as they ship. One subscription covers your entire portfolio.
-          </div>
-        </div>
-        <div style="font-size:13px;color:#44403c;line-height:1.7;margin-bottom:16px;">
-          <div style="font-weight:600;margin-bottom:8px;">Everything in Decision Pass, plus:</div>
-          <ul style="list-style:none;padding:0;margin:0;">
-            <li style="padding:4px 0;padding-left:22px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span><strong>All cards unlocked</strong> — edit categories, settings, and credits on every card</li>
-            <li style="padding:4px 0;padding-left:22px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span><strong>Unlimited history</strong> — full transaction data across all cards</li>
-            <li style="padding:4px 0;padding-left:22px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span><strong>Scenario calculator</strong> — see what adding or dropping a card would do <span style="color:#a8a29e;">(coming soon)</span></li>
-            <li style="padding:4px 0;padding-left:22px;position:relative;"><span style="position:absolute;left:0;color:#059669;font-weight:600;">&#10003;</span><strong>Continuous access</strong> — check before every annual fee, year-round</li>
-          </ul>
-        </div>
-        <div style="background:#f5f5f4;border-radius:8px;padding:12px 16px;margin-bottom:16px;">
-          <div style="font-size:12px;color:#57534e;line-height:1.5;">
-            <strong>Worth it if you carry 2+ cards.</strong> At $24/year, Pro costs less than two Decision Passes and covers your entire wallet indefinitely.
-          </div>
-        </div>
-        <div style="text-align:center;">
-          <a id="proGumroadLink" href="#" target="_blank" class="btn btn-primary" style="width:100%;justify-content:center;font-size:15px;padding:12px;background:#1c1917;">Get Pro — $24/year</a>
-          <p style="font-size:11px;color:#a8a29e;margin-top:8px;">Annual subscription. You'll receive a license key to activate here.</p>
         </div>
       </div>
     </div>

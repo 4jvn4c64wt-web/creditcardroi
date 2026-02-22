@@ -217,6 +217,18 @@ const SKIP_ACCOUNTS = ['checking', 'savings', 'sofi', 'bank', 'venmo',
 
 const CARDS = window.CardTracker.cards;
 
+// Virtual card for debit/no-rewards accounts (defined inline like skip)
+CARDS['other-no-rewards'] = {
+  name: "Debit / Other",
+  shortName: "Debit/Other",
+  annualFee: 0,
+  pointValue: 0,
+  multipliers: {},
+  baseRate: 0,
+  credits: [],
+  categories: ['other']
+};
+
 // =============================================================================
 // KNOWN MERCHANTS (loaded from merchants.js via CardTracker namespace)
 // =============================================================================
@@ -2388,11 +2400,16 @@ function showMapping(allLast4s) {
       <select class="form-select" data-last4="${escapeHtml(last4)}" style="flex:1;max-width:300px;">
         <option value="">Select card...</option>
         ${Object.entries(CARDS)
+          .filter(([id]) => id !== 'skip' && id !== 'other-no-rewards')
           .sort(([,a], [,b]) => a.name.localeCompare(b.name))
           .map(([id, c]) =>
           `<option value="${escapeHtml(id)}" ${state.cardMappings[last4] === id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`
         ).join('')}
+        <option disabled>──────────</option>
+        <option value="other-no-rewards" ${state.cardMappings[last4] === 'other-no-rewards' ? 'selected' : ''}>Debit / Other (no rewards)</option>
+        <option value="skip" ${state.cardMappings[last4] === 'skip' ? 'selected' : ''}>Skip / Don't Track</option>
       </select>
+      ${state.cardMappings[last4] === 'other-no-rewards' ? '<a href="https://docs.google.com/forms/d/e/1FAIpQLSdv50_OOmmuoArTW8FkmCuZhy7WuQH8A0GE1M8mYgTseakdOw/viewform" target="_blank" class="suggest-card-link">Don\'t see your card? Suggest it</a>' : ''}
       ${state.cardMappings[last4] ? '<span class="badge badge-green">Mapped</span>' : '<span class="badge badge-yellow">Needs mapping</span>'}
     </div>
   `}).join('');
@@ -2417,7 +2434,7 @@ function showCardConfigEditor(preselectedCardId = null) {
   document.getElementById('cardConfigSection').classList.remove('hidden');
   
   // Get cards that are actually in use, sorted alphabetically
-  const usedCardIds = [...new Set(state.results?.processed.map(t => t.cardId).filter(id => id && id !== 'skip') || [])]
+  const usedCardIds = [...new Set(state.results?.processed.map(t => t.cardId).filter(id => id && id !== 'skip' && id !== 'other-no-rewards') || [])]
     .sort((a, b) => (CARDS[a]?.name || a).localeCompare(CARDS[b]?.name || b));
   
   const select = document.getElementById('configCardSelect');
@@ -5013,7 +5030,7 @@ function getRemoveCardShiftRows(removeCardId, year, extraCardIds) {
 function getActiveCardIds(year) {
   if (!state.results || !state.results.processed) return [];
   const txns = state.results.processed.filter(t => {
-    if (t.isPayment || !t.cardId || t.cardId === 'skip') return false;
+    if (t.isPayment || !t.cardId || t.cardId === 'skip' || t.cardId === 'other-no-rewards') return false;
     if (year) return getYearFromDateString(t.date) === year;
     return true;
   });
@@ -5491,7 +5508,7 @@ function renderCardScenariosStep2() {
   const activeCardIds = getActiveCardIds(wi.selectedYear || state.selectedYear);
 
   // All available cards for adding (not already in wallet)
-  const allCardIds = Object.keys(CARDS).filter(id => id !== 'skip');
+  const allCardIds = Object.keys(CARDS).filter(id => id !== 'skip' && id !== 'other-no-rewards');
   const addOptions = allCardIds.filter(id => !activeCardIds.includes(id));
   const removeOptions = activeCardIds;
 
@@ -7316,7 +7333,7 @@ function renderView(view) {
     // Recalculate cards for filtered transactions
     const cardMap = {};
     filteredProcessed.forEach(t => {
-      if (!t.cardId || t.cardId === 'skip' || t.isPayment) return;
+      if (!t.cardId || t.cardId === 'skip' || t.cardId === 'other-no-rewards' || t.isPayment) return;
       if (!cardMap[t.cardId]) {
         const card = CARDS[t.cardId];
         cardMap[t.cardId] = {

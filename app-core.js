@@ -7743,8 +7743,8 @@ function renderView(view) {
             const cyPeriod = showCYToggle ? (cardDisplayData[c.cardId]?.cardYearPeriod || getCardYearPeriod(c.cardId, displayYear)) : null;
             const cyTooltip = showCYToggle
               ? (isCYActive
-                ? 'Card Year' + (cyPeriod ? ': ' + cyPeriod.startFormatted + ' \u2013 ' + cyPeriod.endFormatted : '') + '\nClick to switch back to calendar year (Jan\u2013Dec)'
-                : 'Switch to Card Year' + (cyPeriod ? ': ' + cyPeriod.startFormatted + ' \u2013 ' + cyPeriod.endFormatted : '') + '\nShows data aligned to your annual fee date instead of Jan\u2013Dec')
+                ? 'Switch to calendar year (Jan\u2013Dec)'
+                : 'Switch to card year' + (cyPeriod ? ' (' + cyPeriod.startFormatted + ' \u2013 ' + cyPeriod.endFormatted + ')' : ''))
               : '';
             return `<div class="flip-card" data-card-id="${escapeHtml(c.cardId)}">
               <div class="flip-card-inner">
@@ -7762,7 +7762,7 @@ function renderView(view) {
                   <div class="fc-bottom-row">
                     <div class="fc-annual-fee">${c.annualFee > 0 ? '-$' + c.annualFee + ' annual fee' : 'No annual fee'}</div>
                     <div style="display:flex;align-items:center;gap:8px;">
-                      ${showCYToggle ? '<span class="card-year-toggle tooltip tooltip-multiline tooltip-right" data-card-id="' + escapeHtml(c.cardId) + '" data-tooltip="' + escapeHtml(cyTooltip) + '" style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:3px;background:' + (isCYActive ? '#4b6bfb' : '#e7e5e4') + ';color:' + (isCYActive ? '#fff' : '#a8a29e') + ';cursor:pointer;">CY</span>' : ''}
+                      ${showCYToggle ? '<span class="card-year-toggle tooltip tooltip-right" data-card-id="' + escapeHtml(c.cardId) + '" data-tooltip="' + escapeHtml(cyTooltip) + '" style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:3px;background:' + (isCYActive ? '#4b6bfb' : '#e7e5e4') + ';color:' + (isCYActive ? '#fff' : '#a8a29e') + ';cursor:pointer;">CY</span>' : ''}
                       <div class="fc-flip-hint">\u21bb details</div>
                     </div>
                   </div>

@@ -316,7 +316,7 @@ This is the single source of truth for "how many points does this card earn on t
 
 ### Card Year vs Calendar Year
 
-Users can toggle between calendar year (Jan–Dec) and card year (anniversary-to-anniversary) for each card. Card year is determined by when the annual fee posts. The CY toggle on each summary card displays a contextual tooltip on hover explaining the current mode and showing the card year date range (e.g., "Mar 15, 2025 – Mar 14, 2026"). Tooltip text differs based on toggle state: when off it describes what card year mode is; when on it shows the active period and offers to switch back.
+Users can toggle between calendar year (Jan–Dec) and card year (anniversary-to-anniversary) for each card. Card year is determined by when the annual fee posts. The CY toggle on each summary card displays a contextual tooltip on hover: when off it shows "Switch to card year (dates)"; when on it shows "Switch to calendar year (Jan–Dec)".
 
 Functions: `getCardYearPeriod()`, `calculateCardYearMetrics()`, `getCardYearManualCredits()`, `getCardYearCreditsUsed()`
 

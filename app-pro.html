@@ -74,8 +74,8 @@
     .tooltip-multiline:hover::after { white-space: pre-line; text-align: left; min-width: 140px; }
     .tooltip-right:hover::after { left: auto; right: 0; transform: none; }
     .tooltip-right:hover::before { left: auto; right: 10px; transform: none; }
-    .card-year-toggle { transition: background 0.15s; }
-    .card-year-toggle:hover { transform: scale(1.2); }
+    .card-year-toggle { transition: background 0.15s; position: relative; }
+    .card-year-toggle:hover { opacity: 0.85; }
     @media (max-width: 900px) { .metrics-grid { grid-template-columns: repeat(2, 1fr); } .metric:nth-child(2), .metric:nth-child(4) { border-right: none; } }
     @media (max-width: 500px) { .metrics-grid { grid-template-columns: 1fr; } .metric { border-right: none; border-bottom: 1px solid #e7e5e4; } .metric:last-child { border-bottom: none; } }
 

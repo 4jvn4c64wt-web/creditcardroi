@@ -2409,7 +2409,7 @@ function showMapping(allLast4s) {
         <option value="other-no-rewards" ${state.cardMappings[last4] === 'other-no-rewards' ? 'selected' : ''}>Debit / Other (no rewards)</option>
         <option value="skip" ${state.cardMappings[last4] === 'skip' ? 'selected' : ''}>Skip / Don't Track</option>
       </select>
-      ${state.cardMappings[last4] === 'other-no-rewards' ? '<a href="https://docs.google.com/forms/d/e/1FAIpQLSdv50_OOmmuoArTW8FkmCuZhy7WuQH8A0GE1M8mYgTseakdOw/viewform" target="_blank" class="suggest-card-link">Don\'t see your card? Suggest it →</a>' : ''}
+      ${state.cardMappings[last4] === 'other-no-rewards' ? '<a href="https://docs.google.com/forms/d/e/1FAIpQLSdv50_OOmmuoArTW8FkmCuZhy7WuQH8A0GE1M8mYgTseakdOw/viewform" target="_blank" class="suggest-card-link">Don\'t see your card? Suggest it</a>' : ''}
       ${state.cardMappings[last4] ? '<span class="badge badge-green">Mapped</span>' : '<span class="badge badge-yellow">Needs mapping</span>'}
     </div>
   `}).join('');

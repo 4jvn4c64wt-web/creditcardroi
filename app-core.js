@@ -7740,6 +7740,12 @@ function renderView(view) {
 
             const showCYToggle = displayYear && canShowCardYearToggle(c.cardId) && isCardEditable(c.cardId, 'config');
             const isCYActive = showCYToggle && !!(cardDisplayData[c.cardId]?.isCardYearActive);
+            const cyPeriod = showCYToggle ? (cardDisplayData[c.cardId]?.cardYearPeriod || getCardYearPeriod(c.cardId, displayYear)) : null;
+            const cyTooltip = showCYToggle
+              ? (isCYActive
+                ? 'Switch to calendar year (Jan\u2013Dec)'
+                : 'Switch to card year' + (cyPeriod ? ' (' + cyPeriod.startFormatted + ' \u2013 ' + cyPeriod.endFormatted + ')' : ''))
+              : '';
             return `<div class="flip-card" data-card-id="${escapeHtml(c.cardId)}">
               <div class="flip-card-inner">
                 <div class="flip-card-front ${displayMetrics.netValue >= 0 ? 'positive-border' : 'negative-border'}">
@@ -7756,7 +7762,7 @@ function renderView(view) {
                   <div class="fc-bottom-row">
                     <div class="fc-annual-fee">${c.annualFee > 0 ? '-$' + c.annualFee + ' annual fee' : 'No annual fee'}</div>
                     <div style="display:flex;align-items:center;gap:8px;">
-                      ${showCYToggle ? '<span class="card-year-toggle" data-card-id="' + escapeHtml(c.cardId) + '" style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:3px;background:' + (isCYActive ? '#4b6bfb' : '#e7e5e4') + ';color:' + (isCYActive ? '#fff' : '#a8a29e') + ';cursor:pointer;" title="' + (isCYActive ? 'Showing card anniversary year' : 'Switch to card anniversary year') + '">CY</span>' : ''}
+                      ${showCYToggle ? '<span class="card-year-toggle" data-card-id="' + escapeHtml(c.cardId) + '" data-cy-tip="' + escapeHtml(cyTooltip) + '" style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:3px;background:' + (isCYActive ? '#4b6bfb' : '#e7e5e4') + ';color:' + (isCYActive ? '#fff' : '#a8a29e') + ';cursor:pointer;">CY</span>' : ''}
                       <div class="fc-flip-hint">\u21bb details</div>
                     </div>
                   </div>
@@ -7872,6 +7878,7 @@ function renderView(view) {
     document.querySelectorAll('.card-year-toggle').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
+        tooltipEl.classList.remove('visible');
         const cardId = btn.dataset.cardId;
         if (state.cardYearToggles[cardId]) {
           delete state.cardYearToggles[cardId];
@@ -7880,6 +7887,23 @@ function renderView(view) {
         }
         safeLocalStorageSet('ccTracker_cardYearToggles', state.cardYearToggles);
         renderView('summary');
+      });
+    });
+
+    // CY toggle tooltip (reuse body-appended tooltip to escape overflow:hidden)
+    document.querySelectorAll('.card-year-toggle[data-cy-tip]').forEach(btn => {
+      btn.addEventListener('mouseenter', (e) => {
+        e.stopPropagation();
+        tooltipEl.textContent = btn.dataset.cyTip;
+        tooltipEl.classList.add('visible');
+        const rect = btn.getBoundingClientRect();
+        let left = rect.left + rect.width / 2 - tooltipEl.offsetWidth / 2;
+        left = Math.max(8, Math.min(left, window.innerWidth - tooltipEl.offsetWidth - 8));
+        tooltipEl.style.left = left + 'px';
+        tooltipEl.style.top = (rect.top - tooltipEl.offsetHeight - 6) + 'px';
+      });
+      btn.addEventListener('mouseleave', () => {
+        tooltipEl.classList.remove('visible');
       });
     });
   }

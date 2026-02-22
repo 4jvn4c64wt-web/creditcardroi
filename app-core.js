@@ -261,7 +261,7 @@ let state = {
   // Tier state (persisted)
   // Decision Pass: array of { key: string, cardId: string, activatedAt: number (ms timestamp) }
   decisionPasses: safeLocalStorageGet('ccTracker_decisionPasses', []),
-  // Pro access: { key: string, activatedAt: number (ms timestamp) } or null
+  // Pro access: { key: string, lastVerified: number (ms timestamp) } or null
   proAccess: safeLocalStorageGet('ccTracker_proAccess', null),
   // Dismissed DP banners: { "config_<cardId>": true, "transactions": true } — per-page dismissals
   dpBannersDismissed: safeLocalStorageGet('ccTracker_dpBannersDismissed', {}),
@@ -499,7 +499,7 @@ function isValidLicenseKeyFormat(key) {
 }
 
 // Gumroad product ID for Pro license verification
-const GUMROAD_PRODUCT_ID = 'n2AyVcNGOfmk5sAwn4jObw==';
+const GUMROAD_PRODUCT_ID = '54OcsB81PuajdXbMdZh_iA==';
 
 /**
  * Verify a license key against Gumroad's API
@@ -556,24 +556,22 @@ function activateDecisionPass(key, cardId) {
  * @returns {boolean} True if activation succeeded
  */
 function activateProAccess(key) {
-  const now = Date.now();
   state.proAccess = {
     key: key.trim(),
-    activatedAt: now,
-    lastVerified: now
+    lastVerified: Date.now()
   };
   safeLocalStorageSet('ccTracker_proAccess', state.proAccess);
   return true;
 }
 
 /**
- * Check if Pro access is currently valid (365 days from activatedAt)
+ * Check if Pro access is currently valid (key exists in state)
+ * Subscription validity is controlled by Gumroad membership;
+ * the 7-day re-verification handles lapsed subscriptions.
  * @returns {boolean}
  */
 function hasValidProAccess() {
-  if (!state.proAccess) return false;
-  const elapsed = Date.now() - state.proAccess.activatedAt;
-  return elapsed <= 365 * 24 * 60 * 60 * 1000; // 365 days
+  return !!(state.proAccess && state.proAccess.key);
 }
 
 /**
@@ -9082,21 +9080,15 @@ async function handleFile(file) {
         safeLocalStorageSet('ccTracker_annualBonusPoints', backup.customAnnualBonusPoints);
       }
 
-      // Restore proAccess only if activatedAt is less than 365 days old
+      // Restore proAccess if key and lastVerified are present
       let importedProValid = false;
-      if (backup.proAccess && backup.proAccess.key && backup.proAccess.activatedAt) {
-        const elapsed = Date.now() - backup.proAccess.activatedAt;
-        if (elapsed <= 365 * 24 * 60 * 60 * 1000) {
-          // Preserve original activatedAt, carry over lastVerified as-is
-          state.proAccess = {
-            key: backup.proAccess.key,
-            activatedAt: backup.proAccess.activatedAt,
-            lastVerified: backup.proAccess.lastVerified || backup.proAccess.activatedAt
-          };
-          safeLocalStorageSet('ccTracker_proAccess', state.proAccess);
-          importedProValid = true;
-        }
-        // If expired, silently skip — no error shown
+      if (backup.proAccess && backup.proAccess.key && backup.proAccess.lastVerified) {
+        state.proAccess = {
+          key: backup.proAccess.key,
+          lastVerified: backup.proAccess.lastVerified
+        };
+        safeLocalStorageSet('ccTracker_proAccess', state.proAccess);
+        importedProValid = true;
       }
 
       // If proAccess was restored, verify with Gumroad before redirecting
@@ -9627,7 +9619,6 @@ async function initCore() {
             // Set up Pro access
             const testPro = {
               key: 'TESTPRO-SWITCH',
-              activatedAt: Date.now(),
               lastVerified: Date.now()
             };
             state.proAccess = testPro;

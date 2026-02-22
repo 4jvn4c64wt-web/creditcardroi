@@ -438,7 +438,7 @@ Stored in localStorage with `ccTracker_` prefix. Loaded on page init with `safeL
 | `columnMappings` | `ccTracker_columnMappings` | Remembered CSV column mappings by shape |
 | `savedTransactions` | `ccTracker_transactions` | All raw transactions |
 | `decisionPasses` | `ccTracker_decisionPasses` | Active Decision Pass keys |
-| `proAccess` | `ccTracker_proAccess` | Pro license: `{ key, activatedAt, lastVerified }`. `activatedAt` never changes after initial activation (not on re-verification, not on import). `lastVerified` is rolling — updates on every successful Gumroad API response. Excluded from clear/reset. Included in export/import: `activatedAt` expiry (365 days) checked on import, `lastVerified` carried over as-is so the 7-day re-verification window transfers correctly. |
+| `proAccess` | `ccTracker_proAccess` | Pro license: `{ key, lastVerified }`. `lastVerified` is rolling — updates on every successful Gumroad API response. Subscription validity is controlled entirely by Gumroad membership; if the membership lapses, the weekly re-verification will return `success: false` and access stops. Excluded from clear/reset. Included in export/import: `lastVerified` carried over as-is so the 7-day re-verification window transfers correctly. |
 | `dpBannersDismissed` | `ccTracker_dpBannersDismissed` | Dismissed upgrade banners |
 | `featureEducation` | `ccTracker_featureEducation` | Tracks which feature tutorials have been shown |
 
@@ -475,13 +475,13 @@ If you add a new persistent state field, you must update **all** of these locati
 
 Decision Passes are per-card temporary upgrades stored in `state.decisionPasses`. They last 7 days.
 
-### Pro Validation (two independent checks)
+### Pro Validation
 
-On every load of `app-pro.html`, `app-pro.js` runs two checks in order before calling `initCore()`:
+On every load of `app-pro.html`, `app-pro.js` runs a re-verification check before calling `initCore()`:
 
-1. **Re-verification (`lastVerified`)** — Controls how often the app phones home to Gumroad. If `lastVerified` is more than 7 days ago, the app calls `verifyGumroadLicense()`. On success, `lastVerified` updates to now and the app proceeds. On failure (API returns `success: false` or network error), a non-dismissable "Verification Required" modal appears with an OK button that redirects to `app.html`. If `lastVerified` is within 7 days, no API call is made.
+**Re-verification (`lastVerified`)** — Controls how often the app phones home to Gumroad. If `lastVerified` is more than 7 days ago, the app calls `verifyGumroadLicense()`. On success, `lastVerified` updates to now and the app proceeds. On failure (API returns `success: false` or network error), a non-dismissable "Verification Required" modal appears with an OK button that redirects to `app.html`. If `lastVerified` is within 7 days, no API call is made.
 
-2. **Subscription expiry (`activatedAt`)** — Controls the absolute 365-day subscription window. `activatedAt` never changes after initial activation. If more than 365 days have elapsed, a non-dismissable "Your Pro subscription has expired" modal appears with: a "Renew Pro" button (opens Gumroad checkout), a license key input + Activate button (for users who already renewed), and a "Return to Free" button (redirects to `app.html`).
+Subscription validity is controlled entirely by Gumroad — if the membership lapses, the weekly re-verification will return `success: false` and access stops. There is no local expiry check.
 
 ### Key Functions
 
@@ -495,7 +495,7 @@ On every load of `app-pro.html`, `app-pro.js` runs two checks in order before ca
 | `verifyGumroadLicense(key)` | POST to Gumroad API, returns `{ success }` |
 | `proNeedsReverification()` | Is `lastVerified` more than 7 days old? |
 | `updateProLastVerified()` | Update `lastVerified` to now |
-| `hasValidProAccess()` | Is `activatedAt` within 365 days? |
+| `hasValidProAccess()` | Does Pro access exist (key present)? |
 
 ### Special Cases
 
@@ -900,8 +900,8 @@ Quick lookup for the most commonly needed functions in `app-core.js`:
 | `parseDateString()` | 72 | Unified date parsing (multiple formats) |
 | `generateTransactionId()` | 175 | Content-based deduplication IDs |
 | `verifyGumroadLicense()` | 506 | POST to Gumroad API to verify a license key |
-| `activateProAccess()` | 545 | Store proAccess with key, activatedAt, lastVerified |
-| `hasValidProAccess()` | 557 | Check if activatedAt is within 365 days |
+| `activateProAccess()` | 558 | Store proAccess with key and lastVerified |
+| `hasValidProAccess()` | 573 | Check if Pro access exists (key present) |
 | `proNeedsReverification()` | 564 | Check if lastVerified is more than 7 days old |
 | `updateProLastVerified()` | 573 | Update lastVerified to current timestamp |
 | `normalize()` | 580 | Lowercase + strip non-alphanumeric |

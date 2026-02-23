@@ -3527,6 +3527,7 @@ function showResults(results, isNewUpload = false) {
   
   // Initial metrics (will be updated by filters)
   const t = results.totals;
+  // Update hidden backward-compat elements
   const metricSpendEl = document.getElementById('metricSpend');
   if (metricSpendEl) metricSpendEl.textContent = formatCurrency(t.spend);
   const metricPointsEl = document.getElementById('metricPoints');
@@ -3547,11 +3548,22 @@ function showResults(results, isNewUpload = false) {
     shellNetEl.textContent = (t.netValue < 0 ? '-' : '') + formatCurrency(t.netValue);
     shellNetEl.className = `shell-net-value ${t.netValue >= 0 ? 'positive' : 'negative'}`;
   }
-  // Update shell spend + return context line
-  const shellCtxEl = document.getElementById('shellNetContext');
-  if (shellCtxEl) {
+  // Update shell formula inputs (Point Value, Credits Used, Annual Fees)
+  const shellPVEl = document.getElementById('shellPointsValue');
+  if (shellPVEl) shellPVEl.textContent = formatCurrency(t.pointsValue);
+  const shellCreditsEl = document.getElementById('shellCreditsUsed');
+  if (shellCreditsEl) shellCreditsEl.textContent = formatCurrency(t.credits);
+  const shellAFEl = document.getElementById('shellAnnualFees');
+  if (shellAFEl) shellAFEl.textContent = formatCurrency(t.fees);
+  // Update expandable strip metrics (Total Spend, Points Earned, Return)
+  const stripSpendEl = document.getElementById('stripTotalSpend');
+  if (stripSpendEl) stripSpendEl.textContent = formatCurrency(t.spend);
+  const stripPointsEl = document.getElementById('stripPointsEarned');
+  if (stripPointsEl) stripPointsEl.textContent = formatNumber(t.points) + ' pts';
+  const stripReturnEl = document.getElementById('stripReturn');
+  if (stripReturnEl) {
     const returnPct = t.spend > 0 ? ((t.netValue / t.spend) * 100).toFixed(1) + '%' : '\u2014';
-    shellCtxEl.textContent = 'Spend: ' + formatCurrency(t.spend) + ' \u00B7 Return: ' + returnPct;
+    stripReturnEl.textContent = returnPct;
   }
 
   // Count low-confidence transactions actionable by this tier
@@ -7646,15 +7658,26 @@ function renderView(view) {
       shellNetEl.textContent = (netValue < 0 ? '-' : '') + formatCurrency(netValue);
       shellNetEl.className = `shell-net-value ${netValue >= 0 ? 'positive' : 'negative'}`;
     }
-    // Update shell spend + return context line
-    const shellCtxEl = document.getElementById('shellNetContext');
-    if (shellCtxEl) {
-      const returnPct = filteredTotals.spend > 0 ? ((netValue / filteredTotals.spend) * 100).toFixed(1) + '%' : '\u2014';
-      shellCtxEl.textContent = 'Spend: ' + formatCurrency(filteredTotals.spend) + ' \u00B7 Return: ' + returnPct;
-    }
-    // Update details strip values
+    // Update shell formula inputs (always-visible column)
+    const shellPVEl = document.getElementById('shellPointsValue');
+    if (shellPVEl) shellPVEl.textContent = formatCurrency(adjustedTotalPointsValue);
+    const shellCreditsEl = document.getElementById('shellCreditsUsed');
+    if (shellCreditsEl) shellCreditsEl.textContent = formatCurrency(adjustedTotalCredits);
+    const shellAFEl = document.getElementById('shellAnnualFees');
+    if (shellAFEl) shellAFEl.textContent = formatCurrency(totalAnnualFees);
+    // Update hidden backward-compat element
     const metricAFEl = document.getElementById('metricAnnualFees');
     if (metricAFEl) metricAFEl.textContent = formatCurrency(totalAnnualFees);
+    // Update expandable strip metrics (Total Spend, Points Earned, Return)
+    const stripSpendEl = document.getElementById('stripTotalSpend');
+    if (stripSpendEl) stripSpendEl.textContent = formatCurrency(filteredTotals.spend);
+    const stripPointsEl = document.getElementById('stripPointsEarned');
+    if (stripPointsEl) stripPointsEl.textContent = formatNumber(filteredTotals.points) + ' pts';
+    const stripReturnEl = document.getElementById('stripReturn');
+    if (stripReturnEl) {
+      const returnPct = filteredTotals.spend > 0 ? ((netValue / filteredTotals.spend) * 100).toFixed(1) + '%' : '\u2014';
+      stripReturnEl.textContent = returnPct;
+    }
 
 
     // Get available years for filter
@@ -8228,6 +8251,7 @@ function renderView(view) {
 
       const netValue = filteredTotals.pointsValue + filteredTotals.credits + totalManualCredits + totalAnnualBonus - totalAnnualFees;
 
+      // Update hidden backward-compat elements
       const mSpendTxn = document.getElementById('metricSpend');
       if (mSpendTxn) mSpendTxn.textContent = formatCurrency(filteredTotals.spend);
       const mPointsTxn = document.getElementById('metricPoints');
@@ -8241,6 +8265,31 @@ function renderView(view) {
         netEl.textContent = formatCurrency(netValue);
         netEl.classList.remove('positive', 'negative');
         netEl.classList.add(netValue >= 0 ? 'positive' : 'negative');
+      }
+      // Update shell header net value
+      const shellNetElTxn = document.getElementById('shellNetValue');
+      if (shellNetElTxn) {
+        shellNetElTxn.textContent = (netValue < 0 ? '-' : '') + formatCurrency(netValue);
+        shellNetElTxn.className = `shell-net-value ${netValue >= 0 ? 'positive' : 'negative'}`;
+      }
+      // Update shell formula inputs
+      const shellPVTxn = document.getElementById('shellPointsValue');
+      if (shellPVTxn) shellPVTxn.textContent = formatCurrency(filteredTotals.pointsValue);
+      const shellCreditsTxn = document.getElementById('shellCreditsUsed');
+      if (shellCreditsTxn) shellCreditsTxn.textContent = formatCurrency(filteredTotals.credits + totalManualCredits);
+      const shellAFTxn = document.getElementById('shellAnnualFees');
+      if (shellAFTxn) shellAFTxn.textContent = formatCurrency(totalAnnualFees);
+      const metricAFTxn = document.getElementById('metricAnnualFees');
+      if (metricAFTxn) metricAFTxn.textContent = formatCurrency(totalAnnualFees);
+      // Update expandable strip metrics (Total Spend, Points Earned, Return)
+      const stripSpendTxn = document.getElementById('stripTotalSpend');
+      if (stripSpendTxn) stripSpendTxn.textContent = formatCurrency(filteredTotals.spend);
+      const stripPointsTxn = document.getElementById('stripPointsEarned');
+      if (stripPointsTxn) stripPointsTxn.textContent = formatNumber(filteredTotals.points) + ' pts';
+      const stripReturnTxn = document.getElementById('stripReturn');
+      if (stripReturnTxn) {
+        const returnPct = filteredTotals.spend > 0 ? ((netValue / filteredTotals.spend) * 100).toFixed(1) + '%' : '\u2014';
+        stripReturnTxn.textContent = returnPct;
       }
       
       // Pagination
@@ -8467,6 +8516,52 @@ function renderView(view) {
   }
 
   if (view === 'cardscenarios') {
+    // Reset shell strip metrics to wallet totals (same as Summary for the selected year)
+    const csDisplayYear = state.selectedYear;
+    let csFiltered = r.processed;
+    if (csDisplayYear) {
+      csFiltered = r.processed.filter(t => getYearFromDate(t.date) === csDisplayYear);
+    }
+    csFiltered = applyTierDateFiltering(csFiltered);
+    const csTotals = csFiltered.reduce((acc, t) => {
+      if (!t.isPayment && !t.isAnnualFee) {
+        if (t.isCredit && !t.isRefund) {
+          acc.credits += Math.abs(t.amount);
+        } else if (!t.isCredit) {
+          acc.spend += Math.abs(t.amount);
+          acc.points += t.points || 0;
+          acc.pointsValue += t.pointsValue || 0;
+        }
+      }
+      return acc;
+    }, { spend: 0, points: 0, pointsValue: 0, credits: 0 });
+    // Compute annual fees for active cards
+    const csActiveCards = new Set(csFiltered.map(t => t.cardId).filter(id => id && id !== 'skip'));
+    let csAnnualFees = 0;
+    csActiveCards.forEach(cardId => { csAnnualFees += getEffectiveAnnualFee(cardId, csFiltered); });
+    const csNetValue = csTotals.pointsValue + csTotals.credits - csAnnualFees;
+    // Update shell header for card scenarios
+    const csShellNet = document.getElementById('shellNetValue');
+    if (csShellNet) {
+      csShellNet.textContent = (csNetValue < 0 ? '-' : '') + formatCurrency(csNetValue);
+      csShellNet.className = `shell-net-value ${csNetValue >= 0 ? 'positive' : 'negative'}`;
+    }
+    const csShellPV = document.getElementById('shellPointsValue');
+    if (csShellPV) csShellPV.textContent = formatCurrency(csTotals.pointsValue);
+    const csShellCr = document.getElementById('shellCreditsUsed');
+    if (csShellCr) csShellCr.textContent = formatCurrency(csTotals.credits);
+    const csShellAF = document.getElementById('shellAnnualFees');
+    if (csShellAF) csShellAF.textContent = formatCurrency(csAnnualFees);
+    // Update strip metrics
+    const csStripSpend = document.getElementById('stripTotalSpend');
+    if (csStripSpend) csStripSpend.textContent = formatCurrency(csTotals.spend);
+    const csStripPoints = document.getElementById('stripPointsEarned');
+    if (csStripPoints) csStripPoints.textContent = formatNumber(csTotals.points) + ' pts';
+    const csStripReturn = document.getElementById('stripReturn');
+    if (csStripReturn) {
+      const csReturnPct = csTotals.spend > 0 ? ((csNetValue / csTotals.spend) * 100).toFixed(1) + '%' : '\u2014';
+      csStripReturn.textContent = csReturnPct;
+    }
     renderCardScenarios();
   }
 }

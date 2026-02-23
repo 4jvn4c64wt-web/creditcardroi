@@ -100,7 +100,11 @@
     .shell-net-value { font-size: 28px; font-weight: 700; font-family: 'DM Mono', monospace; letter-spacing: -1px; line-height: 1.1; }
     .shell-net-value.positive { color: #166534; }
     .shell-net-value.negative { color: #991b1b; }
-    .shell-net-context { font-size: 11px; color: #9e9b96; font-family: 'DM Sans', sans-serif; margin-top: 2px; white-space: nowrap; }
+    .shell-formula-inputs { display: flex; flex-direction: column; gap: 2px; }
+    .shell-formula-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+    .shell-formula-label { font-size: 10px; font-weight: 600; color: #9e9b96; text-transform: uppercase; letter-spacing: 0.05em; }
+    .shell-formula-value { font-size: 13px; font-weight: 600; font-family: 'DM Mono', monospace; color: #1c1917; text-align: right; }
+    @media (max-width: 767px) { .shell-formula-inputs, .shell-formula-divider { display: none; } }
     .shell-expand-btn { width: 26px; height: 26px; border-radius: 50%; border: 1px solid #e8e5e0; background: #fff; color: #9e9b96; font-size: 16px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; margin-left: 10px; transition: all 0.15s; line-height: 1; }
     .shell-expand-btn:hover { background: #f5f5f4; color: #1c1917; }
     .shell-topbar-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -114,26 +118,17 @@
     /* Details strip */
     .shell-details-strip { overflow: hidden; transition: max-height 0.35s ease, opacity 0.3s ease; max-height: 0; opacity: 0; background: #fff; border-bottom: 1px solid #e8e5e0; }
     .shell-details-strip.open { max-height: 120px; opacity: 1; }
-    .shell-details-inner { max-width: 1400px; margin: 0 auto; padding: 12px 24px 14px; display: flex; align-items: center; gap: 0; flex-wrap: wrap; }
+    .shell-details-inner { max-width: 1400px; margin: 0 auto; padding: 12px 24px 14px; display: flex; align-items: center; gap: 40px; flex-wrap: wrap; }
     .shell-details-item { display: flex; flex-direction: column; align-items: center; min-width: 80px; }
     .shell-details-item-label { font-size: 10px; font-weight: 600; color: #9e9b96; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px; }
     .shell-details-item-value { font-size: 18px; font-weight: 600; font-family: 'DM Mono', monospace; color: #1c1917; }
-    .shell-details-op { font-size: 20px; font-weight: 500; color: #9e9b96; margin: 0 14px; padding-top: 12px; }
-    .shell-details-item.result .shell-details-item-value { font-weight: 700; }
-    .shell-details-item-value.positive { color: #059669; }
-    .shell-details-item-value.negative { color: #dc2626; }
 
     /* Stagger animation for details items */
-    .shell-details-item, .shell-details-op { opacity: 0; transform: translateY(8px); transition: opacity 0.3s ease, transform 0.3s ease; }
-    .shell-details-strip.open .shell-details-item,
-    .shell-details-strip.open .shell-details-op { opacity: 1; transform: translateY(0); }
+    .shell-details-item { opacity: 0; transform: translateY(8px); transition: opacity 0.3s ease, transform 0.3s ease; }
+    .shell-details-strip.open .shell-details-item { opacity: 1; transform: translateY(0); }
     .shell-details-strip.open .shell-details-item:nth-child(1) { transition-delay: 0ms; }
-    .shell-details-strip.open .shell-details-op:nth-child(2) { transition-delay: 50ms; }
-    .shell-details-strip.open .shell-details-item:nth-child(3) { transition-delay: 100ms; }
-    .shell-details-strip.open .shell-details-op:nth-child(4) { transition-delay: 150ms; }
-    .shell-details-strip.open .shell-details-item:nth-child(5) { transition-delay: 200ms; }
-    .shell-details-strip.open .shell-details-op:nth-child(6) { transition-delay: 250ms; }
-    .shell-details-strip.open .shell-details-item:nth-child(7) { transition-delay: 300ms; }
+    .shell-details-strip.open .shell-details-item:nth-child(2) { transition-delay: 100ms; }
+    .shell-details-strip.open .shell-details-item:nth-child(3) { transition-delay: 200ms; }
 
     /* Nav tabs bar */
     .shell-nav { background: #fff; border-bottom: 1px solid #e8e5e0; }
@@ -473,9 +468,23 @@
             <div class="shell-net-block">
               <div class="shell-net-label">NET VALUE</div>
               <div class="shell-net-value positive" id="shellNetValue">$0</div>
-              <div class="shell-net-context" id="shellNetContext"></div>
             </div>
-            <button class="shell-expand-btn" id="shellExpandBtn" title="Show breakdown">+</button>
+            <div class="shell-divider shell-formula-divider"></div>
+            <div class="shell-formula-inputs" id="shellFormulaInputs">
+              <div class="shell-formula-row">
+                <span class="shell-formula-label">Point Value</span>
+                <span class="shell-formula-value" id="shellPointsValue">$0</span>
+              </div>
+              <div class="shell-formula-row">
+                <span class="shell-formula-label">Credits Used</span>
+                <span class="shell-formula-value" id="shellCreditsUsed">$0</span>
+              </div>
+              <div class="shell-formula-row">
+                <span class="shell-formula-label">Annual Fees</span>
+                <span class="shell-formula-value" id="shellAnnualFees">$0</span>
+              </div>
+            </div>
+            <button class="shell-expand-btn" id="shellExpandBtn" title="Show metrics">+</button>
           </div>
           <div class="shell-topbar-right">
             <button class="btn btn-secondary" id="upgradeBtn" style="color:#059669;border-color:#bbf7d0;" title="Unlock editing, full history, and more">Upgrade to Pro</button>
@@ -518,27 +527,20 @@
         </div>
       </div>
 
-      <!-- Persistent Shell: Details Strip (hidden by default) -->
+      <!-- Persistent Shell: Details Strip (hidden by default, utility metrics) -->
       <div class="shell-details-strip" id="shellDetailsStrip">
         <div class="shell-details-inner">
           <div class="shell-details-item">
-            <div class="shell-details-item-label">Points Value</div>
-            <div class="shell-details-item-value" id="metricPointsValue">$0</div>
+            <div class="shell-details-item-label">Total Spend</div>
+            <div class="shell-details-item-value" id="stripTotalSpend">$0</div>
           </div>
-          <div class="shell-details-op">+</div>
           <div class="shell-details-item">
-            <div class="shell-details-item-label">Credits Used</div>
-            <div class="shell-details-item-value" id="metricCredits">$0</div>
+            <div class="shell-details-item-label">Points Earned</div>
+            <div class="shell-details-item-value" id="stripPointsEarned">0 pts</div>
           </div>
-          <div class="shell-details-op">&minus;</div>
           <div class="shell-details-item">
-            <div class="shell-details-item-label">Annual Fees</div>
-            <div class="shell-details-item-value" id="metricAnnualFees">$0</div>
-          </div>
-          <div class="shell-details-op">=</div>
-          <div class="shell-details-item result">
-            <div class="shell-details-item-label">Net Value</div>
-            <div class="shell-details-item-value" id="metricNetValue">$0</div>
+            <div class="shell-details-item-label">Return</div>
+            <div class="shell-details-item-value" id="stripReturn">0%</div>
           </div>
         </div>
       </div>
@@ -547,6 +549,10 @@
       <div id="topMetrics" style="display:none;">
         <div class="metric-value" id="metricPoints">0</div>
         <div id="metricSpend">$0</div>
+        <div id="metricPointsValue">$0</div>
+        <div id="metricCredits">$0</div>
+        <div id="metricAnnualFees">$0</div>
+        <div id="metricNetValue">$0</div>
       </div>
 
       <!-- Persistent Shell: Nav Tabs -->

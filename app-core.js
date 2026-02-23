@@ -7950,6 +7950,30 @@ function renderView(view) {
     */
 
     container.innerHTML = `
+      <div class="txn-metrics-bar">
+        <div class="txn-metrics-bar-inner">
+          <div class="txn-metrics-bar-item">
+            <div class="txn-metrics-bar-label">Total Spend</div>
+            <div class="txn-metrics-bar-value" id="txnBarSpend">$0</div>
+          </div>
+          <div class="txn-metrics-bar-item">
+            <div class="txn-metrics-bar-label">Points Earned</div>
+            <div class="txn-metrics-bar-value" id="txnBarPoints">0 pts</div>
+          </div>
+          <div class="txn-metrics-bar-item">
+            <div class="txn-metrics-bar-label">Point Value</div>
+            <div class="txn-metrics-bar-value" id="txnBarPointValue">$0</div>
+          </div>
+          <div class="txn-metrics-bar-item">
+            <div class="txn-metrics-bar-label">Annual Fee</div>
+            <div class="txn-metrics-bar-value" id="txnBarAnnualFee">$0</div>
+          </div>
+          <div class="txn-metrics-bar-item">
+            <div class="txn-metrics-bar-label">Return</div>
+            <div class="txn-metrics-bar-value" id="txnBarReturn">&mdash;</div>
+          </div>
+        </div>
+      </div>
       <div style="max-width:1400px;margin:0 auto;padding:24px;">
       <div class="card">
         <h2 class="card-title">Transaction Detail</h2>
@@ -8242,7 +8266,52 @@ function renderView(view) {
         netEl.classList.remove('positive', 'negative');
         netEl.classList.add(netValue >= 0 ? 'positive' : 'negative');
       }
-      
+
+      // Prorated annual fee for the transactions metrics bar
+      let proratedAnnualFee = 0;
+      for (const cardId of filteredCardIds) {
+        const cardDef = CARDS[cardId];
+        if (!cardDef) continue;
+        const cardTxnsForProration = txns.filter(t => t.cardId === cardId && !t.isPayment && !t.isAnnualFee);
+        const monthSet = new Set();
+        for (const t of cardTxnsForProration) {
+          const dateStr = t.date;
+          let year, month;
+          if (dateStr.includes('-')) {
+            year = dateStr.split('-')[0];
+            month = dateStr.split('-')[1];
+          } else if (dateStr.includes('/')) {
+            month = dateStr.split('/')[0];
+            year = dateStr.split('/')[2];
+            if (year.length === 2) year = '20' + year;
+          }
+          if (year && month) monthSet.add(year + '-' + month);
+        }
+        const distinctMonths = monthSet.size;
+        const effectiveFee = getEffectiveAnnualFee(cardId, txns);
+        proratedAnnualFee += (distinctMonths / 12) * effectiveFee;
+      }
+
+      // Update transactions metrics bar
+      const txnBarSpend = document.getElementById('txnBarSpend');
+      if (txnBarSpend) txnBarSpend.textContent = formatCurrency(filteredTotals.spend);
+      const txnBarPoints = document.getElementById('txnBarPoints');
+      if (txnBarPoints) txnBarPoints.textContent = formatNumber(filteredTotals.points) + ' pts';
+      const txnBarPointValue = document.getElementById('txnBarPointValue');
+      if (txnBarPointValue) txnBarPointValue.textContent = formatCurrency(filteredTotals.pointsValue);
+      const txnBarAnnualFee = document.getElementById('txnBarAnnualFee');
+      if (txnBarAnnualFee) txnBarAnnualFee.textContent = formatCurrency(proratedAnnualFee);
+      const txnBarReturn = document.getElementById('txnBarReturn');
+      if (txnBarReturn) {
+        if (filteredTotals.spend > 0) {
+          const totalCreditsForReturn = filteredTotals.credits + totalManualCredits;
+          const returnPct = (filteredTotals.pointsValue + totalCreditsForReturn - proratedAnnualFee) / filteredTotals.spend * 100;
+          txnBarReturn.textContent = returnPct.toFixed(1) + '%';
+        } else {
+          txnBarReturn.innerHTML = '&mdash;';
+        }
+      }
+
       // Pagination
       const pageSize = 100;
       const currentPage = parseInt(document.getElementById('txnPage')?.value || '1');

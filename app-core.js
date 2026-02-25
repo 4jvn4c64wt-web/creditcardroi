@@ -245,6 +245,110 @@ function getEffectiveCategory(specificCategory, cardId) { return window.CardTrac
 function classifyToSpecificCategory(merchantName) { return window.CardTracker.classification.classifyToSpecificCategory(merchantName); }
 
 // =============================================================================
+// DATA MIGRATION SYSTEM
+// =============================================================================
+
+// Current data schema version. Increment when adding a new migration.
+const DATA_VERSION = 1;
+const DATA_VERSION_KEY = 'ccTracker_dataVersion';
+
+/**
+ * Migration registry. Each entry migrates data from version N to version N+1.
+ * Index 0 = migration from version 0 → 1 (bootstrap)
+ *
+ * Rules for writing migrations:
+ * - Read/write directly to localStorage (state object does not exist yet)
+ * - Use safeJSONParse() and safeLocalStorageSet() for safe access
+ * - Be idempotent where possible (safe to re-run)
+ * - Never delete data — only transform or add
+ */
+const DATA_MIGRATIONS = [
+  // Version 0 → 1: Bootstrap migration
+  // Absorbs the Lyft Pink → Lyft Credit rename.
+  // Migrates monthlyCredits from legacy array format to year-based object.
+  function migrateV0toV1() {
+    console.log('[Migration] Running v0 → v1 (bootstrap)');
+
+    // --- Lyft Pink → Lyft Credit rename ---
+    const oldName = 'Lyft Pink', newName = 'Lyft Credit';
+
+    const disabledCredits = safeJSONParse(localStorage.getItem('ccTracker_disabledCredits'), {});
+    let changed = false;
+    for (const cardId in disabledCredits) {
+      const arr = disabledCredits[cardId];
+      if (Array.isArray(arr)) {
+        const idx = arr.indexOf(oldName);
+        if (idx !== -1) { arr[idx] = newName; changed = true; }
+      }
+    }
+    if (changed) safeLocalStorageSet('ccTracker_disabledCredits', disabledCredits);
+
+    const creditOverrides = safeJSONParse(localStorage.getItem('ccTracker_creditOverrides'), {});
+    changed = false;
+    for (const txnId in creditOverrides) {
+      if (creditOverrides[txnId] === oldName) { creditOverrides[txnId] = newName; changed = true; }
+    }
+    if (changed) safeLocalStorageSet('ccTracker_creditOverrides', creditOverrides);
+
+    // --- monthlyCredits: migrate legacy array format to year-based object ---
+    const monthlyCredits = safeJSONParse(localStorage.getItem('ccTracker_monthlyCredits'), {});
+    let mcChanged = false;
+    const currentYear = new Date().getFullYear();
+    for (const cardId in monthlyCredits) {
+      for (const creditName in monthlyCredits[cardId]) {
+        if (Array.isArray(monthlyCredits[cardId][creditName])) {
+          const legacyMonths = monthlyCredits[cardId][creditName];
+          monthlyCredits[cardId][creditName] = { [currentYear]: legacyMonths };
+          mcChanged = true;
+        }
+      }
+    }
+    if (mcChanged) safeLocalStorageSet('ccTracker_monthlyCredits', monthlyCredits);
+
+    console.log('[Migration] v0 → v1 complete');
+  }
+];
+
+/**
+ * Run all pending data migrations.
+ * Reads the stored version, runs each migration sequentially,
+ * then writes the new version. Runs synchronously before state init.
+ */
+function runDataMigrations() {
+  let storedVersion = safeJSONParse(localStorage.getItem(DATA_VERSION_KEY), 0);
+
+  if (storedVersion > DATA_VERSION) {
+    console.warn(`[Migration] Stored data version (${storedVersion}) is ahead of code version (${DATA_VERSION}). Skipping migrations.`);
+    return;
+  }
+
+  if (storedVersion === DATA_VERSION) {
+    return;
+  }
+
+  console.log(`[Migration] Data version ${storedVersion} → ${DATA_VERSION}: running ${DATA_VERSION - storedVersion} migration(s)`);
+
+  for (let v = storedVersion; v < DATA_VERSION; v++) {
+    if (DATA_MIGRATIONS[v]) {
+      try {
+        DATA_MIGRATIONS[v]();
+      } catch (e) {
+        console.error(`[Migration] Failed at v${v} → v${v + 1}:`, e);
+        return;
+      }
+    } else {
+      console.warn(`[Migration] No migration function for v${v} → v${v + 1}, skipping`);
+    }
+  }
+
+  safeLocalStorageSet(DATA_VERSION_KEY, DATA_VERSION);
+  console.log(`[Migration] Data version is now ${DATA_VERSION}`);
+}
+
+// Execute migrations before state initialization
+runDataMigrations();
+
+// =============================================================================
 // STATE
 // =============================================================================
 let state = {
@@ -318,23 +422,6 @@ let state = {
   tourActive: false,
   featureEducation: safeLocalStorageGet('ccTracker_featureEducation', {}) // tracks which feature tutorials have been shown
 };
-
-// Migrate "Lyft Pink" → "Lyft Credit" in persisted credit settings
-(function migrateLyftPinkName() {
-  const oldName = 'Lyft Pink', newName = 'Lyft Credit';
-  let changed = false;
-  for (const cardId in state.disabledCredits) {
-    const arr = state.disabledCredits[cardId];
-    const idx = arr.indexOf(oldName);
-    if (idx !== -1) { arr[idx] = newName; changed = true; }
-  }
-  if (changed) safeLocalStorageSet('ccTracker_disabledCredits', state.disabledCredits);
-  changed = false;
-  for (const txnId in state.creditOverrides) {
-    if (state.creditOverrides[txnId] === oldName) { state.creditOverrides[txnId] = newName; changed = true; }
-  }
-  if (changed) safeLocalStorageSet('ccTracker_creditOverrides', state.creditOverrides);
-})();
 
 // =============================================================================
 // DECISION PASS & TIER LOGIC
@@ -8878,6 +8965,7 @@ function buildExportData() {
 
   return {
     version: '1.1',
+    dataVersion: DATA_VERSION,
     exportedAt: new Date().toISOString(),
     appName: 'Credit Card ROI Tracker',
     transactions: state.savedTransactions,
@@ -9119,6 +9207,19 @@ async function handleFile(file) {
       if (backup.customAnnualBonusPoints) {
         state.customAnnualBonusPoints = backup.customAnnualBonusPoints;
         safeLocalStorageSet('ccTracker_annualBonusPoints', backup.customAnnualBonusPoints);
+      }
+
+      // Run migrations on imported data if it came from an older version
+      const importedDataVersion = typeof backup.dataVersion === 'number' ? backup.dataVersion : 0;
+      if (importedDataVersion < DATA_VERSION) {
+        safeLocalStorageSet(DATA_VERSION_KEY, importedDataVersion);
+        runDataMigrations();
+        // Re-read migrated data into state
+        state.disabledCredits = safeLocalStorageGet('ccTracker_disabledCredits', {});
+        state.creditOverrides = safeLocalStorageGet('ccTracker_creditOverrides', {});
+        state.monthlyCredits = safeLocalStorageGet('ccTracker_monthlyCredits', {});
+      } else {
+        safeLocalStorageSet(DATA_VERSION_KEY, DATA_VERSION);
       }
 
       // Restore proAccess if key and lastVerified are present

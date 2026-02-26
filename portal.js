@@ -33,6 +33,11 @@ window.CardTracker.portal = (function() {
       label: 'Capital One Travel',
       keywords: ['capital one travel', 'capitalonetravel', 'capitalone travel',
                  'capone travel', 'c1 travel']
+    },
+    'capital-one-entertainment': {
+      label: 'Capital One Entertainment',
+      keywords: ['capital one entertainment', 'capitaloneentertainment',
+                 'c1 entertainment']
     }
   };
 

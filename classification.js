@@ -111,11 +111,6 @@ window.CardTracker.classification.CATEGORY_HIERARCHY = {
   'travel': null,
   'flights-direct': 'travel',
   'hotels-direct': 'travel',
-  'chase-travel': 'travel', // Chase Travel portal (child of travel)
-  'amex-travel': 'travel', // Amex Travel portal (child of travel)
-  'bilt-travel': 'travel', // Bilt Travel portal (child of travel)
-  'capital-one-travel': 'travel', // Capital One Travel portal (child of travel)
-  'capital-one-entertainment': 'entertainment', // Capital One Entertainment (child of entertainment)
   'rent': null,
   'ground-transport': 'transit',
   'other': null

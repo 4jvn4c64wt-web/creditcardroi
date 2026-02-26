@@ -4365,7 +4365,7 @@ function renderCardScenariosStep1() {
 
 function renderCardScenariosStep2() {
   const wi = state.cardScenarios;
-  const activeCardIds = getActiveCardIds(wi.selectedYear || state.selectedYear);
+  const activeCardIds = getActiveCardIds(); // No year filter — year is chosen in step 3
 
   // All available cards for adding (not already in wallet)
   const allCardIds = Object.keys(CARDS).filter(id => id !== 'skip' && id !== 'other-no-rewards');

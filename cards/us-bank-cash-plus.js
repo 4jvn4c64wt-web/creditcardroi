@@ -232,5 +232,72 @@ window.CardTracker.cards['us-bank-cash-plus'] = {
         'Famous Dave\'s BBQ', 'Postmates', 'Village Inn'
       ]
     }
-  }
+  },
+
+  // Plugin hooks
+
+  getMultiplier: function(category, txnDate, merchantDesc, ctx) {
+    // Helper to get year from date
+    function getYearFromDate(dateStr) {
+      if (!dateStr) return new Date().getFullYear();
+      if (dateStr.includes('-')) return parseInt(dateStr.split('-')[0]);
+      if (dateStr.includes('/')) {
+        var parts = dateStr.split('/');
+        var yearPart = parts[2];
+        return parseInt(yearPart.length === 2 ? '20' + yearPart : yearPart);
+      }
+      return new Date().getFullYear();
+    }
+
+    var quarter = txnDate ? ctx.getQuarterForDate(txnDate) : ctx.getCurrentQuarter();
+    var year = getYearFromDate(txnDate);
+    var yearQuarterKey = year + '-' + quarter;
+
+    // Try year-specific key first, then fall back to quarter-only key for legacy data
+    var quarterCats = ctx.state.cashPlusCategories[yearQuarterKey] || ctx.state.cashPlusCategories[quarter];
+
+    if (quarterCats) {
+      // Walk up hierarchy to check if this category or any parent matches 5% selection
+      var checkCat = category;
+      while (checkCat) {
+        if (quarterCats.fivePercent && quarterCats.fivePercent.indexOf(checkCat) >= 0) {
+          var reason = checkCat !== category
+            ? '5% ' + checkCat + ' (from ' + category + ', ' + year + ' ' + quarter + ')'
+            : '5% ' + category + ' (' + year + ' ' + quarter + ' selection)';
+          return { rate: 5, reason: reason };
+        }
+        checkCat = ctx.CATEGORY_HIERARCHY[checkCat];
+      }
+
+      // Walk up hierarchy to check if this category or any parent matches 2% selection
+      checkCat = category;
+      while (checkCat) {
+        if (quarterCats.twoPercent === checkCat) {
+          var reason2 = checkCat !== category
+            ? '2% ' + checkCat + ' (from ' + category + ', ' + year + ' ' + quarter + ')'
+            : '2% ' + category + ' (' + year + ' ' + quarter + ' selection)';
+          return { rate: 2, reason: reason2 };
+        }
+        checkCat = ctx.CATEGORY_HIERARCHY[checkCat];
+      }
+    }
+
+    // Cash+ base rate is 1%
+    return { rate: 1, reason: '1% base rate' };
+  },
+
+  getCategories: function(txnDate, ctx) {
+    // Show ALL possible 5% and 2% categories so user can always recategorize
+    var allPossible5Pct = ['streaming', 'utilities', 'cell-phone', 'department-stores',
+                          'electronics', 'furniture', 'fast-food', 'fitness',
+                          'ground-transport', 'movie-theaters', 'sporting-goods', 'select-clothing'];
+    var allPossible2Pct = ['gas', 'grocery', 'dining'];
+    var seen = {};
+    var unique = [];
+    var all = allPossible5Pct.concat(allPossible2Pct).concat(['other']);
+    for (var i = 0; i < all.length; i++) {
+      if (!seen[all[i]]) { seen[all[i]] = true; unique.push(all[i]); }
+    }
+    return unique;
+  },
 };

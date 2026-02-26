@@ -245,6 +245,35 @@ function getEffectiveCategory(specificCategory, cardId) { return window.CardTrac
 function classifyToSpecificCategory(merchantName) { return window.CardTracker.classification.classifyToSpecificCategory(merchantName); }
 
 // =============================================================================
+// CARD PLUGIN CONTEXT
+// =============================================================================
+// Provides shared utilities to card plugin hooks at runtime.
+// Card files load before app-core.js, but hooks are called at runtime so they
+// can access all utilities through this context object.
+
+function buildPluginCtx() {
+  return {
+    state,
+    CARDS,
+    CATEGORY_HIERARCHY,
+    getEffectiveCategory,
+    getQuarterForDate,
+    getCurrentQuarter,
+    getYearFromDateString,
+    getPointValue,
+    getActiveCardIds,
+    parseDateString,
+    formatCurrency,
+    escapeHtml,
+    normalize,
+    safeLocalStorageSet,
+    safeLocalStorageGet,
+    isBiltCardConfigured,
+    cffQuarterlyData: window.CardTracker.cffQuarterlyData || {},
+  };
+}
+
+// =============================================================================
 // DATA MIGRATION SYSTEM
 // =============================================================================
 
@@ -764,51 +793,11 @@ function shouldSkipByAccountType(accountType) {
 function getCardCategories(cardId, txnDate = null) {
   const card = CARDS[cardId];
   if (!card) return ['other'];
-  
-  // Special handling for Cash+
-  // Show ALL possible 5% and 2% categories so user can always recategorize
-  if (cardId === 'us-bank-cash-plus') {
-    const allPossible5Pct = ['streaming', 'utilities', 'cell-phone', 'department-stores', 
-                            'electronics', 'furniture', 'fast-food', 'fitness', 
-                            'ground-transport', 'movie-theaters', 'sporting-goods', 'select-clothing'];
-    const allPossible2Pct = ['gas', 'grocery', 'dining'];
-    return [...new Set([...allPossible5Pct, ...allPossible2Pct, 'other'])];
-  }
-  
-  // Special handling for Chase Freedom Flex (quarterly rotating 5% categories)
-  // Dynamically derive all possible quarterly categories from cffQuarterlyData
-  // so new quarterly entries are automatically available for recategorization
-  if (cardId === 'chase-freedom-flex') {
-    const baseCats = ['chase-travel', 'dining', 'drugstore'];
-    const CFF_DATA = window.CardTracker.cffQuarterlyData || {};
-    const allQuarterlyKeys = new Set();
-    for (const entries of Object.values(CFF_DATA)) {
-      for (const entry of entries) {
-        allQuarterlyKeys.add(entry.key);
-      }
-    }
-    return [...new Set([...baseCats, ...allQuarterlyKeys, 'other'])];
-  }
 
-  // Special handling for CSR legacy (before Oct 26, 2025)
-  if (cardId === 'chase-sapphire-reserve' && card.legacyCutoffDate) {
-    const csrCutoff = new Date(card.legacyCutoffDate);
-    const txnDateObj = txnDate ? new Date(txnDate) : new Date();
-    if (txnDateObj < csrCutoff) {
-      // Use legacy categories from card definition (includes lyft for Chase partnership)
-      return card.legacy?.categories || ['chase-travel', 'travel', 'dining', 'lyft', 'other'];
-    }
-  }
-
-  // Special handling for Bilt legacy (before Feb 7, 2026)
-  // Before Bilt 2.0, all Bilt cards had the same categories: dining, travel, rent, other
-  if (card.isBilt) {
-    const bilt2StartDate = new Date(2026, 1, 7); // Feb 7, 2026
-    const txnDateObj = txnDate ? new Date(txnDate) : new Date();
-    if (txnDateObj < bilt2StartDate) {
-      // Use legacy categories - same for all Bilt cards before 2.0
-      return card.legacy?.categories || ['dining', 'travel', 'rent', 'other'];
-    }
+  // Plugin hook: card-specific category list
+  if (typeof card.getCategories === 'function') {
+    const result = card.getCategories(txnDate, buildPluginCtx());
+    if (result != null) return result;
   }
 
   return card.categories || ['other'];
@@ -943,17 +932,21 @@ function checkPOSPatterns(normalizedMerchant) { return window.CardTracker.classi
 function checkAddressPatterns(normalizedMerchant) { return window.CardTracker.classification.checkAddressPatterns(normalizedMerchant); }
 function classifyTravel(normalizedText, cardId) { return window.CardTracker.classification.classifyTravel(normalizedText, cardId); }
 
-// CFF and CFU are cash back cards (1 cpp) unless paired with a Sapphire card,
-// which allows transferring rewards to Ultimate Rewards points (1.8 cpp).
+// Default point value with plugin override support.
+// Cards can define getPointValueOverride(walletCardIds, ctx) to adjust their
+// point value based on wallet composition (e.g., CFF/CFU paired with Sapphire).
 function getDefaultPointValue(cardId) {
-  if (cardId === 'chase-freedom-flex' || cardId === 'chase-freedom-unlimited') {
-    const mappedCards = new Set(Object.values(state.cardMappings));
-    if (mappedCards.has('chase-sapphire-preferred') || mappedCards.has('chase-sapphire-reserve')) {
-      return 0.018;
-    }
-    return 0.01;
+  const card = CARDS[cardId];
+  if (!card) return 0.01;
+
+  // Plugin hook: point value override based on wallet composition
+  if (typeof card.getPointValueOverride === 'function') {
+    const walletCardIds = [...new Set(Object.values(state.cardMappings))].filter(id => id && id !== 'skip' && id !== 'other-no-rewards');
+    const result = card.getPointValueOverride(walletCardIds, buildPluginCtx());
+    if (result != null) return result;
   }
-  return CARDS[cardId]?.pointValue || 0.01;
+
+  return card.pointValue || 0.01;
 }
 
 function getPointValue(cardId) {
@@ -1122,350 +1115,14 @@ function detectBiltRentPayments(transactions, cardId) {
 function getMultiplier(cardId, category, txnDate = null, merchantDesc = '') {
   const card = CARDS[cardId];
   if (!card) return { rate: 1, reason: 'Unknown card' };
-  
-  // Helper to get year from date
-  function getYearFromDate(dateStr) {
-    if (!dateStr) return new Date().getFullYear();
-    if (dateStr.includes('-')) return parseInt(dateStr.split('-')[0]);
-    if (dateStr.includes('/')) {
-      const parts = dateStr.split('/');
-      const yearPart = parts[2];
-      return parseInt(yearPart.length === 2 ? '20' + yearPart : yearPart);
-    }
-    return new Date().getFullYear();
-  }
-  
-  // Special handling for Cash+ with quarterly category selection
-  if (cardId === 'us-bank-cash-plus') {
-    const quarter = txnDate ? getQuarterForDate(txnDate) : getCurrentQuarter();
-    const year = getYearFromDate(txnDate);
-    const yearQuarterKey = `${year}-${quarter}`;
 
-    // Try year-specific key first, then fall back to quarter-only key for legacy data
-    const quarterCats = state.cashPlusCategories[yearQuarterKey] || state.cashPlusCategories[quarter];
-
-    if (quarterCats) {
-      // Walk up hierarchy to check if this category or any parent matches 5% selection
-      let checkCat = category;
-      while (checkCat) {
-        if (quarterCats.fivePercent?.includes(checkCat)) {
-          const reason = checkCat !== category
-            ? `5% ${checkCat} (from ${category}, ${year} ${quarter})`
-            : `5% ${category} (${year} ${quarter} selection)`;
-          return { rate: 5, reason };
-        }
-        checkCat = CATEGORY_HIERARCHY[checkCat];
-      }
-
-      // Walk up hierarchy to check if this category or any parent matches 2% selection
-      checkCat = category;
-      while (checkCat) {
-        if (quarterCats.twoPercent === checkCat) {
-          const reason = checkCat !== category
-            ? `2% ${checkCat} (from ${category}, ${year} ${quarter})`
-            : `2% ${category} (${year} ${quarter} selection)`;
-          return { rate: 2, reason };
-        }
-        checkCat = CATEGORY_HIERARCHY[checkCat];
-      }
-    }
-    // Cash+ base rate is 1%
-    return { rate: 1, reason: '1% base rate' };
-  }
-  
-  // Special handling for CFF with quarterly rotating categories (from stored historical data)
-  if (cardId === 'chase-freedom-flex') {
-    const quarter = txnDate ? getQuarterForDate(txnDate) : getCurrentQuarter();
-    const year = getYearFromDate(txnDate);
-    const yearQuarterKey = `${year}-${quarter}`;
-
-    // Look up stored quarterly bonus categories
-    const CFF_DATA = window.CardTracker.cffQuarterlyData || {};
-    const quarterEntries = CFF_DATA[yearQuarterKey] || [];
-    const normMerchant = (merchantDesc || '').toLowerCase();
-
-    // Helper to parse transaction month (1-12)
-    function getTxnMonth(dateStr) {
-      if (!dateStr) return new Date().getMonth() + 1;
-      if (dateStr.includes('-')) return parseInt(dateStr.split('-')[1]); // YYYY-MM-DD
-      if (dateStr.includes('/')) return parseInt(dateStr.split('/')[0]); // MM/DD/YYYY
-      return new Date().getMonth() + 1;
-    }
-
-    // Check each stored quarterly category for a match
-    for (const entry of quarterEntries) {
-      // Month-only restriction (e.g., PayPal December-only, Internet June-only)
-      if (entry.monthOnly) {
-        const txnMonth = getTxnMonth(txnDate);
-        if (txnMonth !== entry.monthOnly) continue;
-      }
-
-      // PayPal: match by merchant description (payment wrapper, not a category)
-      if (entry.key === 'paypal') {
-        if (normMerchant.includes('paypal')) {
-          const monthNote = entry.monthOnly ? ` ${new Date(2000, entry.monthOnly - 1).toLocaleString('en', {month: 'long'})}` : '';
-          return { rate: entry.rate, reason: `${entry.rate}% PayPal (${year} ${quarter}${monthNote})` };
-        }
-        continue;
-      }
-
-      // Merchant-keyword entries: match by merchant description or exact category match
-      // These are merchant-specific bonuses (McDonald's, Norwegian Cruise Line, etc.)
-      // Primary match: merchant description keywords
-      // Fallback: if user manually categorized as this entry's key, honor the override
-      if (entry.merchantKeywords) {
-        let matched = false;
-        for (const kw of entry.merchantKeywords) {
-          if (normMerchant.includes(kw)) { matched = true; break; }
-        }
-        if (matched) {
-          return { rate: entry.rate, reason: `${entry.rate}% ${entry.label} (${year} ${quarter} bonus)` };
-        }
-        // Also match if category was manually assigned to exactly this entry's key
-        if (category === entry.key) {
-          return { rate: entry.rate, reason: `${entry.rate}% ${entry.label} (${year} ${quarter} bonus)` };
-        }
-        continue; // No keyword or category match - skip this entry entirely
-      }
-
-      // Category-based: walk up the transaction's category hierarchy to find a match
-      let checkCat = category;
-      while (checkCat) {
-        if (checkCat === entry.key) {
-          const reason = checkCat !== category
-            ? `${entry.rate}% ${entry.label} (from ${category}, ${year} ${quarter})`
-            : `${entry.rate}% ${entry.label} (${year} ${quarter} bonus)`;
-          return { rate: entry.rate, reason };
-        }
-        checkCat = CATEGORY_HIERARCHY[checkCat];
-      }
-    }
-
-    // Check static multipliers with hierarchy (chase-travel 5x, dining 3x, drugstore 3x)
-    // Only apply if not already matched by a quarterly bonus above
-    const effectiveCat = getEffectiveCategory(category, cardId);
-    if (card.multipliers[effectiveCat]) {
-      const rate = card.multipliers[effectiveCat];
-      if (effectiveCat !== category) {
-        return { rate, reason: `${rate}x ${effectiveCat} (from ${category})` };
-      }
-      return { rate, reason: `${rate}x ${effectiveCat}` };
-    }
-
-    return { rate: card.baseRate, reason: `${card.baseRate}x base rate` };
-  }
-  
-  // Special handling for Bilt cards (legacy vs 2.0)
-  if (card.isBilt) {
-    const cfg = state.biltConfig[cardId] || {};
-    // Bilt 2.0 universally starts Feb 7, 2026
-    const bilt2StartDate = new Date(2026, 1, 7); // Feb 7, 2026
-
-    // Parse transaction date explicitly to avoid timezone issues
-    let txnDateObj;
-    if (txnDate) {
-      if (txnDate.includes('-')) {
-        const [year, month, day] = txnDate.split('-').map(Number);
-        txnDateObj = new Date(year, month - 1, day);
-      } else if (txnDate.includes('/')) {
-        const parts = txnDate.split('/');
-        const month = parseInt(parts[0]);
-        const day = parseInt(parts[1]);
-        let year = parseInt(parts[2]);
-        if (year < 100) year += 2000;
-        txnDateObj = new Date(year, month - 1, day);
-      } else {
-        txnDateObj = new Date(txnDate);
-      }
-    } else {
-      txnDateObj = new Date();
-    }
-    const isLegacy = txnDateObj < bilt2StartDate;
-
-    // LEGACY MODE (before Feb 7, 2026)
-    // All Bilt cards had identical rates: 3x dining, 2x travel, 1x everything else
-    if (isLegacy) {
-      if (category === 'rent') {
-        // Legacy rent: 1x with 5 transactions requirement (no special rent multiplier)
-        return { rate: 1, reason: '1x rent (Legacy Bilt — 5 txn requirement)' };
-      }
-      // Legacy category multipliers (same for all old Bilt cards)
-      if (category === 'dining') return { rate: 3, reason: '3x dining (Legacy Bilt)' };
-      if (category === 'travel') return { rate: 2, reason: '2x travel (Legacy Bilt)' };
-      // Everything else is 1x in legacy mode (no matter which Bilt card)
-      return { rate: 1, reason: '1x base (Legacy Bilt)' };
-    }
-    
-    // BILT 2.0 MODE (Feb 7, 2026+)
-    if (category === 'rent') {
-      const rentAmt = cfg.manualRentAmount || 2000;
-      
-      if (cfg.rewardOption === 'housing-only') {
-        // Calculate NET spending ratio from transactions in the same month (purchases - refunds)
-        const txnMonth = txnDateObj.getMonth();
-        const txnYear = txnDateObj.getFullYear();
-        const monthTxns = state.transactions.filter(t => {
-          // Raw transactions lack cardId; look up via card mappings
-          const mappedCardId = state.cardMappings[t.last4];
-          if (!mappedCardId || !mappedCardId.startsWith('bilt-')) return false;
-          const d = new Date(t.date);
-          return d.getMonth() === txnMonth && d.getFullYear() === txnYear;
-        });
-        const purchases = monthTxns.filter(t => t.amount < 0).reduce((sum, t) => sum + Math.abs(t.amount), 0);
-        const refunds = monthTxns.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
-        const monthSpend = Math.max(0, purchases - refunds);
-        
-        const ratio = rentAmt > 0 ? monthSpend / rentAmt : 0;
-        let rate = 0, tierName = '<25%';
-        if (ratio >= 1.0) { rate = 1.25; tierName = '100%+'; }
-        else if (ratio >= 0.75) { rate = 1; tierName = '75-99%'; }
-        else if (ratio >= 0.50) { rate = 0.75; tierName = '50-74%'; }
-        else if (ratio >= 0.25) { rate = 0.5; tierName = '25-49%'; }
-        
-        if (rate === 0) {
-          return { rate: 0, reason: `Rent: 250pt floor (${tierName}, $${monthSpend.toFixed(0)}/$${rentAmt} net spend)` };
-        }
-        return { rate, reason: `Rent: ${rate}x Housing-only (${tierName}: $${monthSpend.toFixed(0)}/$${rentAmt})` };
-      } else {
-        // Flexible Bilt Cash option - use user-specified monthly redemption amount
-        const monthlyRedemption = cfg.monthlyBiltCashRedemption || 0;
-
-        const maxPts = (monthlyRedemption / 3) * 100; // $3 Bilt Cash = 100 pts on $100 rent
-        const rate = rentAmt > 0 ? Math.min(1, maxPts / rentAmt) : 0;
-        if (rate <= 0) {
-          // For unconfigured cards (scenarios), use conservative 1x default
-          const isConfigured = isBiltCardConfigured(cardId);
-          if (!isConfigured) {
-            return { rate: 1, reason: '1x rent (estimated - configure card for actual rate)' };
-          }
-          return { rate: 0, reason: 'Rent: No Bilt Cash redemption configured' };
-        }
-        return { rate, reason: `Rent: ${(rate*100).toFixed(0)}% via $${monthlyRedemption.toFixed(0)} Bilt Cash/mo` };
-      }
-    }
-    
-    // Obsidian 3x bonus category choice
-    if (cardId === 'bilt-obsidian') {
-      if (cfg.bonusCategory === 'grocery') {
-        if (category === 'grocery') return { rate: 3, reason: '3x grocery (Obsidian bonus)' };
-        if (category === 'dining') return { rate: 1, reason: '1x dining (grocery selected)' };
-      } else {
-        // Default: dining is 3x
-        if (category === 'dining') return { rate: 3, reason: '3x dining (Obsidian bonus)' };
-        if (category === 'grocery') return { rate: 1, reason: '1x grocery (dining selected)' };
-      }
-    }
-    
-    // Standard multipliers
-    if (card.multipliers[category]) {
-      return { rate: card.multipliers[category], reason: `${card.multipliers[category]}x ${category}` };
-    }
-    return { rate: card.baseRate, reason: `${card.baseRate}x base rate` };
+  // Plugin hook: card-specific multiplier logic
+  if (typeof card.getMultiplier === 'function') {
+    const result = card.getMultiplier(category, txnDate, merchantDesc, buildPluginCtx());
+    if (result != null) return result;
   }
 
-  // Special handling for Chase Lyft partnership (Jan 12, 2020+)
-  // Lyft bonuses apply to CSR, CSP, and CFU - must check before other travel logic
-  if (category === 'lyft' && card.lyftPartnershipStart) {
-    const lyftStart = new Date(card.lyftPartnershipStart);
-    const txnDateObj = txnDate ? new Date(txnDate) : new Date();
-
-    if (txnDateObj >= lyftStart) {
-      // CSR had 10x Lyft until April 1, 2025, then 5x after
-      if (cardId === 'chase-sapphire-reserve' && card.lyft10xEndDate) {
-        const lyft10xEnd = new Date(card.lyft10xEndDate);
-        if (txnDateObj < lyft10xEnd) {
-          return { rate: 10, reason: '10x Lyft (Chase partnership 2020-2025)' };
-        }
-        // After April 1, 2025 - fall through to standard 5x from multipliers
-      }
-      // CFU had 5x Lyft until April 1, 2025, then 2x after
-      if (cardId === 'chase-freedom-unlimited' && card.lyft5xEndDate) {
-        const lyft5xEnd = new Date(card.lyft5xEndDate);
-        if (txnDateObj < lyft5xEnd) {
-          return { rate: 5, reason: '5x Lyft (Chase partnership 2020-2025)' };
-        }
-        // After April 1, 2025 - fall through to standard 2x from multipliers
-      }
-      // Use defined multiplier (CSP 5x, CSR 5x post-April 2025, CFU 2x post-April 2025)
-      if (card.multipliers['lyft']) {
-        return { rate: card.multipliers['lyft'], reason: `${card.multipliers['lyft']}x Lyft (Chase partnership)` };
-      }
-    }
-    // Before partnership start date - Lyft would just be regular transit/travel
-  }
-
-  // Special handling for CSR legacy (before Oct 26, 2025)
-  if (cardId === 'chase-sapphire-reserve' && card.legacyCutoffDate) {
-    const csrCutoff = new Date(card.legacyCutoffDate);
-    const txnDateObj = txnDate ? new Date(txnDate) : new Date();
-
-    if (txnDateObj < csrCutoff) {
-      // Legacy CSR rates
-      if (category === 'chase-travel') return { rate: 10, reason: '10x Chase Travel (Legacy CSR)' };
-      if (category === 'dining') return { rate: 3, reason: '3x dining (Legacy CSR)' };
-
-      // Legacy CSR had 3x on ALL travel — check if category is travel-related
-      // Walk up hierarchy to see if this category falls under 'travel'
-      // Note: Lyft is handled above, so won't reach here for Lyft transactions
-      let checkCat = category;
-      while (checkCat) {
-        if (checkCat === 'travel' || checkCat === 'flights-direct' ||
-            checkCat === 'hotels-direct' || checkCat === 'car-rental' ||
-            checkCat === 'transit' || checkCat === 'cruise' ||
-            checkCat === 'vacation-rental' || checkCat === 'airbnb') {
-          return { rate: 3, reason: `3x travel (Legacy CSR — ${category})` };
-        }
-        checkCat = CATEGORY_HIERARCHY[checkCat];
-      }
-
-      return { rate: 1, reason: '1x base (Legacy CSR)' };
-    }
-    // If after cutoff, fall through to standard multiplier logic below
-  }
-
-  // Capital One Venture X: portal bookings earn 10x on hotels & rental cars, 5x on everything else.
-  // Check the merchant description for travel sub-type keywords to decide 10x vs 5x.
-  if (cardId === 'capital-one-venture-x' && category === 'capital-one-travel' && merchantDesc) {
-    const normDesc = merchantDesc.toLowerCase().replace(/[^a-z0-9\s]/g, '');
-    // Hotel keywords (same as classifyTravel hotels list)
-    const hotelKeywords = ['marriott', 'hilton', 'hyatt', 'ihg', 'wyndham', 'best western', 'radisson',
-      'sheraton', 'westin', 'ritz', 'four seasons', 'mgm', 'caesars', 'flamingo',
-      'venetian', 'bellagio', 'cosmopolitan'];
-    // Car rental keywords (same as classifyTravel car rentals list)
-    const carRentalKeywords = ['hertz', 'enterprise', 'avis', 'budget', 'national car', 'alamo',
-      'dollar rent', 'thrifty', 'sixt', 'zipcar'];
-    for (const kw of hotelKeywords) {
-      if (normDesc.includes(kw)) {
-        return { rate: 10, reason: `10x Capital One Travel (hotel: ${kw})` };
-      }
-    }
-    for (const kw of carRentalKeywords) {
-      if (normDesc.includes(kw)) {
-        return { rate: 10, reason: `10x Capital One Travel (rental car: ${kw})` };
-      }
-    }
-    // Flights, vacation rentals, and anything unrecognized default to 5x (conservative)
-    return { rate: 5, reason: '5x Capital One Travel (default — flights/vacation rentals/unknown)' };
-  }
-
-  // Amex Platinum: portal bookings earn 5x on hotels & flights, 1x on everything else (car rentals, etc.)
-  // Check the merchant description for travel sub-type keywords to decide 5x vs 1x.
-  if (cardId === 'amex-platinum' && category === 'amex-travel' && merchantDesc) {
-    const normDesc = merchantDesc.toLowerCase().replace(/[^a-z0-9\s]/g, '');
-    // Check for hotel keywords in Amex Travel transactions (e.g., "AMEXTRAVEL.COM PREPAID HOTEL")
-    if (normDesc.includes('hotel') || normDesc.includes('prepaid hotel')) {
-      return { rate: 5, reason: '5x Amex Travel (hotel)' };
-    }
-    // Check for flight keywords in Amex Travel transactions (e.g., "AMEXTRAVEL.COM AIRFARE")
-    if (normDesc.includes('airfare') || normDesc.includes('flight') || normDesc.includes('airline')) {
-      return { rate: 5, reason: '5x Amex Travel (flight)' };
-    }
-    // Car rentals and everything else through Amex Travel get 1x base rate
-    return { rate: 1, reason: '1x Amex Travel (car rental or other)' };
-  }
-
-  // Streaming keyword validation: if card defines streamingKeywords, only give
-  // the streaming bonus when the merchant matches an approved service
+  // Default: streaming keyword validation (applies to any card with streamingKeywords)
   if (category === 'streaming' && card.streamingKeywords && merchantDesc) {
     const normDesc = merchantDesc.toLowerCase().replace(/[^a-z0-9\s.+]/g, '');
     const matched = card.streamingKeywords.some(kw => normDesc.includes(kw));
@@ -1474,12 +1131,11 @@ function getMultiplier(cardId, category, txnDate = null, merchantDesc = '') {
     }
   }
 
-  // Use hierarchy to find the best matching category for this card
+  // Default: use hierarchy to find the best matching category for this card
   const effectiveCat = getEffectiveCategory(category, cardId);
 
   if (card.multipliers[effectiveCat]) {
     const rate = card.multipliers[effectiveCat];
-    // Show both specific and effective category if they differ
     if (effectiveCat !== category && category !== 'other') {
       return { rate, reason: `${rate}x ${effectiveCat} (from ${category})` };
     }
@@ -1541,6 +1197,12 @@ function getEffectiveAnnualFee(cardId, transactions = []) {
 
   // Fall back to card definition logic
 
+  // Plugin hook: card-specific annual fee logic (called after detected-fees check)
+  if (typeof card.getAnnualFee === 'function') {
+    const result = card.getAnnualFee(transactions, detectedFees, buildPluginCtx());
+    if (result != null) return result;
+  }
+
   // Handle cards where annual fee started from a specific date (e.g., Bilt Obsidian/Palladium - no fee before Feb 7, 2026)
   if (card.annualFeeStartDate) {
     const startDate = new Date(card.annualFeeStartDate);
@@ -1553,19 +1215,6 @@ function getEffectiveAnnualFee(cardId, transactions = []) {
     }
     // No transactions for this card - default to current annual fee
     return card.annualFee || 0;
-  }
-
-  // Special handling for CSR legacy annual fee
-  if (cardId === 'chase-sapphire-reserve' && card.legacyCutoffDate) {
-    const cutoff = new Date(card.legacyCutoffDate);
-
-    // Check if any transaction is after the cutoff date
-    const hasPostCutoff = cardTxns.some(t => {
-      const txnDate = new Date(t.date);
-      return txnDate >= cutoff;
-    });
-
-    return hasPostCutoff ? card.annualFee : card.legacyAnnualFee;
   }
 
   return card.annualFee || 0;
@@ -3702,26 +3351,23 @@ function showResults(results, isNewUpload = false) {
 // =============================================================================
 
 /**
- * Get multiplier for card scenarios. Uses current rates (today's date)
- * and skips CFF quarterly bonuses since those are unpredictable for future scenarios.
- * Falls back to CFF's static multipliers (chase-travel 5x, dining 3x, drugstore 3x, 1x base).
+ * Get multiplier for card scenarios. Uses current rates (today's date).
+ * Cards can define getScenarioMultiplier() to provide forward-looking rates
+ * (e.g., CFF skips quarterly bonuses since they're unpredictable).
  */
 function getCardScenariosMultiplier(cardId, category) {
-  const _today = new Date();
-  const todayStr = `${_today.getFullYear()}-${String(_today.getMonth()+1).padStart(2,'0')}-${String(_today.getDate()).padStart(2,'0')}`;
+  const card = CARDS[cardId];
+  if (!card) return { rate: 1, reason: 'Unknown card' };
 
-  if (cardId === 'chase-freedom-flex') {
-    // Skip quarterly bonus lookup — use only static multipliers
-    const card = CARDS[cardId];
-    if (!card) return { rate: 1, reason: 'Unknown card' };
-    const effectiveCat = getEffectiveCategory(category, cardId);
-    if (card.multipliers[effectiveCat]) {
-      const rate = card.multipliers[effectiveCat];
-      return { rate, reason: `${rate}x ${effectiveCat}` };
-    }
-    return { rate: card.baseRate, reason: `${card.baseRate}x base rate` };
+  // Plugin hook: card-specific scenario multiplier
+  if (typeof card.getScenarioMultiplier === 'function') {
+    const result = card.getScenarioMultiplier(category, buildPluginCtx());
+    if (result != null) return result;
   }
 
+  // Default: use getMultiplier with today's date
+  const _today = new Date();
+  const todayStr = `${_today.getFullYear()}-${String(_today.getMonth()+1).padStart(2,'0')}-${String(_today.getDate()).padStart(2,'0')}`;
   return getMultiplier(cardId, category, todayStr);
 }
 

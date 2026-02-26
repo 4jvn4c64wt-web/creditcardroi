@@ -24,20 +24,12 @@ window.CardTracker.cards['amex-platinum'] = {
   ],
   categories: ['flights-direct', 'amex-travel', 'other'],
 
-  // Plugin hooks
-
-  getMultiplier: function(category, txnDate, merchantDesc, ctx) {
-    // Portal bookings: 5x on hotels & flights, 1x on everything else (car rentals, etc.)
-    if (category === 'amex-travel' && merchantDesc) {
-      var normDesc = merchantDesc.toLowerCase().replace(/[^a-z0-9\s]/g, '');
-      if (normDesc.includes('hotel') || normDesc.includes('prepaid hotel')) {
-        return { rate: 5, reason: '5x Amex Travel (hotel)' };
-      }
-      if (normDesc.includes('airfare') || normDesc.includes('flight') || normDesc.includes('airline')) {
-        return { rate: 5, reason: '5x Amex Travel (flight)' };
-      }
-      return { rate: 1, reason: '1x Amex Travel (car rental or other)' };
+  // Portal bonuses: 5x hotels & flights via Amex Travel, 1x everything else
+  portalBonuses: {
+    'amex-travel': {
+      'flights-portal': 5,
+      'hotels-portal': 5,
+      defaultRate: 1
     }
-    return null; // Fall through to default
   },
 };

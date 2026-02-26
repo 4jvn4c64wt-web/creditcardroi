@@ -23,6 +23,13 @@ window.CardTracker.cards['chase-sapphire-reserve'] = {
     { name: 'Apple Music/TV+', amount: 288, keywords: [], manual: true },
   ],
   categories: ['chase-travel', 'flights-direct', 'hotels-direct', 'dining', 'lyft', 'other'],
+  // Portal bonuses: flat 8x on all Chase Travel (no sub-type differentiation)
+  // Note: Legacy rates (10x before Oct 2025) are handled by the plugin hook below.
+  portalBonuses: {
+    'chase-travel': {
+      defaultRate: 8
+    }
+  },
   // Lyft partnership: 10x from Jan 12, 2020 to March 31, 2025, then 5x after
   lyftPartnershipStart: '2020-01-12',
   lyft10xEndDate: '2025-04-01', // After this date, CSR gets 5x instead of 10x

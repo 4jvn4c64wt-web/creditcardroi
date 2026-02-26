@@ -1143,6 +1143,13 @@ function getMultiplier(cardId, category, txnDate = null, merchantDesc = '') {
     if (result != null) return result;
   }
 
+  // Portal bonus check
+  const portalModule = window.CardTracker.portal;
+  if (portalModule && card.portalBonuses) {
+    const portalResult = portalModule.getPortalMultiplier(card, category, merchantDesc);
+    if (portalResult) return portalResult;
+  }
+
   // Default: streaming keyword validation (applies to any card with streamingKeywords)
   if (category === 'streaming' && card.streamingKeywords && merchantDesc) {
     const normDesc = merchantDesc.toLowerCase().replace(/[^a-z0-9\s.+]/g, '');

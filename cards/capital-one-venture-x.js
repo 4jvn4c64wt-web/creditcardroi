@@ -23,29 +23,12 @@ window.CardTracker.cards['capital-one-venture-x'] = {
   // 10,000 bonus miles awarded each cardholder anniversary (not a statement credit)
   annualBonusPoints: 10000,
 
-  // Plugin hooks
-
-  getMultiplier: function(category, txnDate, merchantDesc, ctx) {
-    // Portal bookings: 10x on hotels & rental cars, 5x on everything else
-    if (category === 'capital-one-travel' && merchantDesc) {
-      var normDesc = merchantDesc.toLowerCase().replace(/[^a-z0-9\s]/g, '');
-      var hotelKeywords = ['marriott', 'hilton', 'hyatt', 'ihg', 'wyndham', 'best western', 'radisson',
-        'sheraton', 'westin', 'ritz', 'four seasons', 'mgm', 'caesars', 'flamingo',
-        'venetian', 'bellagio', 'cosmopolitan'];
-      var carRentalKeywords = ['hertz', 'enterprise', 'avis', 'budget', 'national car', 'alamo',
-        'dollar rent', 'thrifty', 'sixt', 'zipcar'];
-      for (var i = 0; i < hotelKeywords.length; i++) {
-        if (normDesc.includes(hotelKeywords[i])) {
-          return { rate: 10, reason: '10x Capital One Travel (hotel: ' + hotelKeywords[i] + ')' };
-        }
-      }
-      for (var j = 0; j < carRentalKeywords.length; j++) {
-        if (normDesc.includes(carRentalKeywords[j])) {
-          return { rate: 10, reason: '10x Capital One Travel (rental car: ' + carRentalKeywords[j] + ')' };
-        }
-      }
-      return { rate: 5, reason: '5x Capital One Travel (default — flights/vacation rentals/unknown)' };
+  // Portal bonuses: 10x hotels & rental cars, 5x everything else via Capital One Travel
+  portalBonuses: {
+    'capital-one-travel': {
+      'hotels-portal': 10,
+      'car-rental-portal': 10,
+      defaultRate: 5
     }
-    return null; // Fall through to default
   },
 };

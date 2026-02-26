@@ -111,6 +111,9 @@ window.CardTracker.classification.CATEGORY_HIERARCHY = {
   'travel': null,
   'flights-direct': 'travel',
   'hotels-direct': 'travel',
+  'chase-travel': 'travel', // Chase Travel portal (child of travel)
+  'amex-travel': 'travel', // Amex Travel portal (child of travel)
+  'bilt-travel': 'travel', // Bilt Travel portal (child of travel)
   'capital-one-travel': 'travel', // Capital One Travel portal (child of travel)
   'capital-one-entertainment': 'entertainment', // Capital One Entertainment (child of entertainment)
   'rent': null,
@@ -537,31 +540,7 @@ window.CardTracker.classification.classifyTravel = function(normalizedText, card
   const norm = normalizedText;
   const CONFIDENCE_ADJUSTMENTS = window.CardTracker.classification.CONFIDENCE_ADJUSTMENTS;
 
-  // Check for portal bookings
-  const chasePatterns = ['chase travel', 'chasetravel', 'cl chase', 'clchase', 'chasepay', 'chasecomtravel', 'cardmember serv', 'cardmember ser'];
-  for (const pattern of chasePatterns) {
-    if (norm.includes(pattern)) {
-      return { subcategory: 'chase-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Chase Travel portal' };
-    }
-  }
-  const amexPatterns = ['amex travel', 'amextravel', 'american express travel', 'amexcomtravel', 'aexp travel', 'aet', 'amex trv', 'americanexpresscomtravel'];
-  for (const pattern of amexPatterns) {
-    if (norm.includes(pattern)) {
-      return { subcategory: 'amex-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Amex Travel portal' };
-    }
-  }
-  const biltPatterns = ['bilt travel', 'bilttravel', 'biltcomtravel'];
-  for (const pattern of biltPatterns) {
-    if (norm.includes(pattern)) {
-      return { subcategory: 'bilt-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Bilt Travel portal' };
-    }
-  }
-  const capitalOnePatterns = ['capital one travel', 'capitalonetravel', 'capitalone travel', 'capone travel', 'c1 travel'];
-  for (const pattern of capitalOnePatterns) {
-    if (norm.includes(pattern)) {
-      return { subcategory: 'capital-one-travel', confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE, source: 'known', reason: 'Capital One Travel portal' };
-    }
-  }
+  // Portal detection is now handled by portal.js (Priority 2.5 in classifyMerchant)
 
   // Check for OTAs
   const otas = ['expedia', 'booking.com', 'hotels.com', 'priceline', 'kayak', 'orbitz', 'travelocity'];
@@ -665,6 +644,22 @@ window.CardTracker.classification.classifyMerchant = function(merchant, csvCateg
       source: 'user-rule',
       reason: cardSpecificKey && state.merchantRules[cardSpecificKey] ? 'User rule (this card)' : 'User rule (all cards)'
     };
+  }
+
+  // PRIORITY 2.5: Portal Detection
+  // Must run before known merchants to prevent "CAPITAL ONE TRAVEL MARRIOTT"
+  // from being caught as hotels-direct by the Marriott entry in KNOWN_MERCHANTS.
+  const portalModule = window.CardTracker.portal;
+  if (portalModule) {
+    const portalId = portalModule.detectPortal(combinedNorm);
+    if (portalId) {
+      return {
+        subcategory: portalId,
+        confidence: CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE,
+        source: 'portal',
+        reason: portalModule.PORTAL_REGISTRY[portalId].label + ' portal'
+      };
+    }
   }
 
   // PRIORITY 3: Known Merchant List

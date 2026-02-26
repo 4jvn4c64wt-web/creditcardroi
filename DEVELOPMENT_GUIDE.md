@@ -441,6 +441,7 @@ Stored in localStorage with `ccTracker_` prefix. Loaded on page init with `safeL
 | `proAccess` | `ccTracker_proAccess` | Pro license: `{ key, lastVerified }`. `lastVerified` is rolling — updates on every successful Gumroad API response. Subscription validity is controlled entirely by Gumroad membership; if the membership lapses, the weekly re-verification will return `success: false` and access stops. Excluded from clear/reset. Included in export/import: `lastVerified` carried over as-is so the 7-day re-verification window transfers correctly. |
 | `dpBannersDismissed` | `ccTracker_dpBannersDismissed` | Dismissed upgrade banners |
 | `featureEducation` | `ccTracker_featureEducation` | Tracks which feature tutorials have been shown |
+| (infrastructure) | `ccTracker_dataVersion` | Data schema version (integer) — managed by migration system, not in `state` object |
 
 ### Session State (reset on reload)
 
@@ -464,6 +465,26 @@ If you add a new persistent state field, you must update **all** of these locati
 5. **Import restore** — search `backup.monthlyCredits` (nearby)
 6. **Clear settings** — search `Clear all settings button`
 7. **Delete all data** — search `Type DELETE to confirm`
+8. **Data migration** (if changing structure of existing data) — increment `DATA_VERSION`, add migration function to `DATA_MIGRATIONS` array
+
+### Data Versioning & Migrations
+
+The app uses a versioned migration system for localStorage data. On every page load, `runDataMigrations()` runs before state initialization, comparing the stored `ccTracker_dataVersion` against the code's `DATA_VERSION` constant and running any needed migration functions.
+
+| Constant/Key | Purpose |
+|--------------|---------|
+| `DATA_VERSION` | Current data schema version (integer, in code) |
+| `ccTracker_dataVersion` | Stored data version (integer, in localStorage) |
+| `DATA_MIGRATIONS` | Array of migration functions (index N = v(N) → v(N+1)) |
+| `runDataMigrations()` | Runner that executes pending migrations sequentially |
+
+**When to add a migration:** Whenever you change the *structure* of existing persisted data (rename a field, change a value's type, add a required sub-field to existing objects). You do NOT need a migration for adding a brand-new localStorage key with a new default — `safeLocalStorageGet()` handles that.
+
+**How to add a migration:**
+1. Increment `DATA_VERSION` by 1
+2. Add a new function at the end of `DATA_MIGRATIONS`
+3. The function reads from localStorage, transforms, and writes back
+4. If the migration touches keys that are re-read during import, add a re-read line in the import migration block (search `Re-read migrated data into state`)
 
 ---
 
@@ -811,6 +832,21 @@ For PayPal quarters, include `isPaypal: true` and optionally `decemberOnly: true
 
 **Important:** `getCardCategories()` dynamically derives CFF's valid categories from `cffQuarterlyData`, so adding new quarterly entries automatically makes those categories available in the recategorization modal. No separate list to maintain.
 
+### G. Adding a Data Migration
+
+When you change the structure of existing persisted data (not just adding a new key):
+
+1. **Increment** `DATA_VERSION` (search `const DATA_VERSION =`)
+2. **Add** a migration function at the end of `DATA_MIGRATIONS` array
+3. The function must:
+   - Read raw localStorage with `localStorage.getItem()` + `safeJSONParse()`
+   - Transform the data
+   - Write back with `safeLocalStorageSet()`
+   - Log to console: `console.log('[Migration] Running vN → vN+1')`
+4. Be idempotent where possible (safe if run twice)
+5. Never delete user data — only transform or add
+6. Test with: (a) fresh install, (b) existing data at previous version, (c) export+import round-trip
+
 ---
 
 ## 15. Testing
@@ -897,6 +933,7 @@ Quick lookup for the most commonly needed functions in `app-core.js`:
 
 | Function | ~Line | Purpose |
 |----------|-------|---------|
+| `runDataMigrations()` | 248 | Run pending localStorage migrations before state init |
 | `parseDateString()` | 72 | Unified date parsing (multiple formats) |
 | `generateTransactionId()` | 175 | Content-based deduplication IDs |
 | `verifyGumroadLicense()` | 506 | POST to Gumroad API to verify a license key |

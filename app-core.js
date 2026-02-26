@@ -270,6 +270,27 @@ function buildPluginCtx() {
     safeLocalStorageGet,
     isBiltCardConfigured,
     cffQuarterlyData: window.CardTracker.cffQuarterlyData || {},
+    // Phase 2: config UI, scenario, and state hooks
+    formatCurrencyPrecise,
+    formatNumber,
+    renderView,
+    getAnnualizedCardSpend,
+    getCardScenariosMultiplier,
+    mapToCardCategory,
+    getAddCardShiftRows,
+    getRemoveCardShiftRows,
+    calculateAddCardValue,
+    calculateRemoveCardValue,
+    calculateSwapValue,
+    hasDetectedAnnualFee,
+    getAnnualBonusPoints,
+    formatSubcategoryName,
+    getScenarioPromptCard,
+    calculateCardScenariosNetImpact,
+    updateAddCardResult,
+    updateRemoveCardResult,
+    updateSwapCardResult,
+    renderCardConfig: window.CardTracker._renderCardConfig || function() {},
   };
 }
 
@@ -2245,65 +2266,10 @@ function showCardConfigEditor(preselectedCardId = null) {
 
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   
-  const CASH_PLUS_5_LABELS = {
-    'streaming': 'TV, Internet & Streaming',
-    'utilities': 'Home Utilities',
-    'cell-phone': 'Cell Phone Providers',
-    'department-stores': 'Department Stores',
-    'electronics': 'Electronics Stores',
-    'furniture': 'Furniture Stores',
-    'fast-food': 'Fast Food',
-    'fitness': 'Gyms & Fitness Centers',
-    'ground-transport': 'Ground Transportation',
-    'movies': 'Movie Theaters',
-    'sporting-goods': 'Sporting Goods Stores',
-    'clothing': 'Select Clothing Stores'
-  };
-  
-  const CASH_PLUS_2_LABELS = {
-    'gas': 'Gas Stations',
-    'grocery': 'Grocery Stores',
-    'dining': 'Restaurants'
-  };
-  
-  // CFF quarterly 5% categories (historical list from past 5 years) - ALPHABETIZED
-  const CFF_5_LABELS = {
-    'amazon': 'Amazon.com',
-    'car-rental': 'Car Rentals',
-    'charity': 'Charity',
-    'chase-travel': 'Chase Travel',
-    'dining': 'Restaurants',
-    'ebay': 'eBay',
-    'ev-charging': 'EV Charging',
-    'fitness': 'Gyms & Fitness',
-    'gas': 'Gas Stations',
-    'grocery': 'Grocery Stores',
-    'home-improvement': 'Home Improvement',
-    'hotels-direct': 'Hotels',
-    'internet-cable-phone': 'Internet/Cable/Phone',
-    'live-entertainment': 'Live Entertainment',
-    'lowes': 'Lowe\'s',
-    'mcdonalds': 'McDonald\'s',
-    'movies': 'Movie Theaters',
-    'paypal': 'PayPal',
-    'pet': 'Pet Stores',
-    'spa-self-care': 'Spa & Self Care',
-    'streaming': 'Streaming Services',
-    'target': 'Target',
-    'walmart': 'Walmart',
-    'whole-foods': 'Whole Foods',
-    'wholesale-club': 'Wholesale Clubs'
-  };
-  
-  // Quarter definitions with date bounds
-  const QUARTERS = [
-    { id: 'Q1', name: 'Q1 (Jan-Mar)', months: [0, 1, 2] },
-    { id: 'Q2', name: 'Q2 (Apr-Jun)', months: [3, 4, 5] },
-    { id: 'Q3', name: 'Q3 (Jul-Sep)', months: [6, 7, 8] },
-    { id: 'Q4', name: 'Q4 (Oct-Dec)', months: [9, 10, 11] }
-  ];
-  
   function renderCardConfig() {
+    // Expose for plugin config hooks (closure-bound, so plugins can trigger re-render)
+    window.CardTracker._renderCardConfig = renderCardConfig;
+
     const cardId = select.value;
     const card = CARDS[cardId];
     if (!card) return;
@@ -2311,15 +2277,13 @@ function showCardConfigEditor(preselectedCardId = null) {
     // Editability gating
     const cardEditable = isCardEditable(cardId, 'config');
     const creditsEditable = isCardEditable(cardId, 'credits');
-    const isCashPlus = cardId === 'us-bank-cash-plus';
-    const isCFF = cardId === 'chase-freedom-flex';
-    // Cash+ quarterly categories always editable; Bilt config always editable (except credits)
-    const cashPlusEditable = isCashPlus || cardEditable;
-    const biltEditable = (card.isBilt) || cardEditable;
+    const hasPluginConfig = typeof card.renderConfigSection === 'function';
+    // Cards with plugin config sections are always editable (quarterly selections, Bilt config, etc.)
+    const pluginEditable = hasPluginConfig || cardEditable;
 
     // Update save button and show locked notice
     const saveBtn = document.getElementById('saveCardConfig');
-    if (!cardEditable && !cashPlusEditable && !biltEditable) {
+    if (!cardEditable && !pluginEditable) {
       saveBtn.disabled = true;
       saveBtn.title = 'Unlock editing with Decision Pass or Pro';
     } else {
@@ -2337,357 +2301,13 @@ function showCardConfigEditor(preselectedCardId = null) {
     const currentYear = new Date().getFullYear();
     const availableYears = txnYears.length > 0 ? txnYears : [currentYear];
 
-    // Cash+ quarterly section - WITH YEAR SELECTOR
-    let cashPlusSection = '';
-    if (isCashPlus) {
-      const selectedCashPlusYear = state.selectedCashPlusYear || availableYears[0];
-      
-      cashPlusSection = `
-        <div id="quarterlySection">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-            <h3 style="font-size:14px;font-weight:600;">Quarterly Category Selection</h3>
-            <select id="cashPlusYearSelect" class="form-select" style="min-width:100px;padding:6px 10px;">
-              ${availableYears.map(y => `<option value="${y}" ${y === selectedCashPlusYear ? 'selected' : ''}>${y}</option>`).join('')}
-            </select>
-          </div>
-          <p style="font-size:12px;color:#78716c;margin-bottom:4px;">Select the bonus categories you activated with U.S. Bank for each quarter.</p>
-          <p style="font-size:11px;color:#a8a29e;margin-bottom:12px;">This affects how points are calculated for transactions in that period. $2,000 cap on 5% categories per quarter.</p>
-          
-          <div id="cashPlusQuarters">
-          ${QUARTERS.map(q => {
-            const yearQuarterKey = `${selectedCashPlusYear}-${q.id}`;
-            const quarterSelections = state.cashPlusCategories[yearQuarterKey] || state.cashPlusCategories[q.id] || { fivePercent: [], twoPercent: '' };
-            const isCurrentQuarter = selectedCashPlusYear === currentYear && getCurrentQuarter() === q.id;
-            
-            return `
-            <details style="margin-bottom:12px;border:1px solid #e7e5e4;border-radius:8px;${isCurrentQuarter ? 'border-color:#059669;' : ''}" ${isCurrentQuarter ? 'open' : ''}>
-              <summary style="padding:12px;cursor:pointer;font-weight:500;font-size:13px;background:${isCurrentQuarter ? '#dcfce7' : '#fafaf9'};border-radius:7px;list-style:none;display:flex;justify-content:space-between;align-items:center;">
-                <span>${q.name} ${isCurrentQuarter ? '(Current)' : ''}</span>
-                <span style="font-size:11px;color:#78716c;">
-                  ${quarterSelections.fivePercent?.length || 0}/2 categories selected
-                </span>
-              </summary>
-              <div style="padding:12px;">
-                <div style="margin-bottom:12px;">
-                  <div style="font-size:12px;font-weight:500;margin-bottom:6px;">5% Categories (select up to 2):</div>
-                  <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:6px;">
-                    ${Object.entries(CASH_PLUS_5_LABELS).map(([key, label]) => `
-                      <label style="display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid #e7e5e4;border-radius:4px;cursor:pointer;font-size:11px;${quarterSelections.fivePercent?.includes(key) ? 'background:#dcfce7;border-color:#059669;' : ''}">
-                        <input type="checkbox" class="cash-plus-5" data-year="${selectedCashPlusYear}" data-quarter="${q.id}" data-category="${key}" ${quarterSelections.fivePercent?.includes(key) ? 'checked' : ''}>
-                        ${label}
-                      </label>
-                    `).join('')}
-                  </div>
-                </div>
-                <div>
-                  <div style="font-size:12px;font-weight:500;margin-bottom:6px;">2% Category (select 1):</div>
-                  <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:6px;">
-                    ${Object.entries(CASH_PLUS_2_LABELS).map(([key, label]) => `
-                      <label style="display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid #e7e5e4;border-radius:4px;cursor:pointer;font-size:11px;${quarterSelections.twoPercent === key ? 'background:#fef9c3;border-color:#eab308;' : ''}">
-                        <input type="radio" name="cashPlus2-${q.id}" class="cash-plus-2" data-year="${selectedCashPlusYear}" data-quarter="${q.id}" data-category="${key}" ${quarterSelections.twoPercent === key ? 'checked' : ''}>
-                        ${label}
-                      </label>
-                    `).join('')}
-                  </div>
-                </div>
-              </div>
-            </details>
-          `}).join('')}
-          </div>
-        </div>
-      `;
+    // Plugin-provided card config section (Cash+ quarterly, CFF quarterly, Bilt config, etc.)
+    let pluginSection = '';
+    if (hasPluginConfig) {
+      pluginSection = card.renderConfigSection(cardId, buildPluginCtx()) || '';
     }
     
-    // CFF quarterly 5% section - read-only display from stored historical data
-    let cffSection = '';
-    if (isCFF) {
-      const CFF_DATA = window.CardTracker.cffQuarterlyData || {};
-      const storedYears = [...new Set(Object.keys(CFF_DATA).map(k => parseInt(k.split('-')[0])))].sort((a,b) => b-a);
-      const allCFFYears = [...new Set([...availableYears, ...storedYears])].sort((a,b) => b-a);
-      const selectedCFFYear = state.selectedCFFYear || allCFFYears[0];
-
-      // All possible CFF category labels for greyed-out display
-      const ALL_CFF_LABELS = {
-        'amazon': 'Amazon', 'car-rental': 'Rental Cars', 'charity': 'Charities',
-        'chase-travel': 'Chase Travel', 'clothing': 'Clothing', 'cruise': 'Cruises',
-        'department-stores': 'Department Stores', 'dining': 'Dining',
-        'ebay': 'eBay', 'ev-charging': 'EV Charging', 'fast-food': 'Fast Food',
-        'fitness': 'Gyms & Fitness', 'gas': 'Gas Stations', 'grocery': 'Grocery Stores',
-        'home-improvement': 'Home Improvement', 'insurance': 'Insurance',
-        'internet-cable-phone': 'Internet/Cable/Phone', 'live-entertainment': 'Live Entertainment',
-        'lowes': "Lowe's", 'movies': 'Movie Theaters', 'online-grocery': 'Online Grocery',
-        'paypal': 'PayPal', 'pet': 'Pet & Vet', 'spa-self-care': 'Spa & Self Care',
-        'streaming': 'Streaming Services', 'target': 'Target', 'tax': 'Tax Preparation',
-        'walmart': 'Walmart', 'whole-foods': 'Whole Foods', 'wholesale-club': 'Wholesale Clubs'
-      };
-
-      cffSection = `
-        <div id="quarterlySection">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-            <h3 style="font-size:14px;font-weight:600;">Quarterly Bonus Categories</h3>
-            <select id="cffYearSelect" class="form-select" style="min-width:100px;padding:6px 10px;">
-              ${allCFFYears.map(y => `<option value="${y}" ${y === selectedCFFYear ? 'selected' : ''}>${y}</option>`).join('')}
-            </select>
-          </div>
-          <p style="font-size:12px;color:#78716c;margin-bottom:4px;">Chase Freedom Flex rotating bonus categories are automatically applied based on quarter.</p>
-          <p style="font-size:11px;color:#a8a29e;margin-bottom:12px;">$1,500 cap per quarter. Card also earns 5x Chase Travel, 3x dining/drugstores.</p>
-
-          <div id="cffQuarters">
-          ${QUARTERS.map(q => {
-            const yearQuarterKey = `${selectedCFFYear}-${q.id}`;
-            const entries = CFF_DATA[yearQuarterKey] || [];
-            const isCurrentQuarter = selectedCFFYear === currentYear && getCurrentQuarter() === q.id;
-            const activeKeys = entries.map(e => e.key);
-
-            return `
-            <details style="margin-bottom:12px;border:1px solid #e7e5e4;border-radius:8px;${isCurrentQuarter ? 'border-color:#059669;' : ''}" ${isCurrentQuarter ? 'open' : ''}>
-              <summary style="padding:12px;cursor:pointer;font-weight:500;font-size:13px;background:${isCurrentQuarter ? '#dcfce7' : '#fafaf9'};border-radius:7px;list-style:none;display:flex;justify-content:space-between;align-items:center;">
-                <span>${q.name} ${isCurrentQuarter ? '(Current)' : ''}</span>
-                <span style="font-size:11px;color:#78716c;">
-                  ${entries.length > 0 ? entries.length + ' bonus categor' + (entries.length === 1 ? 'y' : 'ies') : 'No data'}
-                </span>
-              </summary>
-              <div style="padding:12px;">
-                ${entries.length > 0 ? `
-                <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:6px;">
-                  ${Object.entries(ALL_CFF_LABELS).map(([key, genericLabel]) => {
-                    const entry = entries.find(e => e.key === key);
-                    const isActive = !!entry;
-                    const displayLabel = entry ? entry.label : genericLabel;
-                    const monthName = entry && entry.monthOnly ? new Date(2000, entry.monthOnly - 1).toLocaleString('en', {month: 'short'}) : '';
-                    const rateLabel = entry ? entry.rate + '%' : '';
-                    return `
-                    <div style="display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid ${isActive ? '#059669' : '#f0eeec'};border-radius:4px;font-size:11px;${isActive ? 'background:#dcfce7;font-weight:600;color:#1a1a1a;' : 'background:#fafaf9;color:#c4c0bc;'}">
-                      ${isActive ? '<span style="color:#059669;flex-shrink:0;">&#10003;</span>' : '<span style="flex-shrink:0;visibility:hidden;">&#10003;</span>'}
-                      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(displayLabel)}${monthName ? ' (' + monthName + ' only)' : ''}">${escapeHtml(displayLabel)}</span>
-                      ${isActive ? '<span style="margin-left:auto;font-size:10px;color:#059669;flex-shrink:0;white-space:nowrap;">' + rateLabel + (monthName ? ' <span style="font-size:9px;color:#78716c;">(' + monthName + ')</span>' : '') + '</span>' : ''}
-                    </div>`;
-                  }).join('')}
-                </div>
-                ` : '<div style="font-size:12px;color:#a8a29e;font-style:italic;">No quarterly category data available for this period.</div>'}
-              </div>
-            </details>
-          `}).join('')}
-          </div>
-        </div>
-      `;
-    }
-    
-    // Bilt 2.0 configuration section
-    let biltSection = '';
-    if (card.isBilt) {
-      const cfg = state.biltConfig[cardId] || { 
-        rewardOption: 'flexible', 
-        rentDetection: 'auto', 
-        manualRentAmount: 2000, 
-        manualRentDay: 1,
-        rentMerchantKeyword: '',
-        bonusCategory: 'dining',
-        countBiltCashAsCredit: true
-      };
-      const isFlexible = cfg.rewardOption !== 'housing-only';
-      const isManualRent = cfg.rentDetection === 'manual';
-      
-      // Get available years from processed transactions (raw transactions lack cardId)
-      const processedTxns = state.results?.processed || [];
-      const biltYears = [...new Set(processedTxns
-        .filter(t => t.cardId && t.cardId.startsWith('bilt-'))
-        .map(t => getYearFromDateString(t.date))
-      )].sort().reverse();
-      const currentYear = new Date().getFullYear();
-      const availableBiltYears = biltYears.length > 0 ? biltYears : [currentYear];
-      const selectedBiltYear = state.selectedBiltYear || 'all';
-
-      // Calculate Bilt Cash earned (4% of non-rent Bilt card spend for selected year, post-Feb 7 2026)
-      const bilt20Date = new Date(2026, 1, 7);
-      const biltNonRentSpend = processedTxns
-        .filter(t => {
-          if (!t.cardId || !t.cardId.startsWith('bilt-')) return false;
-          const d = new Date(t.date);
-          if (d < bilt20Date) return false; // Only Bilt 2.0 earns Bilt Cash
-          if (selectedBiltYear !== 'all' && getYearFromDateString(t.date) !== parseInt(selectedBiltYear)) return false;
-          return t.category !== 'rent' && t.amount < 0; // Purchases only
-        })
-        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
-
-      // Also calculate refunds to subtract (positive amounts on Bilt cards)
-      const biltRefunds = processedTxns
-        .filter(t => {
-          if (!t.cardId || !t.cardId.startsWith('bilt-')) return false;
-          const d = new Date(t.date);
-          if (d < bilt20Date) return false;
-          if (selectedBiltYear !== 'all' && getYearFromDateString(t.date) !== parseInt(selectedBiltYear)) return false;
-          return t.category !== 'rent' && t.amount > 0; // Refunds
-        })
-        .reduce((sum, t) => sum + t.amount, 0);
-      
-      const netBiltSpend = Math.max(0, biltNonRentSpend - biltRefunds);
-      const biltCashEarned = netBiltSpend * 0.04; // 4% Bilt Cash
-      
-      // Calculate rent amount for helper text
-      const rent = cfg.manualRentAmount || 2000;
-      const monthlyBiltCashRedemption = cfg.monthlyBiltCashRedemption || 0;
-      const cashFor100 = (rent / 100) * 3; // $3 per 100 pts on $100 rent
-      const cashFor75 = cashFor100 * 0.75;
-      const cashFor50 = cashFor100 * 0.50;
-      const cashFor25 = cashFor100 * 0.25;
-      
-      biltSection = `
-        <div style="margin-bottom:16px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-            <h3 style="font-size:14px;font-weight:600;margin:0;">🏠 Bilt Rewards Configuration</h3>
-            <select id="biltYearSelect" class="form-select" style="min-width:100px;padding:6px 10px;font-size:12px;">
-              <option value="all" ${selectedBiltYear === 'all' ? 'selected' : ''}>All Years</option>
-              ${availableBiltYears.map(y => `<option value="${y}" ${selectedBiltYear === y ? 'selected' : ''}>${y}</option>`).join('')}
-            </select>
-          </div>
-          <p style="font-size:11px;color:#78716c;margin-bottom:12px;">Bilt 2.0 began February 7, 2026. Transactions before this date use legacy earning rates.</p>
-          
-          <!-- Bilt Cash Earned (auto-calculated) -->
-          <div style="margin-bottom:16px;padding:12px;background:#fafaf9;border:1px solid #e7e5e4;border-radius:8px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-              <span style="font-size:12px;font-weight:600;">💰 Bilt Cash Earned (${selectedBiltYear === 'all' ? 'All Time' : selectedBiltYear})</span>
-              <span style="font-size:18px;font-weight:700;color:#166534;">$${biltCashEarned.toFixed(2)}</span>
-            </div>
-            <p style="font-size:10px;color:#78716c;margin-bottom:8px;">4% of $${netBiltSpend.toFixed(2)} non-rent Bilt card spend (post-Feb 7, 2026)</p>
-            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;">
-              <input type="checkbox" class="bilt-cash-as-credit" data-card="${cardId}" ${cfg.countBiltCashAsCredit !== false ? 'checked' : ''}>
-              <span>Count Bilt Cash as statement credit</span>
-            </label>
-          </div>
-          
-          <!-- Reward Option -->
-          <div style="margin-bottom:16px;padding:12px;border:1px solid #e7e5e4;border-radius:8px;">
-            <label style="display:block;font-size:12px;font-weight:500;margin-bottom:8px;">Which reward option do you use? (for rent points)</label>
-            <div style="display:flex;flex-direction:column;gap:8px;">
-              <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;padding:8px;border-radius:6px;border:1px solid ${isFlexible ? '#d4d4d4' : 'transparent'};">
-                <input type="radio" name="biltRewardOption-${cardId}" value="flexible" ${isFlexible ? 'checked' : ''} class="bilt-reward-option" data-card="${cardId}" style="margin-top:2px;">
-                <div>
-                  <span style="font-size:12px;font-weight:500;">Flexible Bilt Cash</span>
-                  <p style="font-size:10px;color:#78716c;margin:2px 0 0 0;">Redeem Bilt Cash for up to 1x rent points</p>
-                </div>
-              </label>
-              <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;padding:8px;border-radius:6px;border:1px solid ${!isFlexible ? '#d4d4d4' : 'transparent'};">
-                <input type="radio" name="biltRewardOption-${cardId}" value="housing-only" ${!isFlexible ? 'checked' : ''} class="bilt-reward-option" data-card="${cardId}" style="margin-top:2px;">
-                <div>
-                  <span style="font-size:12px;font-weight:500;">Housing-only Rewards</span>
-                  <p style="font-size:10px;color:#78716c;margin:2px 0 0 0;">Earn rent points automatically based on spending ratio</p>
-                </div>
-              </label>
-            </div>
-          </div>
-          
-          <!-- Flexible Bilt Cash Section -->
-          <div id="biltFlexibleSection-${cardId}" style="${isFlexible ? '' : 'display:none;'}margin-bottom:16px;padding:12px;background:#fafaf9;border:1px solid #e7e5e4;border-radius:8px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-              <label style="font-size:12px;font-weight:500;">How much Bilt Cash do you redeem monthly for rent?</label>
-              <a href="#" class="bilt-calc-helper" data-card="${cardId}" style="font-size:11px;color:#2563eb;text-decoration:none;">How much do I need?</a>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-              <span style="font-size:14px;">$</span>
-              <input type="number" class="bilt-monthly-redemption form-input" data-card="${cardId}" value="${monthlyBiltCashRedemption}" style="width:100px;padding:6px;">
-              <span style="font-size:11px;color:#78716c;">/ month</span>
-            </div>
-          </div>
-          
-          <!-- Bilt Cash Calculator Modal (hidden by default) -->
-          <div id="biltCalcModal-${cardId}" style="display:none;margin-bottom:16px;padding:12px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-              <span style="font-size:12px;font-weight:600;">🧮 Bilt Cash Calculator</span>
-              <button class="bilt-calc-close" data-card="${cardId}" style="background:none;border:none;cursor:pointer;font-size:16px;color:#78716c;">×</button>
-            </div>
-            <div style="margin-bottom:8px;">
-              <label style="font-size:11px;display:block;margin-bottom:4px;">What is your monthly rent?</label>
-              <div style="display:flex;align-items:center;gap:4px;">
-                <span>$</span>
-                <input type="number" class="bilt-calc-rent form-input" data-card="${cardId}" value="${rent}" style="width:120px;padding:4px;">
-              </div>
-            </div>
-            <div style="font-size:11px;color:#1e40af;background:#eff6ff;padding:8px;border-radius:4px;">
-              <div style="font-weight:600;margin-bottom:4px;">Bilt Cash needed for rent points:</div>
-              <div class="bilt-calc-results" data-card="${cardId}">
-                <div>100% (1x): $<span class="calc-100">${cashFor100.toFixed(2)}</span>/mo</div>
-                <div>75%: $<span class="calc-75">${cashFor75.toFixed(2)}</span>/mo</div>
-                <div>50%: $<span class="calc-50">${cashFor50.toFixed(2)}</span>/mo</div>
-                <div>25%: $<span class="calc-25">${cashFor25.toFixed(2)}</span>/mo</div>
-              </div>
-              <p style="margin-top:6px;font-size:10px;color:#3b82f6;">Formula: $3 Bilt Cash = 100 points on $100 rent</p>
-            </div>
-          </div>
-          
-          <!-- Housing-only Section -->
-          <div id="biltHousingSection-${cardId}" style="${!isFlexible ? '' : 'display:none;'}margin-bottom:16px;padding:12px;background:#fafaf9;border:1px solid #e7e5e4;border-radius:8px;">
-            <p style="font-size:11px;color:#78716c;margin-bottom:8px;"><strong>Housing-only mode:</strong> Your rent points multiplier is calculated automatically based on your everyday spend ratio.</p>
-            <div style="font-size:10px;color:#78716c;">
-              <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:2px;">
-                <span>25-49% spend → 0.5x</span>
-                <span>50-74% spend → 0.75x</span>
-                <span>75-99% spend → 1x</span>
-                <span>100%+ spend → 1.25x</span>
-              </div>
-              <p style="margin-top:6px;">Below 25% = 250 points floor</p>
-            </div>
-          </div>
-          
-          <!-- Rent Detection -->
-          <div style="margin-bottom:16px;padding:12px;border:1px solid #e7e5e4;border-radius:8px;">
-            <label style="display:block;font-size:12px;font-weight:500;margin-bottom:8px;">How should we detect rent payments?</label>
-            <div style="display:flex;flex-direction:column;gap:8px;">
-              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                <input type="radio" name="biltRentDetection-${cardId}" value="auto" ${!isManualRent ? 'checked' : ''} class="bilt-rent-detection" data-card="${cardId}">
-                <span style="font-size:12px;">Auto-detect (uses rent/mortgage categories & common keywords)</span>
-              </label>
-              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                <input type="radio" name="biltRentDetection-${cardId}" value="manual" ${isManualRent ? 'checked' : ''} class="bilt-rent-detection" data-card="${cardId}">
-                <span style="font-size:12px;">Manual configuration</span>
-              </label>
-            </div>
-            
-            <div id="biltManualRent-${cardId}" style="${isManualRent ? '' : 'display:none;'}margin-top:12px;padding:10px;background:#f5f5f4;border-radius:6px;">
-              <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:8px;">
-                <div>
-                  <label style="font-size:10px;display:block;margin-bottom:2px;">Monthly Amount:</label>
-                  <div style="display:flex;align-items:center;gap:4px;">
-                    <span>$</span>
-                    <input type="number" class="bilt-manual-rent form-input" data-card="${cardId}" value="${cfg.manualRentAmount || 2000}" style="width:100px;padding:4px;">
-                  </div>
-                </div>
-                <div>
-                  <label style="font-size:10px;display:block;margin-bottom:2px;">Day of month:</label>
-                  <select class="bilt-rent-day form-select" data-card="${cardId}" style="padding:4px;">
-                    ${Array.from({length:28},(_,i)=>i+1).map(d => 
-                      `<option value="${d}" ${parseInt(cfg.manualRentDay) === d ? 'selected' : ''}>${d}${d===1?'st':d===2?'nd':d===3?'rd':'th'}</option>`
-                    ).join('')}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label style="font-size:10px;display:block;margin-bottom:2px;">Merchant keyword (optional, e.g. "BILT" or your landlord name):</label>
-                <input type="text" class="bilt-rent-keyword form-input" data-card="${cardId}" value="${escapeHtml(cfg.rentMerchantKeyword || '')}" placeholder="Leave blank to use amount+date" style="width:100%;padding:4px;font-size:11px;">
-              </div>
-            </div>
-          </div>
-          
-          ${card.hasObsidianBonus ? `
-          <!-- Obsidian Bonus Category -->
-          <div style="margin-bottom:12px;padding:12px;border:1px solid #e7e5e4;border-radius:8px;">
-            <label style="display:block;font-size:12px;font-weight:500;margin-bottom:8px;">Which category gets your 3x bonus? (annual choice)</label>
-            <div style="display:flex;gap:16px;">
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-                <input type="radio" name="biltBonus-${cardId}" value="dining" ${cfg.bonusCategory !== 'grocery' ? 'checked' : ''} class="bilt-bonus-cat" data-card="${cardId}">
-                <span style="font-size:12px;">Dining</span>
-              </label>
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-                <input type="radio" name="biltBonus-${cardId}" value="grocery" ${cfg.bonusCategory === 'grocery' ? 'checked' : ''} class="bilt-bonus-cat" data-card="${cardId}">
-                <span style="font-size:12px;">Grocery (up to $25k/yr)</span>
-              </label>
-            </div>
-          </div>
-          ` : ''}
-        </div>
-      `;
-    }
-    
+    // Card-specific sections removed — plugin hooks handle rendering
     // Build credits section with monthly claiming for manual credits - NOW YEAR-SPECIFIC
     let creditsSection = '';
 
@@ -2849,8 +2469,6 @@ function showCardConfigEditor(preselectedCardId = null) {
 
     // Locked style for non-editable sections
     const lockedStyle = !cardEditable ? 'pointer-events:none;opacity:0.55;' : '';
-    // Bilt config sections are always editable, credits are not (unless DP active)
-    const biltLockedStyle = !biltEditable ? 'pointer-events:none;opacity:0.55;' : '';
     const creditsLockedStyle = !creditsEditable ? 'pointer-events:none;opacity:0.55;' : '';
 
     document.getElementById('cardConfigContent').innerHTML = `
@@ -2888,9 +2506,7 @@ function showCardConfigEditor(preselectedCardId = null) {
         </div>
         ` : ''}
 
-        <div style="${isCashPlus ? '' : lockedStyle}">${cashPlusSection}</div>
-        ${cffSection}
-        <div style="${card.isBilt ? '' : lockedStyle}">${biltSection}</div>
+        ${pluginSection ? `<div style="${hasPluginConfig ? '' : lockedStyle}">${pluginSection}</div>` : ''}
 
         <!-- Multipliers (read-only) -->
         <div>
@@ -2901,8 +2517,8 @@ function showCardConfigEditor(preselectedCardId = null) {
                 <span style="font-size:13px;">${escapeHtml(cat)}</span>
                 <span style="font-size:13px;font-weight:600;">${rate}x</span>
               </div>
-            `).join('') : (isCashPlus ? '<div style="font-size:12px;color:#78716c;font-style:italic;">Based on quarterly selections above</div>' : '')}
-            ${isCFF ? '<div style="font-size:12px;color:#78716c;font-style:italic;">+ quarterly bonus categories shown above</div>' : ''}
+            `).join('') : (card.earningRatesNote ? `<div style="font-size:12px;color:#78716c;font-style:italic;">${escapeHtml(card.earningRatesNote)}</div>` : '')}
+            ${Object.keys(card.multipliers).length > 0 && card.earningRatesNote ? `<div style="font-size:12px;color:#78716c;font-style:italic;">${escapeHtml(card.earningRatesNote)}</div>` : ''}
             <div style="display:flex;justify-content:space-between;padding:8px 12px;background:#fafaf9;border-radius:6px;border:1px dashed #d6d3d1;">
               <span style="font-size:13px;color:#78716c;">Everything else</span>
               <span style="font-size:13px;font-weight:600;color:#78716c;">${card.baseRate}x</span>
@@ -3008,34 +2624,11 @@ function showCardConfigEditor(preselectedCardId = null) {
       }
     });
 
-    // CFF quarterly categories are now read-only from stored data (no event listeners needed)
-
-    // Limit Cash+ 5% selections to 2 PER QUARTER
-    if (isCashPlus) {
-      document.querySelectorAll('.cash-plus-5').forEach(cb => {
-        cb.addEventListener('change', () => {
-          const quarter = cb.dataset.quarter;
-          const checked = document.querySelectorAll(`.cash-plus-5[data-quarter="${quarter}"]:checked`);
-          if (checked.length > 2) {
-            cb.checked = false;
-            alert('You can only select 2 categories for 5% cashback per quarter');
-          }
-          // Update visual
-          cb.closest('label').style.background = cb.checked ? '#dcfce7' : '';
-          cb.closest('label').style.borderColor = cb.checked ? '#059669' : '#e7e5e4';
-        });
-      });
-      document.querySelectorAll('.cash-plus-2').forEach(cb => {
-        cb.addEventListener('change', () => {
-          const quarter = cb.dataset.quarter;
-          document.querySelectorAll(`.cash-plus-2[data-quarter="${quarter}"]`).forEach(r => {
-            r.closest('label').style.background = r.checked ? '#fef9c3' : '';
-            r.closest('label').style.borderColor = r.checked ? '#eab308' : '#e7e5e4';
-          });
-        });
-      });
+    // Plugin-provided config event listeners (Cash+ checkboxes, CFF year selector, Bilt config handlers, etc.)
+    if (typeof card.attachConfigListeners === 'function') {
+      card.attachConfigListeners(cardId, buildPluginCtx());
     }
-    
+
     // Credit year selector - re-render to update months display
     const creditYearSelect = document.getElementById('creditYearSelect');
     if (creditYearSelect) {
@@ -3045,157 +2638,6 @@ function showCardConfigEditor(preselectedCardId = null) {
       });
     }
     
-    // Cash+ year selector
-    const cashPlusYearSelect = document.getElementById('cashPlusYearSelect');
-    if (cashPlusYearSelect) {
-      cashPlusYearSelect.addEventListener('change', (e) => {
-        state.selectedCashPlusYear = parseInt(e.target.value);
-        renderCardConfig();
-      });
-    }
-    
-    // CFF year selector
-    const cffYearSelect = document.getElementById('cffYearSelect');
-    if (cffYearSelect) {
-      cffYearSelect.addEventListener('change', (e) => {
-        state.selectedCFFYear = parseInt(e.target.value);
-        renderCardConfig();
-      });
-    }
-    
-    // Bilt 2.0 configuration handlers
-    if (card.isBilt) {
-      // Year dropdown
-      const biltYearSelect = document.getElementById('biltYearSelect');
-      if (biltYearSelect) {
-        biltYearSelect.addEventListener('change', () => {
-          state.selectedBiltYear = biltYearSelect.value === 'all' ? 'all' : parseInt(biltYearSelect.value);
-          renderCardConfig();
-        });
-      }
-      // Calculator helper link
-      document.querySelectorAll('.bilt-calc-helper').forEach(link => {
-        link.addEventListener('click', (e) => {
-          e.preventDefault();
-          const cid = link.dataset.card;
-          document.getElementById(`biltCalcModal-${cid}`).style.display = '';
-        });
-      });
-      // Calculator close button
-      document.querySelectorAll('.bilt-calc-close').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const cid = btn.dataset.card;
-          document.getElementById(`biltCalcModal-${cid}`).style.display = 'none';
-        });
-      });
-      // Calculator rent input - recalculate on change (debounced for storage, immediate for UI)
-      document.querySelectorAll('.bilt-calc-rent').forEach(input => {
-        // Debounced save to prevent excessive localStorage writes
-        const debouncedSave = debounce((cid, rentVal) => {
-          if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
-          state.biltConfig[cid].manualRentAmount = rentVal;
-          safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
-        }, 300);
-
-        input.addEventListener('input', () => {
-          const cid = input.dataset.card;
-          const rentVal = parseFloat(input.value) || 0;
-          const cashFor100 = (rentVal / 100) * 3;
-
-          // Immediate UI update for responsiveness
-          const results = document.querySelector(`.bilt-calc-results[data-card="${cid}"]`);
-          if (results) {
-            results.querySelector('.calc-100').textContent = cashFor100.toFixed(2);
-            results.querySelector('.calc-75').textContent = (cashFor100 * 0.75).toFixed(2);
-            results.querySelector('.calc-50').textContent = (cashFor100 * 0.50).toFixed(2);
-            results.querySelector('.calc-25').textContent = (cashFor100 * 0.25).toFixed(2);
-          }
-
-          // Debounced storage save
-          debouncedSave(cid, rentVal);
-        });
-      });
-      // Bilt Cash as credit checkbox
-      document.querySelectorAll('.bilt-cash-as-credit').forEach(checkbox => {
-        checkbox.addEventListener('change', () => {
-          const cid = checkbox.dataset.card;
-          if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
-          state.biltConfig[cid].countBiltCashAsCredit = checkbox.checked;
-          safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
-        });
-      });
-      // Monthly Bilt Cash redemption for rent
-      document.querySelectorAll('.bilt-monthly-redemption').forEach(input => {
-        input.addEventListener('change', () => {
-          const cid = input.dataset.card;
-          if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
-          state.biltConfig[cid].monthlyBiltCashRedemption = parseFloat(input.value) || 0;
-          safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
-        });
-      });
-      // Reward option
-      document.querySelectorAll('.bilt-reward-option').forEach(radio => {
-        radio.addEventListener('change', () => {
-          const cid = radio.dataset.card;
-          if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
-          state.biltConfig[cid].rewardOption = radio.value;
-          safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
-          document.getElementById(`biltFlexibleSection-${cid}`).style.display = radio.value === 'flexible' ? '' : 'none';
-          document.getElementById(`biltHousingSection-${cid}`).style.display = radio.value === 'housing-only' ? '' : 'none';
-          // Update radio label backgrounds
-          document.querySelectorAll(`[name="biltRewardOption-${cid}"]`).forEach(r => {
-            r.closest('label').style.background = r.checked ? (r.value === 'flexible' ? '#fef9c3' : '#dcfce7') : '';
-          });
-        });
-      });
-      // Rent detection mode
-      document.querySelectorAll('.bilt-rent-detection').forEach(radio => {
-        radio.addEventListener('change', () => {
-          const cid = radio.dataset.card;
-          if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
-          state.biltConfig[cid].rentDetection = radio.value;
-          safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
-          document.getElementById(`biltManualRent-${cid}`).style.display = radio.value === 'manual' ? '' : 'none';
-        });
-      });
-      // Manual rent amount
-      document.querySelectorAll('.bilt-manual-rent').forEach(input => {
-        input.addEventListener('change', () => {
-          const cid = input.dataset.card;
-          if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
-          state.biltConfig[cid].manualRentAmount = parseFloat(input.value) || 2000;
-          safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
-          renderCardConfig(); // Re-render to update helper text
-        });
-      });
-      // Rent day
-      document.querySelectorAll('.bilt-rent-day').forEach(sel => {
-        sel.addEventListener('change', () => {
-          const cid = sel.dataset.card;
-          if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
-          state.biltConfig[cid].manualRentDay = parseInt(sel.value);
-          safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
-        });
-      });
-      // Rent merchant keyword
-      document.querySelectorAll('.bilt-rent-keyword').forEach(input => {
-        input.addEventListener('change', () => {
-          const cid = input.dataset.card;
-          if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
-          state.biltConfig[cid].rentMerchantKeyword = input.value.trim();
-          safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
-        });
-      });
-      // Bonus category (Obsidian)
-      document.querySelectorAll('.bilt-bonus-cat').forEach(radio => {
-        radio.addEventListener('change', () => {
-          const cid = radio.dataset.card;
-          if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
-          state.biltConfig[cid].bonusCategory = radio.value;
-          safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
-        });
-      });
-    }
   }
   
   select.addEventListener('change', () => {
@@ -3397,14 +2839,18 @@ function resetCardScenariosState() {
 }
 
 /**
- * Check if any Bilt card is involved in the current scenario (add, remove, or swap).
- * Used to trigger the rent amount prompt at step 2b.
+ * Generic: check if any card involved in the current scenario needs a special prompt.
+ * Returns the card ID of the first card with a scenarioPrompt.isNeeded hook that returns true,
+ * or null if no card needs a prompt.
  */
-function scenarioInvolvesBilt() {
+function getScenarioPromptCard() {
   const wi = state.cardScenarios;
-  if (wi.addCardId && CARDS[wi.addCardId]?.isBilt) return true;
-  if (wi.removeCardId && CARDS[wi.removeCardId]?.isBilt) return true;
-  return false;
+  const involvedCards = [wi.addCardId, wi.removeCardId].filter(Boolean);
+  for (const cardId of involvedCards) {
+    const card = CARDS[cardId];
+    if (card?.scenarioPrompt?.isNeeded?.(wi, buildPluginCtx())) return cardId;
+  }
+  return null;
 }
 
 /**
@@ -3834,11 +3280,10 @@ function calculateSwapValue(removeCardId, addCardId, year) {
   const wi = state.cardScenarios;
   const monthlyRent = wi.rentAmount || 0;
   const biltCashPlan = wi.biltCashPlan || 'maximize';
-  const customRedemption = wi.biltCustomMonthlyRedemption || 0;
-  const walletBiltCard = hypotheticalWallet.find(id => CARDS[id]?.isBilt);
+  const routingCard = hypotheticalWallet.find(id => CARDS[id]?.scenarioPrompt?.computeRouting);
 
-  // Phase 1: Accumulate spend per subcategory and find best Bilt/non-Bilt destinations
-  const removeSpendBuckets = {}; // sub → { spend, sourceRate, sourcePV, sourceValue, isCategory, bestBilt, bestNonBilt, _totalPoints, _destValuePerDollar }
+  // Phase 1: Accumulate spend per subcategory and find best routing/non-routing destinations
+  const removeSpendBuckets = {}; // sub → { spend, sourceRate, sourcePV, sourceValue, isCategory, bestRouting, bestAlt, _totalPoints, _destValuePerDollar }
   const removeBuckets = {};
 
   for (const t of removeTxns) {
@@ -3885,8 +3330,8 @@ function calculateSwapValue(removeCardId, addCardId, year) {
     const removeValue = removeMult.rate * removePV;
 
     if (!removeSpendBuckets[sub]) {
-      // Find best Bilt and best non-Bilt destinations
-      let bestBilt = null, bestNonBilt = null;
+      // Find best routing-card and best non-routing destinations
+      let bestRouting = null, bestAlt = null;
       for (const cardId of hypotheticalWallet) {
         const cardPV = getPointValue(cardId);
         const mapped = mapToCardCategory(sub, cardId, todayStr);
@@ -3894,16 +3339,16 @@ function calculateSwapValue(removeCardId, addCardId, year) {
         const val = mult.rate * cardPV;
         const entry = { cardId, rate: mult.rate, pv: cardPV, cat: mapped, val,
           name: CARDS[cardId]?.shortName || CARDS[cardId]?.name || cardId };
-        if (CARDS[cardId]?.isBilt) {
-          if (!bestBilt || val > bestBilt.val) bestBilt = entry;
+        if (CARDS[cardId]?.scenarioPrompt?.computeRouting) {
+          if (!bestRouting || val > bestRouting.val) bestRouting = entry;
         } else {
-          if (!bestNonBilt || val > bestNonBilt.val) bestNonBilt = entry;
+          if (!bestAlt || val > bestAlt.val) bestAlt = entry;
         }
       }
       removeSpendBuckets[sub] = {
         spend: 0, sourceRate: removeMult.rate, sourcePV: removePV,
         sourceValue: removeValue, isCategory: removeMult.rate > removeBaseRate,
-        bestBilt, bestNonBilt
+        bestRouting, bestAlt
       };
     }
     removeSpendBuckets[sub].spend += amt;
@@ -3914,73 +3359,74 @@ function calculateSwapValue(removeCardId, addCardId, year) {
     removeBuckets['rent'].sourceRate = removeBuckets['rent']._totalPoints / removeBuckets['rent'].spend;
   }
 
-  // Phase 2: Apply Bilt-aware routing for non-rent subcategories
-  // Compute existing Bilt spend from other Bilt cards in the hypothetical wallet
-  let existingBiltSpend = 0;
-  if (walletBiltCard) {
+  // Phase 2: Apply routing-aware optimization for non-rent subcategories
+  // Compute existing routing-card spend from other routing cards in the hypothetical wallet
+  let existingRoutingSpend = 0;
+  if (routingCard) {
     for (const cid of hypotheticalWallet) {
-      if (!CARDS[cid]?.isBilt || cid === removeCardId) continue;
+      if (!CARDS[cid]?.scenarioPrompt?.computeRouting || cid === removeCardId) continue;
       const { subcategories: subs } = getAnnualizedCardSpend(cid, year);
       for (const [s, d] of Object.entries(subs)) {
         if (s === 'rent') continue;
-        existingBiltSpend += d.spend || 0;
+        existingRoutingSpend += d.spend || 0;
       }
     }
   }
 
-  const biltCandidates = [];
+  const routingCandidates = [];
   for (const [sub, bucket] of Object.entries(removeSpendBuckets)) {
     const annualizedSpend = bucket.spend * annualizationFactor;
     if (annualizedSpend <= 0) continue;
 
-    if (!bucket.bestBilt && bucket.bestNonBilt) {
-      // No Bilt destination — route to best non-Bilt directly
+    if (!bucket.bestRouting && bucket.bestAlt) {
+      // No routing destination — route to best alt directly
       removeBuckets[sub] = {
         subcategory: sub, sourceRate: bucket.sourceRate, sourcePointValue: bucket.sourcePV,
-        bestCardId: bucket.bestNonBilt.cardId, bestCardName: bucket.bestNonBilt.name,
-        bestRate: bucket.bestNonBilt.rate, bestPointValue: bucket.bestNonBilt.pv,
-        spend: annualizedSpend, valueChange: annualizedSpend * (bucket.bestNonBilt.val - bucket.sourceValue),
+        bestCardId: bucket.bestAlt.cardId, bestCardName: bucket.bestAlt.name,
+        bestRate: bucket.bestAlt.rate, bestPointValue: bucket.bestAlt.pv,
+        spend: annualizedSpend, valueChange: annualizedSpend * (bucket.bestAlt.val - bucket.sourceValue),
         isCategory: bucket.isCategory
       };
-    } else if (bucket.bestBilt && !bucket.bestNonBilt) {
-      // Only Bilt destination
+    } else if (bucket.bestRouting && !bucket.bestAlt) {
+      // Only routing destination
       removeBuckets[sub] = {
         subcategory: sub, sourceRate: bucket.sourceRate, sourcePointValue: bucket.sourcePV,
-        bestCardId: bucket.bestBilt.cardId, bestCardName: bucket.bestBilt.name,
-        bestRate: bucket.bestBilt.rate, bestPointValue: bucket.bestBilt.pv,
-        spend: annualizedSpend, valueChange: annualizedSpend * (bucket.bestBilt.val - bucket.sourceValue),
+        bestCardId: bucket.bestRouting.cardId, bestCardName: bucket.bestRouting.name,
+        bestRate: bucket.bestRouting.rate, bestPointValue: bucket.bestRouting.pv,
+        spend: annualizedSpend, valueChange: annualizedSpend * (bucket.bestRouting.val - bucket.sourceValue),
         isCategory: bucket.isCategory
       };
-    } else if (bucket.bestBilt && bucket.bestNonBilt) {
-      // Both exist — candidate for Bilt routing optimization
-      biltCandidates.push({
+    } else if (bucket.bestRouting && bucket.bestAlt) {
+      // Both exist — candidate for routing optimization
+      routingCandidates.push({
         sub, spend: annualizedSpend,
-        biltCardId: bucket.bestBilt.cardId, biltRate: bucket.bestBilt.rate, biltPV: bucket.bestBilt.pv,
-        biltCat: bucket.bestBilt.cat, biltName: bucket.bestBilt.name,
-        altCardId: bucket.bestNonBilt.cardId, altRate: bucket.bestNonBilt.rate, altPV: bucket.bestNonBilt.pv,
-        altCat: bucket.bestNonBilt.cat, altName: bucket.bestNonBilt.name,
+        biltCardId: bucket.bestRouting.cardId, biltRate: bucket.bestRouting.rate, biltPV: bucket.bestRouting.pv,
+        biltCat: bucket.bestRouting.cat, biltName: bucket.bestRouting.name,
+        altCardId: bucket.bestAlt.cardId, altRate: bucket.bestAlt.rate, altPV: bucket.bestAlt.pv,
+        altCat: bucket.bestAlt.cat, altName: bucket.bestAlt.name,
         sourceRate: bucket.sourceRate, sourcePV: bucket.sourcePV,
         sourceValue: bucket.sourceValue, isCategory: bucket.isCategory
       });
     }
   }
 
-  // Track cumulative Bilt spend for Component 2 cap coordination
-  let component1BiltSpend = existingBiltSpend;
-  // Add spend from subs that route directly to Bilt (no non-Bilt option)
+  // Track cumulative routing spend for Component 2 cap coordination
+  let component1RoutingSpend = existingRoutingSpend;
+  // Add spend from subs that route directly to routing card (no alt option)
   for (const [sub, bucket] of Object.entries(removeBuckets)) {
     if (sub === 'rent') continue;
-    if (bucket.bestCardId && CARDS[bucket.bestCardId]?.isBilt) {
-      component1BiltSpend += bucket.spend || 0;
+    if (bucket.bestCardId && CARDS[bucket.bestCardId]?.scenarioPrompt?.computeRouting) {
+      component1RoutingSpend += bucket.spend || 0;
     }
   }
 
-  // Apply computeBiltRouting for candidates where both Bilt and non-Bilt destinations exist
-  if (biltCandidates.length > 0 && walletBiltCard) {
-    const result = computeBiltRouting(biltCandidates, walletBiltCard, monthlyRent, biltCashPlan, customRedemption, existingBiltSpend);
-    component1BiltSpend = result.cumulativeBiltSpend;
+  // Apply routing optimization via plugin for candidates where both options exist
+  if (routingCandidates.length > 0 && routingCard) {
+    const routingPlugin = CARDS[routingCard]?.scenarioPrompt;
+    const result = routingPlugin.computeRouting(routingCandidates, routingCard, existingRoutingSpend, buildPluginCtx());
+    component1RoutingSpend = result.cumulativeBiltSpend;
     for (const route of result.routes) {
-      const orig = biltCandidates.find(c => c.sub === route.sub);
+      const orig = routingCandidates.find(c => c.sub === route.sub);
       const sourceValue = orig ? orig.sourceValue : 0;
       const destValue = route.destRate * route.destPV;
       const key = route.sub;
@@ -3997,7 +3443,6 @@ function calculateSwapValue(removeCardId, addCardId, year) {
         };
       } else {
         // Partial split — same subcategory can appear twice (e.g., cap boundary)
-        // Create a separate entry with a unique key
         const splitKey = `${key}__split_${Math.random().toString(36).slice(2, 6)}`;
         removeBuckets[splitKey] = {
           subcategory: route.sub, sourceRate: route.sourceRate, sourcePointValue: route.sourcePV,
@@ -4041,8 +3486,8 @@ function calculateSwapValue(removeCardId, addCardId, year) {
 
   // Compare new card against best existing card in hypothetical wallet (excl. new card)
   const existingWallet = hypotheticalWallet.filter(id => id !== addCardId);
-  const newCardIsBilt = !!CARDS[addCardId]?.isBilt;
-  const comp2BiltCard = newCardIsBilt ? addCardId : existingWallet.find(id => CARDS[id]?.isBilt);
+  const newCardHasRouting = !!CARDS[addCardId]?.scenarioPrompt?.computeRouting;
+  const comp2RoutingCard = newCardHasRouting ? addCardId : existingWallet.find(id => CARDS[id]?.scenarioPrompt?.computeRouting);
 
   // Phase 1: Accumulate spend per subcategory
   const addSpendBuckets = {}; // sub → { spend, bestExisting }
@@ -4054,8 +3499,8 @@ function calculateSwapValue(removeCardId, addCardId, year) {
     addSpendBuckets[sub].spend += amt;
   }
 
-  // Phase 2: For each subcategory, find best existing and new card values, apply Bilt routing
-  const addBiltCandidates = [];
+  // Phase 2: For each subcategory, find best existing and new card values, apply routing
+  const addRoutingCandidates = [];
   const addDirectRows = [];
 
   for (const [sub, bucket] of Object.entries(addSpendBuckets)) {
@@ -4063,7 +3508,7 @@ function calculateSwapValue(removeCardId, addCardId, year) {
     if (annualizedSpend <= 0) continue;
 
     // Find best existing card
-    let bestExisting = { cardId: null, rate: 0, pv: 0.01, val: 0, cat: 'other', name: '', isBilt: false };
+    let bestExisting = { cardId: null, rate: 0, pv: 0.01, val: 0, cat: 'other', name: '', hasRouting: false };
     for (const cid of existingWallet) {
       const pv = getPointValue(cid);
       const mapped = mapToCardCategory(sub, cid, todayStr);
@@ -4071,7 +3516,7 @@ function calculateSwapValue(removeCardId, addCardId, year) {
       const val = mult.rate * pv;
       if (val > bestExisting.val) {
         bestExisting = { cardId: cid, rate: mult.rate, pv, val, cat: mapped,
-          name: CARDS[cid]?.shortName || CARDS[cid]?.name || cid, isBilt: !!CARDS[cid]?.isBilt };
+          name: CARDS[cid]?.shortName || CARDS[cid]?.name || cid, hasRouting: !!CARDS[cid]?.scenarioPrompt?.computeRouting };
       }
     }
 
@@ -4080,10 +3525,10 @@ function calculateSwapValue(removeCardId, addCardId, year) {
     const newMult = getCardScenariosMultiplier(addCardId, newCat);
     const newValue = newMult.rate * addPV;
 
-    // Determine if Bilt routing optimization applies
-    const hasBiltOption = newCardIsBilt || bestExisting.isBilt;
-    if (!hasBiltOption || !comp2BiltCard) {
-      // No Bilt involved — pure points comparison
+    // Determine if routing optimization applies
+    const hasRoutingOption = newCardHasRouting || bestExisting.hasRouting;
+    if (!hasRoutingOption || !comp2RoutingCard) {
+      // No routing involved — pure points comparison
       if (newValue > bestExisting.val) {
         addDirectRows.push({
           sourceCardId: bestExisting.cardId, sourceCardName: bestExisting.name,
@@ -4095,19 +3540,19 @@ function calculateSwapValue(removeCardId, addCardId, year) {
       continue;
     }
 
-    // Bilt vs non-Bilt routing
-    let biltOption, altOption;
-    if (newCardIsBilt && !bestExisting.isBilt) {
-      biltOption = { cardId: addCardId, rate: newMult.rate, pv: addPV, cat: newCat,
+    // Routing vs non-routing card optimization
+    let routingOption, altOption;
+    if (newCardHasRouting && !bestExisting.hasRouting) {
+      routingOption = { cardId: addCardId, rate: newMult.rate, pv: addPV, cat: newCat,
         name: CARDS[addCardId]?.shortName || CARDS[addCardId]?.name || addCardId };
       altOption = bestExisting;
-    } else if (!newCardIsBilt && bestExisting.isBilt) {
-      biltOption = { cardId: bestExisting.cardId, rate: bestExisting.rate, pv: bestExisting.pv,
+    } else if (!newCardHasRouting && bestExisting.hasRouting) {
+      routingOption = { cardId: bestExisting.cardId, rate: bestExisting.rate, pv: bestExisting.pv,
         cat: bestExisting.cat, name: bestExisting.name };
       altOption = { cardId: addCardId, rate: newMult.rate, pv: addPV, cat: newCat,
         name: CARDS[addCardId]?.shortName || CARDS[addCardId]?.name || addCardId };
     } else {
-      // Both Bilt — pure comparison
+      // Both have routing — pure comparison
       if (newValue > bestExisting.val) {
         addDirectRows.push({
           sourceCardId: bestExisting.cardId, sourceCardName: bestExisting.name,
@@ -4119,29 +3564,30 @@ function calculateSwapValue(removeCardId, addCardId, year) {
       continue;
     }
 
-    addBiltCandidates.push({
+    addRoutingCandidates.push({
       sub, spend: annualizedSpend,
-      biltCardId: biltOption.cardId, biltRate: biltOption.rate, biltPV: biltOption.pv,
-      biltCat: biltOption.cat, biltName: biltOption.name,
+      biltCardId: routingOption.cardId, biltRate: routingOption.rate, biltPV: routingOption.pv,
+      biltCat: routingOption.cat, biltName: routingOption.name,
       altCardId: altOption.cardId, altRate: altOption.rate, altPV: altOption.pv,
       altCat: altOption.cat, altName: altOption.name,
       sourceRate: bestExisting.rate, sourcePV: bestExisting.pv,
-      _newCardIsBilt: newCardIsBilt, _existingIsBilt: bestExisting.isBilt,
+      _newCardHasRouting: newCardHasRouting, _existingHasRouting: bestExisting.hasRouting,
       _bestExisting: bestExisting, _newCat: newCat, _newRate: newMult.rate, _newPV: addPV
     });
   }
 
   const addRows = [...addDirectRows];
 
-  // Apply Bilt routing for Component 2 candidates
-  if (addBiltCandidates.length > 0 && comp2BiltCard) {
-    const comp2Result = computeBiltRouting(addBiltCandidates, comp2BiltCard, monthlyRent, biltCashPlan, customRedemption, component1BiltSpend);
+  // Apply routing optimization for Component 2 candidates via plugin
+  if (addRoutingCandidates.length > 0 && comp2RoutingCard) {
+    const comp2Plugin = CARDS[comp2RoutingCard]?.scenarioPrompt;
+    const comp2Result = comp2Plugin.computeRouting(addRoutingCandidates, comp2RoutingCard, component1RoutingSpend, buildPluginCtx());
     for (const route of comp2Result.routes) {
-      const orig = addBiltCandidates.find(c => c.sub === route.sub && c.spend >= route.spend - 0.01);
+      const orig = addRoutingCandidates.find(c => c.sub === route.sub && c.spend >= route.spend - 0.01);
       if (!orig) continue;
 
-      if (orig._newCardIsBilt && route.destCardId === addCardId) {
-        // New Bilt card won — shift from existing to new card
+      if (orig._newCardHasRouting && route.destCardId === addCardId) {
+        // New routing card won — shift from existing to new card
         const oldVal = orig._bestExisting.val;
         const newVal = route.destRate * route.destPV;
         const isRentMotivated = biltCashPlan !== 'cash' && !!route.routeReason && route.routeReason.includes('Rent uplift');
@@ -4153,8 +3599,8 @@ function calculateSwapValue(removeCardId, addCardId, year) {
           routeReason: route.routeReason,
           _isRentMotivated: isRentMotivated
         });
-      } else if (!orig._newCardIsBilt && route.destCardId === addCardId) {
-        // New non-Bilt card won over existing Bilt — shift to new card
+      } else if (!orig._newCardHasRouting && route.destCardId === addCardId) {
+        // New non-routing card won over existing routing card — shift to new card
         const oldVal = orig._bestExisting.val;
         const newVal = orig._newRate * orig._newPV;
         addRows.push({
@@ -4165,7 +3611,7 @@ function calculateSwapValue(removeCardId, addCardId, year) {
           routeReason: route.routeReason
         });
       }
-      // If Bilt defended (existing Bilt won), no row is added — spend stays on existing card
+      // If routing card defended, no row is added — spend stays on existing card
     }
   }
 
@@ -4291,147 +3737,6 @@ function formatSubcategoryName(sub) {
 }
 
 /**
- * Bilt-aware spend routing algorithm.
- * Routes spend to Bilt optimally: cheapest-sacrifice categories first, up to the rent cap.
- * After the cap, Bilt Cash is only a tiebreaker (not a routing advantage).
- *
- * @param {Array} candidates - Array of { sub, spend, biltRate, biltPV, biltCardId, biltCat, biltName,
- *   altCardId, altRate, altPV, altCat, altName, sourceRate, sourcePV }
- * @param {string} biltCardId - The Bilt card to route to
- * @param {number} monthlyRent
- * @param {string} biltCashPlan - 'maximize' | 'cash' | 'custom'
- * @param {number} customMonthlyRedemption - For 'custom' plan
- * @param {number} existingBiltSpend - Annual Bilt spend already on other Bilt cards (counts toward cap)
- * @returns {{ routes: Array, cumulativeBiltSpend: number, annualBiltSpendCap: number, rentUpliftPerDollar: number }}
- */
-function computeBiltRouting(candidates, biltCardId, monthlyRent, biltCashPlan, customMonthlyRedemption, existingBiltSpend) {
-  const biltPV = getPointValue(biltCardId);
-  const biltCard = CARDS[biltCardId];
-  const biltName = biltCard?.shortName || biltCard?.name || biltCardId;
-
-  // Step A: Rent uplift per dollar = (0.04 / 3) × 100 × PV = 1.333 × PV
-  const rentUpliftPerDollar = (0.04 / 3) * 100 * biltPV;
-
-  // Step B: Calculate the annual Bilt spend cap
-  let annualBiltSpendCap;
-  if (biltCashPlan === 'cash' || monthlyRent <= 0) {
-    annualBiltSpendCap = 0;
-  } else if (biltCashPlan === 'custom') {
-    const monthlyBiltCashNeeded = customMonthlyRedemption || 0;
-    annualBiltSpendCap = Math.min(
-      (monthlyBiltCashNeeded / 0.04) * 12,
-      monthlyRent * 0.75 * 12
-    );
-  } else { // 'maximize'
-    annualBiltSpendCap = monthlyRent * 0.75 * 12;
-  }
-
-  // Pre-load existing Bilt spend toward the cap
-  let cumulativeBiltSpend = existingBiltSpend || 0;
-
-  // Step C: For each category, calculate sacrifice cost
-  const categorized = candidates.map(c => {
-    const biltBaseVal = c.biltRate * c.biltPV;
-    const altVal = c.altRate * c.altPV;
-    return { ...c, biltBaseVal, altVal, sacrificeCost: altVal - biltBaseVal };
-  });
-
-  // Separate: Bilt wins on pure base rate (sacrifice <= 0) vs alt wins (sacrifice > 0)
-  const biltWins = categorized.filter(c => c.sacrificeCost <= 0);
-  const altWins = categorized.filter(c => c.sacrificeCost > 0);
-
-  // Step D: Sort alt-wins by sacrifice cost ascending (cheapest sacrifice first)
-  altWins.sort((a, b) => a.sacrificeCost - b.sacrificeCost);
-
-  const routes = [];
-
-  // Categories where Bilt wins on base rate — always route to Bilt
-  for (const c of biltWins) {
-    const reason = c.sacrificeCost < 0
-      ? `${c.biltRate}x Bilt ($${c.biltBaseVal.toFixed(4)}/dollar) beats ${c.altName} ${c.altRate}x ($${c.altVal.toFixed(4)}/dollar)`
-      : `Tied on base rate — Bilt wins (earns Bilt Cash)`;
-    routes.push({
-      sub: c.sub, spend: c.spend,
-      destCardId: c.biltCardId || biltCardId, destRate: c.biltRate, destPV: c.biltPV,
-      destCat: c.biltCat, destName: c.biltName || biltName,
-      sourceRate: c.sourceRate, sourcePV: c.sourcePV, routeReason: reason
-    });
-    cumulativeBiltSpend += c.spend;
-  }
-
-  // Step E: Route cheapest-sacrifice categories to Bilt for rent uplift, up to cap
-  const handledSubs = new Set(); // track partially-handled subs
-  if (annualBiltSpendCap > 0) {
-    for (const c of altWins) {
-      if (cumulativeBiltSpend >= annualBiltSpendCap) break;
-
-      const netBenefit = rentUpliftPerDollar - c.sacrificeCost;
-      if (netBenefit <= 0) break; // Not worth sacrificing
-
-      const availableToRoute = Math.min(c.spend, annualBiltSpendCap - cumulativeBiltSpend);
-
-      if (availableToRoute < c.spend) {
-        // Partial route — split this category
-        routes.push({
-          sub: c.sub, spend: availableToRoute,
-          destCardId: c.biltCardId || biltCardId, destRate: c.biltRate, destPV: c.biltPV,
-          destCat: c.biltCat, destName: c.biltName || biltName,
-          sourceRate: c.sourceRate, sourcePV: c.sourcePV,
-          routeReason: `Rent uplift: ${c.biltRate}x ($${c.biltBaseVal.toFixed(4)}) + rent uplift ($${rentUpliftPerDollar.toFixed(4)}) = $${(c.biltBaseVal + rentUpliftPerDollar).toFixed(4)}/dollar vs ${c.altName} $${c.altVal.toFixed(4)}/dollar (partial — rent cap reached)`
-        });
-        routes.push({
-          sub: c.sub, spend: c.spend - availableToRoute,
-          destCardId: c.altCardId, destRate: c.altRate, destPV: c.altPV,
-          destCat: c.altCat, destName: c.altName,
-          sourceRate: c.sourceRate, sourcePV: c.sourcePV,
-          routeReason: `Post-cap: ${c.altName} ${c.altRate}x ($${c.altVal.toFixed(4)}/dollar) — no rent uplift`
-        });
-        handledSubs.add(c.sub);
-        cumulativeBiltSpend += availableToRoute;
-      } else {
-        routes.push({
-          sub: c.sub, spend: c.spend,
-          destCardId: c.biltCardId || biltCardId, destRate: c.biltRate, destPV: c.biltPV,
-          destCat: c.biltCat, destName: c.biltName || biltName,
-          sourceRate: c.sourceRate, sourcePV: c.sourcePV,
-          routeReason: `Rent uplift: ${c.biltRate}x ($${c.biltBaseVal.toFixed(4)}) + rent uplift ($${rentUpliftPerDollar.toFixed(4)}) = $${(c.biltBaseVal + rentUpliftPerDollar).toFixed(4)}/dollar vs ${c.altName} $${c.altVal.toFixed(4)}/dollar`
-        });
-        handledSubs.add(c.sub);
-        cumulativeBiltSpend += c.spend;
-      }
-    }
-  }
-
-  // Step F: Handle remaining spend (post-cap, not worth routing, or 'cash' plan)
-  for (const c of altWins) {
-    if (handledSubs.has(c.sub)) continue; // Already handled above
-    // Post-cap: pure comparison, Bilt Cash as tiebreaker only
-    if (c.biltBaseVal >= c.altVal) {
-      routes.push({
-        sub: c.sub, spend: c.spend,
-        destCardId: c.biltCardId || biltCardId, destRate: c.biltRate, destPV: c.biltPV,
-        destCat: c.biltCat, destName: c.biltName || biltName,
-        sourceRate: c.sourceRate, sourcePV: c.sourcePV,
-        routeReason: c.biltBaseVal === c.altVal
-          ? `Tied — Bilt wins (Bilt Cash tiebreaker)`
-          : `${c.biltRate}x Bilt ($${c.biltBaseVal.toFixed(4)}/dollar) beats ${c.altName} ($${c.altVal.toFixed(4)}/dollar)`
-      });
-      cumulativeBiltSpend += c.spend;
-    } else {
-      routes.push({
-        sub: c.sub, spend: c.spend,
-        destCardId: c.altCardId, destRate: c.altRate, destPV: c.altPV,
-        destCat: c.altCat, destName: c.altName,
-        sourceRate: c.sourceRate, sourcePV: c.sourcePV,
-        routeReason: `${c.altName} ${c.altRate}x ($${c.altVal.toFixed(4)}/dollar) beats Bilt ${c.biltRate}x ($${c.biltBaseVal.toFixed(4)}/dollar)`
-      });
-    }
-  }
-
-  return { routes, cumulativeBiltSpend, annualBiltSpendCap, rentUpliftPerDollar };
-}
-
-/**
  * Get spending shift rows for "Add a Card" scenario.
  * Uses Bilt-aware routing when the new card or existing wallet cards are Bilt.
  * Cheapest-sacrifice categories route to Bilt first, up to rent cap.
@@ -4449,23 +3754,22 @@ function getAddCardShiftRows(newCardId, year) {
   const sampleDate = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
 
   const wi = state.cardScenarios;
-  const monthlyRent = wi.rentAmount || 0;
-  const biltCashPlan = wi.biltCashPlan || 'maximize';
-  const customRedemption = wi.biltCustomMonthlyRedemption || 0;
 
-  // Determine the Bilt card in the hypothetical wallet (existing + new)
+  // Determine the routing card in the hypothetical wallet (existing + new)
   const hypotheticalWallet = [...walletCardIds, newCardId];
-  const biltCardInWallet = hypotheticalWallet.find(id => CARDS[id]?.isBilt);
-  const newCardIsBilt = !!newCard.isBilt;
+  const routingCard = hypotheticalWallet.find(id => CARDS[id]?.scenarioPrompt?.computeRouting);
+  const newCardHasRouting = !!newCard.scenarioPrompt?.computeRouting;
 
-  // Compute existing Bilt spend (from current Bilt cards, not the new card)
-  let existingBiltSpend = 0;
-  for (const cid of walletCardIds) {
-    if (!CARDS[cid]?.isBilt) continue;
-    const { subcategories: subs } = getAnnualizedCardSpend(cid, year);
-    for (const [s, d] of Object.entries(subs)) {
-      if (s === 'rent') continue;
-      existingBiltSpend += d.spend || 0;
+  // Compute existing routing-card spend (from current routing cards, not the new card)
+  let existingRoutingSpend = 0;
+  if (routingCard) {
+    for (const cid of walletCardIds) {
+      if (!CARDS[cid]?.scenarioPrompt?.computeRouting) continue;
+      const { subcategories: subs } = getAnnualizedCardSpend(cid, year);
+      for (const [s, d] of Object.entries(subs)) {
+        if (s === 'rent') continue;
+        existingRoutingSpend += d.spend || 0;
+      }
     }
   }
 
@@ -4492,7 +3796,7 @@ function getAddCardShiftRows(newCardId, year) {
 
   for (const [sub, info] of Object.entries(subSpendMap)) {
     // Best existing card in wallet (pure points)
-    let bestExisting = { cardId: null, rate: 0, pv: 0.01, val: 0, cat: 'other', name: '', isBilt: false };
+    let bestExisting = { cardId: null, rate: 0, pv: 0.01, val: 0, cat: 'other', name: '', hasRouting: false };
     for (const cid of walletCardIds) {
       const pv = getPointValue(cid);
       const mapped = mapToCardCategory(sub, cid, sampleDate);
@@ -4500,7 +3804,7 @@ function getAddCardShiftRows(newCardId, year) {
       const val = mult.rate * pv;
       if (val > bestExisting.val) {
         bestExisting = { cardId: cid, rate: mult.rate, pv, val, cat: mapped,
-          name: CARDS[cid]?.shortName || CARDS[cid]?.name || cid, isBilt: !!CARDS[cid]?.isBilt };
+          name: CARDS[cid]?.shortName || CARDS[cid]?.name || cid, hasRouting: !!CARDS[cid]?.scenarioPrompt?.computeRouting };
       }
     }
 
@@ -4509,12 +3813,12 @@ function getAddCardShiftRows(newCardId, year) {
     const newMult = getCardScenariosMultiplier(newCardId, newCat);
     const newVal = newMult.rate * newPV;
 
-    // Determine the "Bilt option" and the "non-Bilt option"
-    // The Bilt option is whichever of {new card, best existing} is Bilt
-    // The non-Bilt option is whichever is not Bilt
-    const hasBiltOption = newCardIsBilt || bestExisting.isBilt;
-    if (!hasBiltOption || !biltCardInWallet) {
-      // No Bilt involved — pure points comparison
+    // Determine the "routing option" and the "alt option"
+    // The routing option is whichever of {new card, best existing} has routing plugin
+    // The alt option is whichever does not
+    const hasRoutingOption = newCardHasRouting || bestExisting.hasRouting;
+    if (!hasRoutingOption || !routingCard) {
+      // No routing involved — pure points comparison
       if (newVal > bestExisting.val) {
         directRows.push({
           sourceCardId: bestExisting.cardId || info.sources[0]?.cardId,
@@ -4527,21 +3831,21 @@ function getAddCardShiftRows(newCardId, year) {
       continue;
     }
 
-    // Determine Bilt and alt options for the routing algorithm
-    let biltOption, altOption;
-    if (newCardIsBilt && !bestExisting.isBilt) {
-      // New card is Bilt, existing best is not
-      biltOption = { cardId: newCardId, rate: newMult.rate, pv: newPV, cat: newCat,
+    // Determine routing and alt options for the routing algorithm
+    let routingOption, altOption;
+    if (newCardHasRouting && !bestExisting.hasRouting) {
+      // New card has routing, existing best does not
+      routingOption = { cardId: newCardId, rate: newMult.rate, pv: newPV, cat: newCat,
         name: newCard.shortName || newCard.name || newCardId };
       altOption = bestExisting;
-    } else if (!newCardIsBilt && bestExisting.isBilt) {
-      // Existing best is Bilt, new card is not — Bilt "defends" with rent uplift
-      biltOption = { cardId: bestExisting.cardId, rate: bestExisting.rate, pv: bestExisting.pv,
+    } else if (!newCardHasRouting && bestExisting.hasRouting) {
+      // Existing best has routing, new card does not — routing card "defends" with rent uplift
+      routingOption = { cardId: bestExisting.cardId, rate: bestExisting.rate, pv: bestExisting.pv,
         cat: bestExisting.cat, name: bestExisting.name };
       altOption = { cardId: newCardId, rate: newMult.rate, pv: newPV, cat: newCat,
         name: newCard.shortName || newCard.name || newCardId };
     } else {
-      // Both are Bilt — just compare rates, no routing optimization needed
+      // Both have routing — just compare rates, no routing optimization needed
       if (newVal > bestExisting.val) {
         directRows.push({
           sourceCardId: bestExisting.cardId, sourceCardName: bestExisting.name,
@@ -4555,57 +3859,58 @@ function getAddCardShiftRows(newCardId, year) {
 
     biltCandidates.push({
       sub, spend: info.spend,
-      biltCardId: biltOption.cardId, biltRate: biltOption.rate, biltPV: biltOption.pv,
-      biltCat: biltOption.cat, biltName: biltOption.name,
+      biltCardId: routingOption.cardId, biltRate: routingOption.rate, biltPV: routingOption.pv,
+      biltCat: routingOption.cat, biltName: routingOption.name,
       altCardId: altOption.cardId, altRate: altOption.rate, altPV: altOption.pv,
       altCat: altOption.cat, altName: altOption.name,
       sourceRate: bestExisting.rate, sourcePV: bestExisting.pv,
       // Track which direction the shift goes
-      _newCardIsBilt: newCardIsBilt,
-      _existingIsBilt: bestExisting.isBilt,
+      _newCardHasRouting: newCardHasRouting,
+      _existingHasRouting: bestExisting.hasRouting,
       _bestExisting: bestExisting,
       _newCat: newCat, _newRate: newMult.rate, _newPV: newPV
     });
   }
 
-  // Apply Bilt routing optimization
-  if (biltCandidates.length > 0 && biltCardInWallet) {
-    const result = computeBiltRouting(biltCandidates, biltCardInWallet, monthlyRent, biltCashPlan, customRedemption, existingBiltSpend);
+  // Apply routing optimization via plugin
+  if (biltCandidates.length > 0 && routingCard) {
+    const routingPlugin = CARDS[routingCard]?.scenarioPrompt;
+    const result = routingPlugin.computeRouting(biltCandidates, routingCard, existingRoutingSpend, buildPluginCtx());
     for (const route of result.routes) {
       // Find the original candidate to determine the shift direction
       const orig = biltCandidates.find(c => c.sub === route.sub && c.spend >= route.spend - 0.01);
 
-      if (orig && orig._newCardIsBilt && route.destCardId === newCardId) {
-        // New Bilt card won — shift spend to new card
+      if (orig && orig._newCardHasRouting && route.destCardId === newCardId) {
+        // New routing card won — shift spend to new card
         rows.push({
           sourceCardId: orig._bestExisting.cardId, sourceCardName: orig._bestExisting.name,
           sourceCategory: route.sub, sourceRate: orig._bestExisting.rate, sourcePointValue: orig._bestExisting.pv,
           newCategory: orig._newCat, newRate: orig._newRate, newPointValue: orig._newPV,
           actualSpend: route.spend, routeReason: route.routeReason
         });
-      } else if (orig && !orig._newCardIsBilt && route.destCardId !== newCardId) {
-        // Existing Bilt card defended — no shift (spend stays on Bilt)
+      } else if (orig && !orig._newCardHasRouting && route.destCardId !== newCardId) {
+        // Existing routing card defended — no shift (spend stays)
         // Don't push a row — this spend doesn't shift to the new card
-      } else if (orig && !orig._newCardIsBilt && route.destCardId === newCardId) {
-        // New non-Bilt card won — shift FROM Bilt to new card
+      } else if (orig && !orig._newCardHasRouting && route.destCardId === newCardId) {
+        // New non-routing card won — shift FROM routing card to new card
         rows.push({
           sourceCardId: orig._bestExisting.cardId, sourceCardName: orig._bestExisting.name,
           sourceCategory: route.sub, sourceRate: orig._bestExisting.rate, sourcePointValue: orig._bestExisting.pv,
           newCategory: orig._newCat, newRate: orig._newRate, newPointValue: orig._newPV,
           actualSpend: route.spend, routeReason: route.routeReason
         });
-      } else if (orig && orig._newCardIsBilt && route.destCardId !== newCardId) {
+      } else if (orig && orig._newCardHasRouting && route.destCardId !== newCardId) {
         // Alt card won — no shift (spend stays on existing card)
         // Don't push a row
       }
     }
   }
 
-  // Add direct rows (no Bilt optimization needed)
+  // Add direct rows (no routing optimization needed)
   rows.push(...directRows);
 
   // Add synthetic rent row when adding first Bilt card with rent amount specified
-  if (wi.rentAmount > 0 && newCardIsBilt) {
+  if (wi.rentAmount > 0 && newCard.isBilt) {
     const walletHasBilt = walletCardIds.some(id => CARDS[id]?.isBilt);
     if (!walletHasBilt) {
       const annualRent = wi.rentAmount * 12;
@@ -4647,31 +3952,28 @@ function getRemoveCardShiftRows(removeCardId, year, extraCardIds) {
   const rows = [];
 
   const wi = state.cardScenarios;
-  const monthlyRent = wi.rentAmount || 0;
-  const biltCashPlan = wi.biltCashPlan || 'maximize';
-  const customRedemption = wi.biltCustomMonthlyRedemption || 0;
-  const walletBiltCard = walletCardIds.find(id => CARDS[id]?.isBilt);
+  const routingCard = walletCardIds.find(id => CARDS[id]?.scenarioPrompt?.computeRouting);
 
-  // Compute existing Bilt spend from remaining Bilt cards (not the removed card)
-  let existingBiltSpend = 0;
-  if (walletBiltCard) {
+  // Compute existing routing-card spend from remaining routing cards (not the removed card)
+  let existingRoutingSpend = 0;
+  if (routingCard) {
     for (const cid of walletCardIds) {
-      if (!CARDS[cid]?.isBilt) continue;
+      if (!CARDS[cid]?.scenarioPrompt?.computeRouting) continue;
       const { subcategories: subs } = getAnnualizedCardSpend(cid, year);
       for (const [s, d] of Object.entries(subs)) {
         if (s === 'rent') continue;
-        existingBiltSpend += d.spend || 0;
+        existingRoutingSpend += d.spend || 0;
       }
     }
   }
 
-  // Phase 1: Collect candidates — find best Bilt and best non-Bilt destinations per subcategory
-  const biltCandidates = [];
+  // Phase 1: Collect candidates — find best routing and best non-routing destinations per subcategory
+  const routingCandidates = [];
 
   for (const [sub, data] of Object.entries(subcategories)) {
     if (data.spend <= 0) continue;
 
-    // Rent: only transferable to other Bilt cards
+    // Rent: only transferable to other Bilt cards (rent exclusivity)
     if (sub === 'rent') {
       const effectiveRate = data.spend > 0 ? data.points / data.spend : 0;
       let destCardId = null, destRate = 0, destPV = 0;
@@ -4699,8 +4001,8 @@ function getRemoveCardShiftRows(removeCardId, year, extraCardIds) {
     const removeCat = mapToCardCategory(sub, removeCardId, sampleDate);
     const removeMult = getCardScenariosMultiplier(removeCardId, removeCat);
 
-    // Find best Bilt and best non-Bilt destinations
-    let bestBilt = null, bestNonBilt = null;
+    // Find best routing-card and best non-routing destinations
+    let bestRouting = null, bestAlt = null;
     for (const cardId of walletCardIds) {
       const cardPV = getPointValue(cardId);
       const mapped = mapToCardCategory(sub, cardId, sampleDate);
@@ -4708,42 +4010,43 @@ function getRemoveCardShiftRows(removeCardId, year, extraCardIds) {
       const val = mult.rate * cardPV;
       const entry = { cardId, rate: mult.rate, pv: cardPV, cat: mapped, val,
         name: CARDS[cardId]?.shortName || CARDS[cardId]?.name || cardId };
-      if (CARDS[cardId]?.isBilt) {
-        if (!bestBilt || val > bestBilt.val) bestBilt = entry;
+      if (CARDS[cardId]?.scenarioPrompt?.computeRouting) {
+        if (!bestRouting || val > bestRouting.val) bestRouting = entry;
       } else {
-        if (!bestNonBilt || val > bestNonBilt.val) bestNonBilt = entry;
+        if (!bestAlt || val > bestAlt.val) bestAlt = entry;
       }
     }
 
-    // If no Bilt card in wallet or no non-Bilt card, route directly
-    if (!bestBilt && bestNonBilt) {
+    // If no routing card in wallet or no alt card, route directly
+    if (!bestRouting && bestAlt) {
       rows.push({
         sourceCategory: sub, sourceRate: removeMult.rate, sourcePointValue: removePV,
-        actualSpend: data.spend, bestCardId: bestNonBilt.cardId, bestCardName: bestNonBilt.name,
-        bestCategory: bestNonBilt.cat, bestRate: bestNonBilt.rate, bestPointValue: bestNonBilt.pv
+        actualSpend: data.spend, bestCardId: bestAlt.cardId, bestCardName: bestAlt.name,
+        bestCategory: bestAlt.cat, bestRate: bestAlt.rate, bestPointValue: bestAlt.pv
       });
-    } else if (bestBilt && !bestNonBilt) {
+    } else if (bestRouting && !bestAlt) {
       rows.push({
         sourceCategory: sub, sourceRate: removeMult.rate, sourcePointValue: removePV,
-        actualSpend: data.spend, bestCardId: bestBilt.cardId, bestCardName: bestBilt.name,
-        bestCategory: bestBilt.cat, bestRate: bestBilt.rate, bestPointValue: bestBilt.pv
+        actualSpend: data.spend, bestCardId: bestRouting.cardId, bestCardName: bestRouting.name,
+        bestCategory: bestRouting.cat, bestRate: bestRouting.rate, bestPointValue: bestRouting.pv
       });
-    } else if (bestBilt && bestNonBilt) {
-      // Both options exist — add as candidate for Bilt routing optimization
-      biltCandidates.push({
+    } else if (bestRouting && bestAlt) {
+      // Both options exist — add as candidate for routing optimization
+      routingCandidates.push({
         sub, spend: data.spend,
-        biltCardId: bestBilt.cardId, biltRate: bestBilt.rate, biltPV: bestBilt.pv,
-        biltCat: bestBilt.cat, biltName: bestBilt.name,
-        altCardId: bestNonBilt.cardId, altRate: bestNonBilt.rate, altPV: bestNonBilt.pv,
-        altCat: bestNonBilt.cat, altName: bestNonBilt.name,
+        biltCardId: bestRouting.cardId, biltRate: bestRouting.rate, biltPV: bestRouting.pv,
+        biltCat: bestRouting.cat, biltName: bestRouting.name,
+        altCardId: bestAlt.cardId, altRate: bestAlt.rate, altPV: bestAlt.pv,
+        altCat: bestAlt.cat, altName: bestAlt.name,
         sourceRate: removeMult.rate, sourcePV: removePV
       });
     }
   }
 
-  // Phase 2: Apply Bilt routing optimization
-  if (biltCandidates.length > 0 && walletBiltCard) {
-    const result = computeBiltRouting(biltCandidates, walletBiltCard, monthlyRent, biltCashPlan, customRedemption, existingBiltSpend);
+  // Phase 2: Apply routing optimization via plugin
+  if (routingCandidates.length > 0 && routingCard) {
+    const routingPlugin = CARDS[routingCard]?.scenarioPrompt;
+    const result = routingPlugin.computeRouting(routingCandidates, routingCard, existingRoutingSpend, buildPluginCtx());
     for (const route of result.routes) {
       rows.push({
         sourceCategory: route.sub, sourceRate: route.sourceRate, sourcePointValue: route.sourcePV,
@@ -4832,194 +4135,38 @@ function calculateCardScenariosNetImpact() {
     removeFee = CARDS[wi.removeCardId]?.annualFee || 0;
   }
 
-  // ============================================================
-  // Bilt Rewards: Bilt Cash (4%) → Rent Points
-  // ============================================================
-  // Routing already handles Bilt allocation via computeBiltRouting().
-  // Here we track final Bilt spend from routing results, then compute
-  // rent points using the official $3 Bilt Cash = 100 Bilt Points ratio.
-
+  // Build hypothetical wallet
   const currentWallet = getActiveCardIds(year);
-  const monthlyRent = wi.rentAmount || 0;
-  const biltCashPlan = wi.biltCashPlan || 'maximize';
-
-  // --- Current Bilt state ---
-  let currentBiltSpend = 0;
-  for (const cardId of currentWallet) {
-    if (!CARDS[cardId]?.isBilt) continue;
-    const { subcategories } = getAnnualizedCardSpend(cardId, year);
-    for (const [sub, data] of Object.entries(subcategories)) {
-      if (sub === 'rent') continue;
-      currentBiltSpend += data.spend || 0;
-    }
-  }
-  const currentBiltCash = currentBiltSpend * 0.04;
-  const currentBiltPV = currentWallet.find(id => CARDS[id]?.isBilt) ? getPointValue(currentWallet.find(id => CARDS[id]?.isBilt)) : 0.018;
-
-  // --- Build hypothetical wallet ---
   const walletAfter = currentWallet.filter(id => id !== wi.removeCardId);
   if (wi.addCardId && CARDS[wi.addCardId] && !walletAfter.includes(wi.addCardId)) {
     walletAfter.push(wi.addCardId);
   }
-  const biltCardAfter = walletAfter.find(id => CARDS[id]?.isBilt);
-  const hasBiltAfter = !!biltCardAfter;
-  const biltPVAfter = biltCardAfter ? getPointValue(biltCardAfter) : 0;
-
-  // --- Track final Bilt spend from routing results ---
-  // Routing (via computeBiltRouting) already determined optimal Bilt allocation.
-  let finalBiltSpend = 0;
-
-  if (hasBiltAfter) {
-    if (wi.scenarioType === 'remove') {
-      const removeCard = CARDS[wi.removeCardId];
-      if (removeCard?.isBilt) {
-        const removeRows = getRemoveCardShiftRows(wi.removeCardId, year) || [];
-        for (const row of removeRows) {
-          if (row.sourceCategory === 'rent') continue;
-          if (CARDS[row.bestCardId]?.isBilt) finalBiltSpend += row.actualSpend || 0;
-        }
-        for (const cardId of currentWallet) {
-          if (cardId === wi.removeCardId || !CARDS[cardId]?.isBilt) continue;
-          const { subcategories } = getAnnualizedCardSpend(cardId, year);
-          for (const [sub, data] of Object.entries(subcategories)) {
-            if (sub === 'rent') continue;
-            finalBiltSpend += data.spend || 0;
-          }
-        }
-      } else {
-        finalBiltSpend = currentBiltSpend;
-      }
-    } else if (wi.scenarioType === 'swap') {
-      // Use calculateSwapValue() output to derive Bilt spend — this is the same
-      // routing that the display table shows (Bilt-aware via computeBiltRouting).
-      const swapResult = calculateSwapValue(wi.removeCardId, wi.addCardId, year);
-
-      // Component 1: removed card's spend redistributed — sum Bilt-destined rows
-      for (const row of swapResult.removeRows) {
-        if (row.subcategory === 'rent') continue;
-        if (row.bestCardId && CARDS[row.bestCardId]?.isBilt) {
-          finalBiltSpend += row.spend || 0;
-        }
-      }
-
-      // Component 2: other cards' spend shifting to the new card
-      if (CARDS[wi.addCardId]?.isBilt) {
-        for (const row of swapResult.addRows) {
-          if (row.subcategory === 'rent') continue;
-          // Only count spend moving FROM non-Bilt sources to the Bilt new card
-          if (!CARDS[row.sourceCardId]?.isBilt) {
-            finalBiltSpend += row.spend || 0;
-          }
-        }
-      }
-
-      // Unchanged Bilt spend: other Bilt cards not being removed or added
-      for (const cardId of currentWallet) {
-        if (cardId === wi.removeCardId || cardId === wi.addCardId || !CARDS[cardId]?.isBilt) continue;
-        const { subcategories } = getAnnualizedCardSpend(cardId, year);
-        for (const [sub, data] of Object.entries(subcategories)) {
-          if (sub === 'rent') continue;
-          finalBiltSpend += data.spend || 0;
-        }
-      }
-
-      // Extract rent-motivated impact for display reallocation
-      rentMotivatedImpact = swapResult.rentMotivatedImpact || 0;
-      rentMotivatedRows = swapResult.rentMotivatedRows || [];
-
-      // Use swapResult.totalSpendChange — calculateSwapValue() correctly builds the
-      // hypothetical wallet (minus removed, plus added) for accurate spending impact.
-      spendingImpact = swapResult.totalSpendChange;
-    } else if (wi.scenarioType === 'add') {
-      finalBiltSpend = currentBiltSpend;
-      if (CARDS[wi.addCardId]?.isBilt) {
-        const addRows = getAddCardShiftRows(wi.addCardId, year) || [];
-        for (const row of addRows) {
-          if (row.newCategory === 'rent') continue;
-          if (!CARDS[row.sourceCardId]?.isBilt) finalBiltSpend += row.actualSpend || 0;
-        }
-      }
-    }
-  } else {
-    finalBiltSpend = 0;
-  }
-
-  // --- Compute Bilt Cash and Rent Points ---
-  // Bilt Cash: 4% of non-rent Bilt spend
-  // Rent points: $3 Bilt Cash = 100 Bilt Points, capped at 1 point per $1 rent
-  // Max useful Bilt Cash for rent = monthlyRent × 0.03 × 12
-
-  // Rent cap: max non-rent Bilt spend that generates useful rent points.
-  // Used for display (rent cap usage %) but does NOT cap Bilt Cash earned —
-  // all Bilt spend earns 4% Bilt Cash regardless. Rent points are capped
-  // downstream via maxBiltCashForRent and the 1pt/$1-rent ceiling.
-  const annualBiltSpendCap = monthlyRent * 0.75 * 12;
-
-  const finalBiltCashEarned = finalBiltSpend * 0.04;
-  const currentBiltCashEarned = currentBiltSpend * 0.04;
-
-  // Max Bilt Cash that can usefully be redeemed for rent
-  const maxBiltCashForRent = monthlyRent > 0 ? monthlyRent * 0.03 * 12 : 0;
-
-  // Determine how much Bilt Cash is redeemed.
-  // If user has manually set biltCashKeptOverride via the input, use it directly.
-  // Otherwise, derive from the plan selection.
-  let finalBiltCashRedeemed;
-  if (wi.biltCashKeptOverride !== undefined) {
-    const kept = Math.max(0, Math.min(wi.biltCashKeptOverride, finalBiltCashEarned));
-    finalBiltCashRedeemed = Math.min(finalBiltCashEarned - kept, maxBiltCashForRent);
-  } else if (biltCashPlan === 'cash') {
-    finalBiltCashRedeemed = 0;
-  } else if (biltCashPlan === 'custom') {
-    const customAnnual = (wi.biltCustomMonthlyRedemption || 0) * 12;
-    finalBiltCashRedeemed = Math.max(0, Math.min(customAnnual, finalBiltCashEarned, maxBiltCashForRent));
-  } else { // 'maximize'
-    finalBiltCashRedeemed = Math.min(maxBiltCashForRent, finalBiltCashEarned);
-  }
-
-  // Current state redemption (apply same plan to current wallet)
-  let currentBiltCashRedeemed;
-  if (biltCashPlan === 'cash') {
-    currentBiltCashRedeemed = 0;
-  } else if (biltCashPlan === 'custom') {
-    const customAnnual = (wi.biltCustomMonthlyRedemption || 0) * 12;
-    currentBiltCashRedeemed = Math.max(0, Math.min(customAnnual, currentBiltCashEarned, maxBiltCashForRent));
-  } else {
-    currentBiltCashRedeemed = Math.min(maxBiltCashForRent, currentBiltCashEarned);
-  }
-
-  // Rent points: $1 Bilt Cash = 33.33 points (from $3 = 100 pts), capped at 1 pt per $1 rent
-  const finalRentPointsAnnual = monthlyRent > 0
-    ? Math.min(finalBiltCashRedeemed * (100 / 3), monthlyRent * 12) : 0;
-  const finalRentPointsValue = finalRentPointsAnnual * biltPVAfter;
-
-  const currentRentPointsAnnual = monthlyRent > 0
-    ? Math.min(currentBiltCashRedeemed * (100 / 3), monthlyRent * 12) : 0;
-  const currentRentPointsValue = currentRentPointsAnnual * currentBiltPV;
-
-  // Remaining Bilt Cash after redemption
-  const finalBiltCashRemaining = finalBiltCashEarned - finalBiltCashRedeemed;
-  const currentBiltCashRemaining = currentBiltCashEarned - currentBiltCashRedeemed;
-
-  // Bilt Cash remaining is counted as value only when plan is NOT 'maximize'
-  // (if maximizing rent, you're choosing to redeem cash, so remaining is surplus)
-  const countCashAsValue = biltCashPlan !== 'maximize';
-
-  // Deltas
-  const rentPointsValueDelta = finalRentPointsValue - currentRentPointsValue;
-  const biltCashRemainingDelta = finalBiltCashRemaining - currentBiltCashRemaining;
-
-  // Rent cap usage for display (can exceed 100% if Bilt spend > cap)
-  const rentCapUsedPct = annualBiltSpendCap > 0 ? Math.min(100, (finalBiltSpend / annualBiltSpendCap) * 100) : 0;
 
   const creditsImpact = addCreditsTotal - removeCreditsTotal;
   const feeImpact = removeFee - addFee;
 
+  // Call plugin impact calculation if a scenario-prompt card is involved
+  let pluginImpact = {};
+  const promptCardId = getScenarioPromptCard();
+  if (promptCardId) {
+    const promptCard = CARDS[promptCardId];
+    if (promptCard?.scenarioPrompt?.calculateImpact) {
+      pluginImpact = promptCard.scenarioPrompt.calculateImpact(wi, {
+        spendingImpact, currentWallet, walletAfter, year,
+        addCreditsTotal, removeCreditsTotal, addFee, removeFee
+      }, buildPluginCtx());
+      // Plugin may override spendingImpact (e.g., swap uses calculateSwapValue)
+      if (pluginImpact.spendingImpact !== undefined) {
+        spendingImpact = pluginImpact.spendingImpact;
+      }
+    }
+  }
+
+  const rentPointsValueDelta = pluginImpact.rentPointsValueDelta || 0;
+  const biltCashKeptDelta = pluginImpact.biltCashKeptDelta || 0;
+
   // pointValueChange = spend shifts + rent points (NO Bilt Cash — that's a separate line)
   const pointValueChange = spendingImpact + rentPointsValueDelta;
-
-  // Bilt Cash kept as a separate value line (delta for display)
-  const biltCashKeptDelta = finalBiltCashRemaining - currentBiltCashRemaining;
 
   // Total = points + credits + Bilt Cash kept + fee
   const totalImpact = pointValueChange + creditsImpact + biltCashKeptDelta + feeImpact;
@@ -5029,32 +4176,12 @@ function calculateCardScenariosNetImpact() {
     spendingImpact,
     creditsImpact,
     feeImpact,
-    rentPointsValueDelta,
-    biltCashKeptDelta,
-    finalBiltCashEarned,
-    finalBiltCashRedeemed,
-    finalMaxRedemption: maxBiltCashForRent,
-    finalRentPointsAnnual,
-    finalRentPointsValue,
-    finalBiltCashRemaining,
-    currentBiltCashEarned,
-    currentBiltCashRedeemed,
-    currentRentPointsValue,
-    currentBiltCashRemaining,
-    currentBiltSpend,
-    finalBiltSpend,
-    monthlyRent,
-    biltCashPlan,
-    countCashAsValue,
-    annualBiltSpendCap,
-    rentCapUsedPct,
     totalImpact,
     addCreditsTotal,
     removeFee,
     addFee,
     removeCreditsTotal,
-    rentMotivatedImpact,
-    rentMotivatedRows
+    ...pluginImpact
   };
 }
 
@@ -5297,78 +4424,10 @@ function renderCardScenariosStep2() {
 
 function renderCardScenariosStep2b() {
   const wi = state.cardScenarios;
-  const biltCardName = (wi.addCardId && CARDS[wi.addCardId]?.isBilt ? CARDS[wi.addCardId]?.name : null)
-    || (wi.removeCardId && CARDS[wi.removeCardId]?.isBilt ? CARDS[wi.removeCardId]?.name : null)
-    || 'Bilt card';
-
-  const existingBiltId = getActiveCardIds().find(id => CARDS[id]?.isBilt);
-  const existingRent = existingBiltId ? (state.biltConfig[existingBiltId]?.manualRentAmount || '') : '';
-  const prefillRent = wi.rentAmount || existingRent || '';
-  const plan = wi.biltCashPlan || 'maximize';
-  const customAmt = wi.biltCustomMonthlyRedemption || '';
-
-  return `
-    <div class="cardscenarios-step">
-      <div class="cardscenarios-step-header">Bilt Rewards Setup</div>
-      <p style="font-size:13px;color:#57534e;margin-bottom:16px;">
-        Bilt cards earn 4% Bilt Cash on all non-rent spending. You can redeem Bilt Cash to unlock rent points ($3 = 100 points per $100 of rent).
-        The engine will optimize your spend routing based on these settings.
-      </p>
-
-      <div style="margin-bottom:16px;">
-        <label style="font-size:13px;font-weight:600;color:#44403c;display:block;margin-bottom:8px;">Monthly Rent Amount</label>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:16px;font-weight:500;color:#44403c;">$</span>
-          <input type="number" id="cardscenariosRentAmount"
-            style="max-width:200px;font-size:16px;padding:10px 12px;border-radius:6px;border:1px solid #d6d3d1;font-family:inherit;"
-            placeholder="0" min="0" step="1"
-            value="${prefillRent}">
-          <span style="font-size:13px;color:#78716c;">/month</span>
-        </div>
-      </div>
-
-      <div style="margin-bottom:16px;">
-        <label style="font-size:13px;font-weight:600;color:#44403c;display:block;margin-bottom:8px;">Bilt Cash Plan</label>
-        <div style="display:flex;flex-direction:column;gap:8px;">
-          <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;padding:8px 10px;border-radius:6px;border:1px solid ${plan === 'maximize' ? '#059669' : '#d6d3d1'};background:${plan === 'maximize' ? '#f0fdf4' : '#fff'};">
-            <input type="radio" name="biltCashPlan" value="maximize" ${plan === 'maximize' ? 'checked' : ''} style="margin-top:2px;accent-color:#059669;">
-            <div>
-              <div style="font-size:13px;font-weight:600;color:#44403c;">Maximize rent points</div>
-              <div style="font-size:12px;color:#78716c;">Route enough spend to Bilt to fully fund rent points. Cheapest-sacrifice categories routed first.</div>
-            </div>
-          </label>
-          <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;padding:8px 10px;border-radius:6px;border:1px solid ${plan === 'cash' ? '#059669' : '#d6d3d1'};background:${plan === 'cash' ? '#f0fdf4' : '#fff'};">
-            <input type="radio" name="biltCashPlan" value="cash" ${plan === 'cash' ? 'checked' : ''} style="margin-top:2px;accent-color:#059669;">
-            <div>
-              <div style="font-size:13px;font-weight:600;color:#44403c;">Keep as cash</div>
-              <div style="font-size:12px;color:#78716c;">Don't redeem Bilt Cash for rent points. Bilt Cash is a tiebreaker only — no rent uplift in routing.</div>
-            </div>
-          </label>
-          <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;padding:8px 10px;border-radius:6px;border:1px solid ${plan === 'custom' ? '#059669' : '#d6d3d1'};background:${plan === 'custom' ? '#f0fdf4' : '#fff'};">
-            <input type="radio" name="biltCashPlan" value="custom" ${plan === 'custom' ? 'checked' : ''} style="margin-top:2px;accent-color:#059669;">
-            <div>
-              <div style="font-size:13px;font-weight:600;color:#44403c;">Custom redemption amount</div>
-              <div style="font-size:12px;color:#78716c;">Specify how much Bilt Cash to redeem monthly toward rent.</div>
-              <div style="margin-top:6px;display:${plan === 'custom' ? 'flex' : 'none'};align-items:center;gap:6px;" id="biltCustomRedemptionRow">
-                <span style="font-size:14px;color:#44403c;">$</span>
-                <input type="number" id="cardscenariosBiltCustomRedemption"
-                  style="width:100px;padding:6px 8px;border:1px solid #d6d3d1;border-radius:4px;font-family:inherit;font-size:14px;"
-                  placeholder="0" min="0" step="1" value="${customAmt}">
-                <span style="font-size:12px;color:#78716c;">/month</span>
-              </div>
-            </div>
-          </label>
-        </div>
-      </div>
-
-      <p style="font-size:11px;color:#a8a29e;margin-top:4px;line-height:1.4;">
-        Under Bilt 2.0, $3 of Bilt Cash unlocks 100 rent points (up to 1 point per $1 of rent). The engine routes your cheapest-sacrifice spend to Bilt first, up to the cap needed for your plan.
-      </p>
-      <div class="cardscenarios-nav">
-        <button class="btn btn-secondary" id="cardscenariosBack2b">← Back</button>
-        <button class="btn btn-primary" id="cardscenariosNext2b">Next →</button>
-      </div>
-    </div>`;
+  const promptCardId = wi.promptCardId || getScenarioPromptCard();
+  const card = CARDS[promptCardId];
+  if (!card?.scenarioPrompt?.render) return '';
+  return card.scenarioPrompt.render(wi, buildPluginCtx());
 }
 
 function renderCardScenariosStep3() {
@@ -5417,18 +4476,20 @@ function renderStep4Add() {
   const creditsTotal = getAddCardCreditsTotal();
   const annualFee = addCard.annualFee || 0;
 
-  // Calculate Bilt impact
-  let biltImpact = null;
-  if (scenarioInvolvesBilt()) {
-    try { biltImpact = calculateCardScenariosNetImpact(); } catch (e) { console.error('Bilt calc error:', e); }
+  // Calculate plugin impact (e.g., Bilt Cash / rent points)
+  let pluginImpact = null;
+  const addPromptCardId = getScenarioPromptCard();
+  const addPromptCard = addPromptCardId ? CARDS[addPromptCardId] : null;
+  if (addPromptCardId) {
+    try { pluginImpact = calculateCardScenariosNetImpact(); } catch (e) { console.error('Plugin calc error:', e); }
   }
 
-  const combinedPointValue = biltImpact ? biltImpact.pointValueChange : totalGain;
-  const biltCashDelta = biltImpact ? biltImpact.biltCashKeptDelta : 0;
-  const netImpact = combinedPointValue + creditsTotal + biltCashDelta - annualFee;
+  const combinedPointValue = pluginImpact ? pluginImpact.pointValueChange : totalGain;
+  const pluginExtraDelta = pluginImpact ? (pluginImpact.biltCashKeptDelta || 0) : 0;
+  const netImpact = combinedPointValue + creditsTotal + pluginExtraDelta - annualFee;
   const isPositive = netImpact >= 0;
   const cardName = addCard.shortName || addCard.name;
-  const showRentPtsHint = biltImpact && (biltImpact.rentPointsValueDelta || 0) !== 0;
+  const showRentPtsHint = pluginImpact && (pluginImpact.rentPointsValueDelta || 0) !== 0;
 
   let html = `<div class="cardscenarios-step">`;
 
@@ -5452,12 +4513,8 @@ function renderStep4Add() {
       <span>Point value change${showRentPtsHint ? ' <span style="font-size:11px;color:#78716c;font-weight:400;">(incl. rent pts)</span>' : ''}</span>
       <span class="mono" style="font-weight:600;color:${combinedPointValue >= 0 ? '#059669' : combinedPointValue < 0 ? '#dc2626' : '#78716c'};" id="cardscenariosAddRewardsLine">${combinedPointValue >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(combinedPointValue))}</span>
     </div>`;
-  if (biltImpact) {
-    const biltCashKept = biltImpact.finalBiltCashRemaining || 0;
-    html += `<div style="display:flex;justify-content:space-between;">
-      <span>Bilt Cash <span style="font-size:11px;color:#78716c;font-weight:400;">(kept)</span></span>
-      <span class="mono" style="font-weight:600;color:${biltCashDelta >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosAddBiltCashTopLine">${biltCashDelta >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(biltCashDelta))}</span>
-    </div>`;
+  if (addPromptCard?.scenarioPrompt?.renderSummaryLines) {
+    html += addPromptCard.scenarioPrompt.renderSummaryLines(pluginImpact, 'Add', buildPluginCtx());
   }
   html += `<div style="display:flex;justify-content:space-between;">
       <span>Annual fee</span>
@@ -5487,12 +4544,13 @@ function renderStep4Add() {
     </div>
     <div id="cardscenariosAddRewardsDetail" style="margin-top:12px;">`;
 
-  // For Bilt scenarios, use Bilt-routing-aware rows from getAddCardShiftRows()
-  // For non-Bilt, use calculateAddCardValue() rows (only gains)
+  // For routing-aware scenarios, use getAddCardShiftRows() (includes rent routing)
+  // For non-routing, use calculateAddCardValue() rows (only gains)
   let addNormalizedRows;
   let baseTotal;
-  if (biltImpact) {
+  if (pluginImpact) {
     const shiftRows = getAddCardShiftRows(wi.addCardId, wi.selectedYear);
+    const destHasRouting = !!CARDS[wi.addCardId]?.scenarioPrompt?.computeRouting;
     addNormalizedRows = shiftRows.map(r => {
       const sourceVal = r.sourceRate * r.sourcePointValue;
       const newVal = r.newRate * r.newPointValue;
@@ -5502,11 +4560,10 @@ function renderStep4Add() {
         spend: r.actualSpend, impact: (newVal - sourceVal) * r.actualSpend, routeReason: r.routeReason
       };
     }).filter(r => {
-      // Always show non-rent rows shifting to a Bilt card (even $0 impact) since that
-      // spend generates Bilt Cash. Hide rent rows at $0 — rent is shown in the subtotal.
+      // Always show non-rent rows shifting to a routing card (even $0 impact) since that
+      // spend may generate extra value (e.g., Bilt Cash). Hide rent rows at $0.
       if (r.subcategory === 'rent' && Math.abs(r.impact) < 0.005) return false;
-      const destIsBilt = CARDS[wi.addCardId]?.isBilt;
-      return Math.abs(r.impact) >= 0.005 || destIsBilt;
+      return Math.abs(r.impact) >= 0.005 || destHasRouting;
     });
     baseTotal = addNormalizedRows.reduce((s, r) => s + r.impact, 0);
   } else {
@@ -5518,25 +4575,13 @@ function renderStep4Add() {
     baseTotal = totalGain;
   }
 
-  html += renderPointValueContent('Add', addNormalizedRows, baseTotal, biltImpact, 'cardscenariosAddTable', annualizationFactor);
+  html += renderPointValueContent('Add', addNormalizedRows, baseTotal, pluginImpact, 'cardscenariosAddTable', annualizationFactor);
 
   html += `</div></div>`; // end rewards detail + rewards section
 
-  // Bilt Cash (editable) in bottom ledger
-  if (biltImpact) {
-    const biltCashEarned = biltImpact.finalBiltCashEarned || 0;
-    const biltCashKept = biltImpact.finalBiltCashRemaining || 0;
-    html += `<div style="margin-top:12px;border-top:1px solid #e7e5e4;padding-top:12px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;">
-        <span style="font-weight:600;color:#57534e;">Bilt Cash <span style="font-weight:400;color:#78716c;">(kept)</span></span>
-        <span style="display:flex;align-items:center;gap:4px;">
-          <span class="mono" style="font-size:12px;color:#78716c;">$</span>
-          <input type="number" id="cardscenariosAddBiltCashInput" min="0" max="${biltCashEarned.toFixed(2)}" step="0.01" value="${biltCashKept.toFixed(2)}"
-            style="width:72px;padding:2px 4px;border:1px solid #d6d3d1;border-radius:4px;font-size:13px;text-align:right;font-family:monospace;" />
-          <span style="font-size:11px;color:#a8a29e;">of ${formatCurrencyPrecise(biltCashEarned)}</span>
-        </span>
-      </div>
-    </div>`;
+  // Plugin ledger section (e.g., editable Bilt Cash input)
+  if (addPromptCard?.scenarioPrompt?.renderLedgerSection) {
+    html += addPromptCard.scenarioPrompt.renderLedgerSection(pluginImpact, 'Add', buildPluginCtx());
   }
 
   // Annual fee
@@ -5613,26 +4658,24 @@ function cardscenariosSortTable(tableId, sortKey) {
 
 /**
  * Render the full Point Value Change section content (inside the collapsible).
- * Uses a flat table for all scenarios. For Bilt, adds a rent points summary row.
+ * Uses a flat table for all scenarios. Plugin cards may add extra rows (e.g., rent points).
  *
  * @param {string} prefix - 'Add', 'Remove', or 'Swap'
  * @param {Array} normalizedRows - Rows with { subcategory, sourceCardId, sourceCardName, sourceRate, destCardName, destRate, spend, impact }
  * @param {number} baseTotal - Sum of all row impacts (spend shift total)
- * @param {object|null} biltImpact - From calculateCardScenariosNetImpact(), or null for non-Bilt
+ * @param {object|null} pluginImpact - From calculateCardScenariosNetImpact(), or null
  * @param {string} tableId - Unique table ID prefix for this section
  * @param {number} annualizationFactor - For annualization note
  * @returns {string} HTML
  */
-function renderPointValueContent(prefix, normalizedRows, baseTotal, biltImpact, tableId, annualizationFactor) {
+function renderPointValueContent(prefix, normalizedRows, baseTotal, pluginImpact, tableId, annualizationFactor) {
   let html = '';
-  const isBilt = biltImpact !== null;
 
   if (normalizedRows.length === 0) {
     html += `<div style="padding:16px;text-align:center;color:#78716c;background:#f5f5f4;border-radius:8px;font-size:13px;">
       No spending categories where point value changes.
     </div>`;
   } else {
-    // Flat table for ALL scenarios (Bilt and non-Bilt)
     const unifiedRows = normalizedRows.map(r => ({
       subcategory: r.subcategory, currentCard: r.sourceCardName, currentRate: r.sourceRate,
       afterCard: r.destCardName, afterRate: r.destRate, spend: r.spend, impact: r.impact
@@ -5644,47 +4687,20 @@ function renderPointValueContent(prefix, normalizedRows, baseTotal, biltImpact, 
     html += `<p style="font-size:11px;color:#a8a29e;margin-top:8px;">Amounts annualized from ${Math.round(12 / annualizationFactor)} months of data.</p>`;
   }
 
-  // For Bilt: add rent points row below the table
-  if (isBilt) {
-    const rentPtsDelta = biltImpact.rentPointsValueDelta || 0;
-    const finalRentPts = biltImpact.finalRentPointsAnnual || 0;
-    const biltPV = finalRentPts > 0 ? (biltImpact.finalRentPointsValue || 0) / finalRentPts : 0.018;
-    const rentColor = rentPtsDelta >= 0 ? '#059669' : '#dc2626';
-
-    if (rentPtsDelta !== 0 || finalRentPts > 0) {
-      html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;margin-top:8px;border-top:1px solid #e7e5e4;font-size:13px;" id="cardscenarios${prefix}RentPointsLine">
-        <span style="color:#57534e;" id="cardscenarios${prefix}RentPointsLabel">Rent points (${Math.round(finalRentPts).toLocaleString()} pts @ $${biltPV.toFixed(3)})</span>
-        <span class="mono" style="font-weight:600;color:${rentColor};" id="cardscenarios${prefix}RentPointsDelta">${rentPtsDelta >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(rentPtsDelta))}</span>
-      </div>`;
+  // Plugin extra content below the table (e.g., rent points row)
+  if (pluginImpact) {
+    const promptCardId = getScenarioPromptCard();
+    if (promptCardId) {
+      const promptCard = CARDS[promptCardId];
+      if (promptCard?.scenarioPrompt?.renderPointValueExtra) {
+        html += promptCard.scenarioPrompt.renderPointValueExtra(pluginImpact, prefix, buildPluginCtx());
+      }
     }
   }
 
   return html;
 }
 
-
-/**
- * Live-update the Point Value Content section DOM elements without re-rendering.
- * Called when credits/toggles change.
- */
-function updatePointValueContent(prefix, biltImpact) {
-  if (!biltImpact) return;
-
-  const rentPtsDelta = biltImpact.rentPointsValueDelta || 0;
-  const finalRentPts = biltImpact.finalRentPointsAnnual || 0;
-  const biltPV = finalRentPts > 0 ? (biltImpact.finalRentPointsValue || 0) / finalRentPts : 0.018;
-
-  // Update rent points row
-  const rentDeltaEl = document.getElementById(`cardscenarios${prefix}RentPointsDelta`);
-  if (rentDeltaEl) {
-    rentDeltaEl.textContent = `${rentPtsDelta >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(rentPtsDelta))}`;
-    rentDeltaEl.style.color = rentPtsDelta >= 0 ? '#059669' : '#dc2626';
-  }
-  const rentLabelEl = document.getElementById(`cardscenarios${prefix}RentPointsLabel`);
-  if (rentLabelEl) {
-    rentLabelEl.textContent = `Rent points (${Math.round(finalRentPts).toLocaleString()} pts @ $${biltPV.toFixed(3)})`;
-  }
-}
 
 /**
  * Render a unified spend table showing all subcategories where value changes.
@@ -5806,18 +4822,20 @@ function renderStep4Remove() {
   const creditsTotal = getRemoveCardCreditsTotal();
   const annualFee = removeCard.annualFee || 0;
 
-  // Calculate Bilt impact
-  let biltImpact = null;
-  if (scenarioInvolvesBilt()) {
-    try { biltImpact = calculateCardScenariosNetImpact(); } catch (e) { console.error('Bilt calc error:', e); }
+  // Calculate plugin impact (e.g., Bilt Cash / rent points)
+  let pluginImpact = null;
+  const removePromptCardId = getScenarioPromptCard();
+  const removePromptCard = removePromptCardId ? CARDS[removePromptCardId] : null;
+  if (removePromptCardId) {
+    try { pluginImpact = calculateCardScenariosNetImpact(); } catch (e) { console.error('Plugin calc error:', e); }
   }
 
-  const combinedPointValue = biltImpact ? biltImpact.pointValueChange : totalChange;
-  const biltCashDelta = biltImpact ? biltImpact.biltCashKeptDelta : 0;
-  const netImpact = combinedPointValue - creditsTotal + biltCashDelta + annualFee;
+  const combinedPointValue = pluginImpact ? pluginImpact.pointValueChange : totalChange;
+  const pluginExtraDelta = pluginImpact ? (pluginImpact.biltCashKeptDelta || 0) : 0;
+  const netImpact = combinedPointValue - creditsTotal + pluginExtraDelta + annualFee;
   const isPositive = netImpact >= 0;
   const cardName = removeCard.shortName || removeCard.name;
-  const showRentPtsHint = biltImpact && (biltImpact.rentPointsValueDelta || 0) !== 0;
+  const showRentPtsHint = pluginImpact && (pluginImpact.rentPointsValueDelta || 0) !== 0;
 
   let html = `<div class="cardscenarios-step">`;
 
@@ -5841,11 +4859,8 @@ function renderStep4Remove() {
       <span>Point value change${showRentPtsHint ? ' <span style="font-size:11px;color:#78716c;font-weight:400;">(incl. rent pts)</span>' : ''}</span>
       <span class="mono" style="font-weight:600;color:${combinedPointValue >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosRemoveRewardsLine">${combinedPointValue >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(combinedPointValue))}</span>
     </div>`;
-  if (biltImpact) {
-    html += `<div style="display:flex;justify-content:space-between;">
-      <span>Bilt Cash <span style="font-size:11px;color:#78716c;font-weight:400;">(kept)</span></span>
-      <span class="mono" style="font-weight:600;color:${biltCashDelta >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosRemoveBiltCashTopLine">${biltCashDelta >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(biltCashDelta))}</span>
-    </div>`;
+  if (removePromptCard?.scenarioPrompt?.renderSummaryLines) {
+    html += removePromptCard.scenarioPrompt.renderSummaryLines(pluginImpact, 'Remove', buildPluginCtx());
   }
   html += `<div style="display:flex;justify-content:space-between;">
       <span>Saved annual fee</span>
@@ -5876,14 +4891,14 @@ function renderStep4Remove() {
     <div id="cardscenariosRemoveRewardsDetail" style="margin-top:12px;">`;
 
   // Normalize rows for grouped rendering
-  // Always show rows shifting to a Bilt card (even $0 impact) since that spend
-  // generates Bilt Cash → rent points. For non-Bilt destinations, hide near-zero rows.
+  // Always show rows shifting to a routing card (even $0 impact) since that spend
+  // may generate extra value. For non-routing destinations, hide near-zero rows.
   const removeNormalizedRows = rows
     .filter(r => {
       // Hide rent rows at $0 — rent impact is shown in the subtotal line.
       if (r.subcategory === 'rent' && Math.abs(r.valueChange) < 0.005) return false;
-      const destIsBilt = r.bestCardId && CARDS[r.bestCardId]?.isBilt;
-      return Math.abs(r.valueChange) >= 0.005 || destIsBilt;
+      const destHasRouting = r.bestCardId && CARDS[r.bestCardId]?.scenarioPrompt?.computeRouting;
+      return Math.abs(r.valueChange) >= 0.005 || destHasRouting;
     })
     .map(r => ({
       subcategory: r.subcategory, sourceCardId: wi.removeCardId, sourceCardName: cardName,
@@ -5891,25 +4906,13 @@ function renderStep4Remove() {
       spend: r.spend, impact: r.valueChange, routeReason: r.routeReason
     }));
 
-  html += renderPointValueContent('Remove', removeNormalizedRows, totalChange, biltImpact, 'cardscenariosRemoveTable', annualizationFactor);
+  html += renderPointValueContent('Remove', removeNormalizedRows, totalChange, pluginImpact, 'cardscenariosRemoveTable', annualizationFactor);
 
   html += `</div></div>`; // end rewards detail + spending section
 
-  // Bilt Cash (editable) in bottom ledger
-  if (biltImpact) {
-    const biltCashEarned = biltImpact.finalBiltCashEarned || 0;
-    const biltCashKept = biltImpact.finalBiltCashRemaining || 0;
-    html += `<div style="margin-top:12px;border-top:1px solid #e7e5e4;padding-top:12px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;">
-        <span style="font-weight:600;color:#57534e;">Bilt Cash <span style="font-weight:400;color:#78716c;">(kept)</span></span>
-        <span style="display:flex;align-items:center;gap:4px;">
-          <span class="mono" style="font-size:12px;color:#78716c;">$</span>
-          <input type="number" id="cardscenariosRemoveBiltCashInput" min="0" max="${biltCashEarned.toFixed(2)}" step="0.01" value="${biltCashKept.toFixed(2)}"
-            style="width:72px;padding:2px 4px;border:1px solid #d6d3d1;border-radius:4px;font-size:13px;text-align:right;font-family:monospace;" />
-          <span style="font-size:11px;color:#a8a29e;">of ${formatCurrencyPrecise(biltCashEarned)}</span>
-        </span>
-      </div>
-    </div>`;
+  // Plugin ledger section (e.g., editable Bilt Cash input)
+  if (removePromptCard?.scenarioPrompt?.renderLedgerSection) {
+    html += removePromptCard.scenarioPrompt.renderLedgerSection(pluginImpact, 'Remove', buildPluginCtx());
   }
 
   // Saved annual fee
@@ -5951,15 +4954,17 @@ function renderStep4Swap() {
   const removeFee = removeCard.annualFee || 0;
   const netFee = removeFee - addFee;
 
-  // Calculate Bilt impact (rent points folded into Point Value Change)
-  let biltImpact = null;
-  if (scenarioInvolvesBilt()) {
-    try { biltImpact = calculateCardScenariosNetImpact(); } catch (e) { console.error('Bilt calc error:', e); }
+  // Calculate plugin impact (e.g., Bilt Cash / rent points)
+  let pluginImpact = null;
+  const swapPromptCardId = getScenarioPromptCard();
+  const swapPromptCard = swapPromptCardId ? CARDS[swapPromptCardId] : null;
+  if (swapPromptCardId) {
+    try { pluginImpact = calculateCardScenariosNetImpact(); } catch (e) { console.error('Plugin calc error:', e); }
   }
 
-  const combinedPointValue = biltImpact ? biltImpact.pointValueChange : totalSpendChange;
-  const biltCashDelta = biltImpact ? biltImpact.biltCashKeptDelta : 0;
-  const netImpact = combinedPointValue + netCredits + biltCashDelta + netFee;
+  const combinedPointValue = pluginImpact ? pluginImpact.pointValueChange : totalSpendChange;
+  const pluginExtraDelta = pluginImpact ? (pluginImpact.biltCashKeptDelta || 0) : 0;
+  const netImpact = combinedPointValue + netCredits + pluginExtraDelta + netFee;
   const isPositive = netImpact >= 0;
   const removeName = removeCard.shortName || removeCard.name;
   const addName = addCard.shortName || addCard.name;
@@ -5984,16 +4989,13 @@ function renderStep4Swap() {
     <span class="mono" style="font-weight:600;color:${netCredits >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosSwapCreditsLine">${netCredits >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netCredits))}</span>
   </div>`;
 
-  const showRentPtsHint = biltImpact && (biltImpact.rentPointsValueDelta || 0) !== 0;
+  const showRentPtsHint = pluginImpact && (pluginImpact.rentPointsValueDelta || 0) !== 0;
   html += `<div style="display:flex;justify-content:space-between;">
       <span>Point value change${showRentPtsHint ? ' <span style="font-size:11px;color:#78716c;font-weight:400;">(incl. rent pts)</span>' : ''}</span>
       <span class="mono" style="font-weight:600;color:${combinedPointValue >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosSwapRewardsLine">${combinedPointValue >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(combinedPointValue))}</span>
     </div>`;
-  if (biltImpact) {
-    html += `<div style="display:flex;justify-content:space-between;">
-      <span>Bilt Cash <span style="font-size:11px;color:#78716c;font-weight:400;">(kept)</span></span>
-      <span class="mono" style="font-weight:600;color:${biltCashDelta >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosSwapBiltCashTopLine">${biltCashDelta >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(biltCashDelta))}</span>
-    </div>`;
+  if (swapPromptCard?.scenarioPrompt?.renderSummaryLines) {
+    html += swapPromptCard.scenarioPrompt.renderSummaryLines(pluginImpact, 'Swap', buildPluginCtx());
   }
   html += `<div style="display:flex;justify-content:space-between;">
       <span>Annual fee</span>
@@ -6031,9 +5033,9 @@ function renderStep4Swap() {
   for (const r of removeRows) {
     // Hide rent rows at $0 — rent impact is shown in the subtotal line.
     if (r.subcategory === 'rent' && Math.abs(r.valueChange) < 0.005) continue;
-    // Always show non-rent rows shifting to a Bilt card (even $0 impact).
-    const destIsBilt = r.bestCardId && CARDS[r.bestCardId]?.isBilt;
-    if (Math.abs(r.valueChange) < 0.005 && !destIsBilt) continue;
+    // Always show non-rent rows shifting to a routing card (even $0 impact).
+    const destHasRouting = r.bestCardId && CARDS[r.bestCardId]?.scenarioPrompt?.computeRouting;
+    if (Math.abs(r.valueChange) < 0.005 && !destHasRouting) continue;
     swapNormalizedRows.push({
       subcategory: r.subcategory, sourceCardId: wi.removeCardId, sourceCardName: removeName,
       sourceRate: r.sourceRate, destCardName: r.bestCardName, destRate: r.bestRate,
@@ -6042,8 +5044,8 @@ function renderStep4Swap() {
   }
   for (const r of addRows) {
     if (r.subcategory === 'rent' && Math.abs(r.additionalValue) < 0.005) continue;
-    const destIsBilt = CARDS[wi.addCardId]?.isBilt;
-    if (Math.abs(r.additionalValue) < 0.005 && !destIsBilt) continue;
+    const destHasRouting = CARDS[wi.addCardId]?.scenarioPrompt?.computeRouting;
+    if (Math.abs(r.additionalValue) < 0.005 && !destHasRouting) continue;
     swapNormalizedRows.push({
       subcategory: r.subcategory, sourceCardId: r.sourceCardId, sourceCardName: r.sourceCardName,
       sourceRate: r.sourceRate, destCardName: addName, destRate: r.newRate,
@@ -6051,25 +5053,13 @@ function renderStep4Swap() {
     });
   }
 
-  html += renderPointValueContent('Swap', swapNormalizedRows, totalSpendChange, biltImpact, 'cardscenariosSwapTable', annualizationFactor);
+  html += renderPointValueContent('Swap', swapNormalizedRows, totalSpendChange, pluginImpact, 'cardscenariosSwapTable', annualizationFactor);
 
   html += `</div></div>`; // end rewards detail + rewards section
 
-  // Bilt Cash (editable) in bottom ledger
-  if (biltImpact) {
-    const biltCashEarned = biltImpact.finalBiltCashEarned || 0;
-    const biltCashKept = biltImpact.finalBiltCashRemaining || 0;
-    html += `<div style="margin-top:12px;border-top:1px solid #e7e5e4;padding-top:12px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;">
-        <span style="font-weight:600;color:#57534e;">Bilt Cash <span style="font-weight:400;color:#78716c;">(kept)</span></span>
-        <span style="display:flex;align-items:center;gap:4px;">
-          <span class="mono" style="font-size:12px;color:#78716c;">$</span>
-          <input type="number" id="cardscenariosSwapBiltCashInput" min="0" max="${biltCashEarned.toFixed(2)}" step="0.01" value="${biltCashKept.toFixed(2)}"
-            style="width:72px;padding:2px 4px;border:1px solid #d6d3d1;border-radius:4px;font-size:13px;text-align:right;font-family:monospace;" />
-          <span style="font-size:11px;color:#a8a29e;">of ${formatCurrencyPrecise(biltCashEarned)}</span>
-        </span>
-      </div>
-    </div>`;
+  // Plugin ledger section (e.g., editable Bilt Cash input)
+  if (swapPromptCard?.scenarioPrompt?.renderLedgerSection) {
+    html += swapPromptCard.scenarioPrompt.renderLedgerSection(pluginImpact, 'Swap', buildPluginCtx());
   }
 
   // Annual fee section — show both
@@ -6526,10 +5516,11 @@ function attachCardScenariosListeners() {
   if (back2) back2.addEventListener('click', () => { wi.step = 1; renderView('cardscenarios'); });
   const next2 = document.getElementById('cardscenariosNext2');
   if (next2) next2.addEventListener('click', () => {
-    // Check if the card being added/removed/swapped is Bilt — prompt for rent amount
-    const scenarioCardIsBilt = (wi.addCardId && CARDS[wi.addCardId]?.isBilt) || (wi.removeCardId && CARDS[wi.removeCardId]?.isBilt);
-    if (scenarioCardIsBilt) {
+    // Check if any involved card needs a special prompt (e.g., Bilt rent setup)
+    const promptCardId = getScenarioPromptCard();
+    if (promptCardId) {
       wi.showRentPrompt = true;
+      wi.promptCardId = promptCardId;
       renderView('cardscenarios');
       return;
     }
@@ -6541,42 +5532,26 @@ function attachCardScenariosListeners() {
     renderView('cardscenarios');
   });
 
-  // Step 2b: Bilt Rewards setup (rent amount + Bilt Cash plan)
+  // Step 2b: Plugin prompt listeners (e.g., Bilt Rewards setup)
+  const step2bPromptCardId = wi.promptCardId || getScenarioPromptCard();
+  if (step2bPromptCardId) {
+    const step2bCard = CARDS[step2bPromptCardId];
+    if (step2bCard?.scenarioPrompt?.attachListeners) {
+      step2bCard.scenarioPrompt.attachListeners(wi, buildPluginCtx());
+    }
+  }
+
   const back2b = document.getElementById('cardscenariosBack2b');
   if (back2b) back2b.addEventListener('click', () => {
     wi.showRentPrompt = false;
     renderView('cardscenarios');
   });
 
-  // Bilt Cash plan radio buttons
-  document.querySelectorAll('input[name="biltCashPlan"]').forEach(radio => {
-    radio.addEventListener('change', (e) => {
-      wi.biltCashPlan = e.target.value;
-      delete wi.biltCashKeptOverride; // Reset manual override when plan changes
-      // Show/hide custom redemption input
-      const customRow = document.getElementById('biltCustomRedemptionRow');
-      if (customRow) customRow.style.display = e.target.value === 'custom' ? 'flex' : 'none';
-      // Re-render to update radio button styling
-      renderView('cardscenarios');
-    });
-  });
-
-  // Custom redemption amount
-  const customInput = document.getElementById('cardscenariosBiltCustomRedemption');
-  if (customInput) {
-    customInput.addEventListener('input', (e) => {
-      wi.biltCustomMonthlyRedemption = parseFloat(e.target.value) || 0;
-    });
-  }
-
   const next2b = document.getElementById('cardscenariosNext2b');
   if (next2b) next2b.addEventListener('click', () => {
-    const input = document.getElementById('cardscenariosRentAmount');
-    wi.rentAmount = input ? parseFloat(input.value) || 0 : 0;
-    // Read custom redemption on proceed
-    const customInp = document.getElementById('cardscenariosBiltCustomRedemption');
-    if (customInp && wi.biltCashPlan === 'custom') {
-      wi.biltCustomMonthlyRedemption = parseFloat(customInp.value) || 0;
+    const step2bCardForProceed = step2bPromptCardId ? CARDS[step2bPromptCardId] : null;
+    if (step2bCardForProceed?.scenarioPrompt?.onProceed) {
+      step2bCardForProceed.scenarioPrompt.onProceed(wi, buildPluginCtx());
     }
     wi.showRentPrompt = false;
     wi.step = 3;
@@ -6739,27 +5714,17 @@ function attachCardScenariosListeners() {
     });
   }
 
-  // Bilt Cash input handlers (blur/enter)
-  ['Add', 'Remove', 'Swap'].forEach(prefix => {
-    const biltCashInput = document.getElementById(`cardscenarios${prefix}BiltCashInput`);
-    if (biltCashInput) {
-      const handleBiltCashChange = () => {
-        let val = parseFloat(biltCashInput.value) || 0;
-        const max = parseFloat(biltCashInput.max) || 0;
-        val = Math.max(0, Math.min(val, max));
-        biltCashInput.value = val.toFixed(2);
-        wi.biltCashKeptOverride = val;
-        // Recalculate and update everything
-        if (wi.scenarioType === 'add') updateAddCardResult();
-        else if (wi.scenarioType === 'remove') updateRemoveCardResult();
-        else if (wi.scenarioType === 'swap') updateSwapCardResult();
-      };
-      biltCashInput.addEventListener('blur', handleBiltCashChange);
-      biltCashInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); biltCashInput.blur(); }
-      });
+  // Plugin result listeners (e.g., Bilt Cash input handlers)
+  const resultPromptCardId = getScenarioPromptCard();
+  if (resultPromptCardId) {
+    const resultPromptCard = CARDS[resultPromptCardId];
+    if (resultPromptCard?.scenarioPrompt?.attachResultListeners) {
+      const prefix = wi.scenarioType === 'add' ? 'Add' : wi.scenarioType === 'remove' ? 'Remove' : 'Swap';
+      let resultImpact = null;
+      try { resultImpact = calculateCardScenariosNetImpact(); } catch (e) { /* ignore */ }
+      resultPromptCard.scenarioPrompt.attachResultListeners(resultImpact, prefix, buildPluginCtx());
     }
-  });
+  }
 
   // Sortable table headers
   document.querySelectorAll('.cardscenarios-shift-table th[data-sort]').forEach(th => {
@@ -6779,18 +5744,6 @@ function canProceedStep2() {
   if (wi.scenarioType === 'remove') return !!wi.removeCardId;
   if (wi.scenarioType === 'swap') return !!wi.addCardId && !!wi.removeCardId;
   return false;
-}
-
-function _updateBiltCashDisplay(prefix, biltImpact) {
-  if (!biltImpact) return;
-  const input = document.getElementById(`cardscenarios${prefix}BiltCashInput`);
-  if (input) {
-    const earned = biltImpact.finalBiltCashEarned || 0;
-    input.max = earned.toFixed(2);
-    // Update "of $X" label (next sibling span after the input)
-    const ofLabel = input.parentElement?.querySelector('span:last-child');
-    if (ofLabel) ofLabel.textContent = `of ${formatCurrencyPrecise(earned)}`;
-  }
 }
 
 function _updateSummaryElements(prefix, combinedPointValue, netImpact, biltCashDelta) {
@@ -6834,14 +5787,15 @@ function updateAddCardResult() {
   const creditsTotal = getAddCardCreditsTotal();
   const annualFee = addCard.annualFee || 0;
 
-  let biltImpact = null;
-  if (scenarioInvolvesBilt()) {
-    try { biltImpact = calculateCardScenariosNetImpact(); } catch (e) { /* ignore */ }
+  let pluginImpact = null;
+  const addUpdatePromptCardId = getScenarioPromptCard();
+  if (addUpdatePromptCardId) {
+    try { pluginImpact = calculateCardScenariosNetImpact(); } catch (e) { /* ignore */ }
   }
 
-  const combinedPointValue = biltImpact ? biltImpact.pointValueChange : totalGain;
-  const biltCashDelta = biltImpact ? biltImpact.biltCashKeptDelta : 0;
-  const netImpact = combinedPointValue + creditsTotal + biltCashDelta - annualFee;
+  const combinedPointValue = pluginImpact ? pluginImpact.pointValueChange : totalGain;
+  const pluginExtraDelta = pluginImpact ? (pluginImpact.biltCashKeptDelta || 0) : 0;
+  const netImpact = combinedPointValue + creditsTotal + pluginExtraDelta - annualFee;
   const isPositive = netImpact >= 0;
 
   const headlineEl = document.getElementById('cardscenariosAddHeadline');
@@ -6857,9 +5811,13 @@ function updateAddCardResult() {
   const creditsLineEl = document.getElementById('cardscenariosAddCreditsLine');
   if (creditsLineEl) creditsLineEl.textContent = `+${formatCurrencyPrecise(creditsTotal)}`;
 
-  _updateSummaryElements('Add', combinedPointValue, netImpact, biltCashDelta);
-  _updateBiltCashDisplay('Add', biltImpact);
-  updatePointValueContent('Add', biltImpact);
+  _updateSummaryElements('Add', combinedPointValue, netImpact, pluginExtraDelta);
+  if (addUpdatePromptCardId) {
+    const addUpdateCard = CARDS[addUpdatePromptCardId];
+    if (addUpdateCard?.scenarioPrompt?.updateResult) {
+      addUpdateCard.scenarioPrompt.updateResult(pluginImpact, 'Add', buildPluginCtx());
+    }
+  }
 }
 
 function updateRemoveCardResult() {
@@ -6871,14 +5829,15 @@ function updateRemoveCardResult() {
   const creditsTotal = getRemoveCardCreditsTotal();
   const annualFee = removeCard.annualFee || 0;
 
-  let biltImpact = null;
-  if (scenarioInvolvesBilt()) {
-    try { biltImpact = calculateCardScenariosNetImpact(); } catch (e) { /* ignore */ }
+  let pluginImpact = null;
+  const removeUpdatePromptCardId = getScenarioPromptCard();
+  if (removeUpdatePromptCardId) {
+    try { pluginImpact = calculateCardScenariosNetImpact(); } catch (e) { /* ignore */ }
   }
 
-  const combinedPointValue = biltImpact ? biltImpact.pointValueChange : totalChange;
-  const biltCashDelta = biltImpact ? biltImpact.biltCashKeptDelta : 0;
-  const netImpact = combinedPointValue - creditsTotal + biltCashDelta + annualFee;
+  const combinedPointValue = pluginImpact ? pluginImpact.pointValueChange : totalChange;
+  const pluginExtraDelta = pluginImpact ? (pluginImpact.biltCashKeptDelta || 0) : 0;
+  const netImpact = combinedPointValue - creditsTotal + pluginExtraDelta + annualFee;
   const isPositive = netImpact >= 0;
 
   const headlineEl = document.getElementById('cardscenariosRemoveHeadline');
@@ -6894,9 +5853,13 @@ function updateRemoveCardResult() {
   const creditsLineEl = document.getElementById('cardscenariosRemoveCreditsLine');
   if (creditsLineEl) creditsLineEl.textContent = `-${formatCurrencyPrecise(creditsTotal)}`;
 
-  _updateSummaryElements('Remove', combinedPointValue, netImpact, biltCashDelta);
-  _updateBiltCashDisplay('Remove', biltImpact);
-  updatePointValueContent('Remove', biltImpact);
+  _updateSummaryElements('Remove', combinedPointValue, netImpact, pluginExtraDelta);
+  if (removeUpdatePromptCardId) {
+    const removeUpdateCard = CARDS[removeUpdatePromptCardId];
+    if (removeUpdateCard?.scenarioPrompt?.updateResult) {
+      removeUpdateCard.scenarioPrompt.updateResult(pluginImpact, 'Remove', buildPluginCtx());
+    }
+  }
 }
 
 function updateSwapCardResult() {
@@ -6911,14 +5874,15 @@ function updateSwapCardResult() {
   const netCredits = addCredits - removeCredits;
   const netFee = (removeCard.annualFee || 0) - (addCard.annualFee || 0);
 
-  let biltImpact = null;
-  if (scenarioInvolvesBilt()) {
-    try { biltImpact = calculateCardScenariosNetImpact(); } catch (e) { /* ignore */ }
+  let pluginImpact = null;
+  const swapUpdatePromptCardId = getScenarioPromptCard();
+  if (swapUpdatePromptCardId) {
+    try { pluginImpact = calculateCardScenariosNetImpact(); } catch (e) { /* ignore */ }
   }
 
-  const combinedPointValue = biltImpact ? biltImpact.pointValueChange : totalSpendChange;
-  const biltCashDelta = biltImpact ? biltImpact.biltCashKeptDelta : 0;
-  const netImpact = combinedPointValue + netCredits + biltCashDelta + netFee;
+  const combinedPointValue = pluginImpact ? pluginImpact.pointValueChange : totalSpendChange;
+  const pluginExtraDelta = pluginImpact ? (pluginImpact.biltCashKeptDelta || 0) : 0;
+  const netImpact = combinedPointValue + netCredits + pluginExtraDelta + netFee;
   const isPositive = netImpact >= 0;
 
   const headlineEl = document.getElementById('cardscenariosSwapHeadline');
@@ -6942,9 +5906,13 @@ function updateSwapCardResult() {
     creditsTotalEl.style.color = netCredits >= 0 ? '#059669' : '#dc2626';
   }
 
-  _updateSummaryElements('Swap', combinedPointValue, netImpact, biltCashDelta);
-  _updateBiltCashDisplay('Swap', biltImpact);
-  updatePointValueContent('Swap', biltImpact);
+  _updateSummaryElements('Swap', combinedPointValue, netImpact, pluginExtraDelta);
+  if (swapUpdatePromptCardId) {
+    const swapUpdateCard = CARDS[swapUpdatePromptCardId];
+    if (swapUpdateCard?.scenarioPrompt?.updateResult) {
+      swapUpdateCard.scenarioPrompt.updateResult(pluginImpact, 'Swap', buildPluginCtx());
+    }
+  }
 }
 
 function updateCardScenariosSummary() {
@@ -8609,7 +7577,7 @@ function buildExportData() {
     isAnnualFee: t.isAnnualFee || false
   }));
 
-  return {
+  const exportData = {
     version: '1.1',
     dataVersion: DATA_VERSION,
     exportedAt: new Date().toISOString(),
@@ -8623,14 +7591,18 @@ function buildExportData() {
     monthlyCredits: state.monthlyCredits,
     merchantRules: state.merchantRules,
     confirmedTransactions: state.confirmedTransactions,
-    cashPlusCategories: state.cashPlusCategories,
-    cffCategories: state.cffCategories,
-    biltConfig: state.biltConfig,
     columnMappings: state.columnMappings,
     customAnnualBonusPoints: state.customAnnualBonusPoints,
     streamingCredits: state.streamingCredits,
     proAccess: state.proAccess || undefined
   };
+  // Add plugin-managed state (cashPlusCategories, cffCategories, biltConfig, etc.)
+  for (const [cardId, card] of Object.entries(CARDS)) {
+    if (card.pluginState?.exportState) {
+      Object.assign(exportData, card.pluginState.exportState(buildPluginCtx()));
+    }
+  }
+  return exportData;
 }
 
 // Export transactions as CSV
@@ -8834,17 +7806,11 @@ async function handleFile(file) {
         state.confirmedTransactions = backup.confirmedTransactions;
         safeLocalStorageSet('ccTracker_confirmedTxns', backup.confirmedTransactions);
       }
-      if (backup.cashPlusCategories) {
-        state.cashPlusCategories = backup.cashPlusCategories;
-        safeLocalStorageSet('ccTracker_cashPlusCategories', backup.cashPlusCategories);
-      }
-      if (backup.cffCategories) {
-        state.cffCategories = backup.cffCategories;
-        safeLocalStorageSet('ccTracker_cffCategories', backup.cffCategories);
-      }
-      if (backup.biltConfig) {
-        state.biltConfig = backup.biltConfig;
-        safeLocalStorageSet('ccTracker_biltConfig', backup.biltConfig);
+      // Restore plugin-managed state (cashPlusCategories, cffCategories, biltConfig, etc.)
+      for (const [cardId, card] of Object.entries(CARDS)) {
+        if (card.pluginState?.importState) {
+          card.pluginState.importState(backup, buildPluginCtx());
+        }
       }
       if (backup.columnMappings) {
         state.columnMappings = backup.columnMappings;
@@ -9297,13 +8263,15 @@ async function initCore() {
       state.merchantRules = {};
       state.merchantCache = {};
       state.confirmedTransactions = {};
-      state.cashPlusCategories = {};
-      state.cffCategories = {};
-      state.cffPaypalDecemberOnly = {};
-      state.biltConfig = {};
       state.customAnnualBonusPoints = {};
       state.columnMappings = {};
       state.cardYearToggles = {};
+      // Clear plugin-managed state (cashPlusCategories, cffCategories, biltConfig, etc.)
+      for (const [cardId, card] of Object.entries(CARDS)) {
+        if (card.pluginState?.clearState) {
+          card.pluginState.clearState(buildPluginCtx());
+        }
+      }
 
       localStorage.removeItem('ccTracker_cardMappings');
       localStorage.removeItem('ccTracker_pointValues');
@@ -9314,10 +8282,6 @@ async function initCore() {
       localStorage.removeItem('ccTracker_merchantRules');
       localStorage.removeItem('ccTracker_merchantCache');
       localStorage.removeItem('ccTracker_confirmedTxns');
-      localStorage.removeItem('ccTracker_cashPlusCategories');
-      localStorage.removeItem('ccTracker_cffCategories');
-      localStorage.removeItem('ccTracker_cffPaypalDecemberOnly');
-      localStorage.removeItem('ccTracker_biltConfig');
       localStorage.removeItem('ccTracker_annualBonusPoints');
       localStorage.removeItem('ccTracker_columnMappings');
       localStorage.removeItem('ccTracker_cardYearToggles');
@@ -9348,9 +8312,6 @@ async function initCore() {
           state.streamingCredits = {};
           state.merchantRules = {};
           state.confirmedTransactions = {};
-          state.cashPlusCategories = {};
-          state.cffCategories = {};
-          state.biltConfig = {};
           state.customAnnualBonusPoints = {};
           state.columnMappings = {};
           state.savedTransactions = [];
@@ -9358,6 +8319,13 @@ async function initCore() {
           state.results = null;
           state.detectedAnnualFees = {};
           state.dpBannersDismissed = {};
+
+          // Clear plugin-managed state
+          for (const [cardId, card] of Object.entries(CARDS)) {
+            if (card.pluginState?.clearState) {
+              card.pluginState.clearState(buildPluginCtx());
+            }
+          }
 
           // Clear all localStorage EXCEPT tier access keys
           const tierKeys = ['ccTracker_decisionPasses', 'ccTracker_proAccess'];
@@ -9679,49 +8647,10 @@ async function initCore() {
       safeLocalStorageSet('ccTracker_streamingCredits', state.streamingCredits);
     }
 
-    // Save Cash+ quarterly categories for selected year
-    // Use consistent fallback: most recent transaction year, or current year if no transactions
-    if (cardId === 'us-bank-cash-plus') {
-      const defaultYear = state.availableYears.length > 0 ? state.availableYears[0] : new Date().getFullYear();
-      const cashPlusYear = state.selectedCashPlusYear || defaultYear;
-      ['Q1', 'Q2', 'Q3', 'Q4'].forEach(quarterKey => {
-        const yearQuarterKey = `${cashPlusYear}-${quarterKey}`;
-        const fivePercent = [];
-        document.querySelectorAll(`.cash-plus-5[data-quarter="${quarterKey}"]:checked`).forEach(cb => {
-          fivePercent.push(cb.dataset.category);
-        });
-        const twoPercentCb = document.querySelector(`.cash-plus-2[data-quarter="${quarterKey}"]:checked`);
-        const twoPercent = twoPercentCb ? twoPercentCb.dataset.category : '';
-
-        state.cashPlusCategories[yearQuarterKey] = { fivePercent, twoPercent };
-      });
-      safeLocalStorageSet('ccTracker_cashPlusCategories', state.cashPlusCategories);
-    }
-
-    // CFF quarterly categories are now read from stored data (no user selections to save)
-    
-    // Save Bilt-specific config from the DOM (matches pattern of other card-specific saves)
+    // Save plugin-specific config from the DOM (Cash+ quarterly selections, Bilt config, etc.)
     const card = CARDS[cardId];
-    if (card?.isBilt) {
-      if (!state.biltConfig[cardId]) state.biltConfig[cardId] = {};
-      const cfg = state.biltConfig[cardId];
-      const rewardRadio = document.querySelector(`.bilt-reward-option[data-card="${cardId}"]:checked`);
-      if (rewardRadio) cfg.rewardOption = rewardRadio.value;
-      const rentRadio = document.querySelector(`.bilt-rent-detection[data-card="${cardId}"]:checked`);
-      if (rentRadio) cfg.rentDetection = rentRadio.value;
-      const cashCheckbox = document.querySelector(`.bilt-cash-as-credit[data-card="${cardId}"]`);
-      if (cashCheckbox) cfg.countBiltCashAsCredit = cashCheckbox.checked;
-      const redemptionInput = document.querySelector(`.bilt-monthly-redemption[data-card="${cardId}"]`);
-      if (redemptionInput) cfg.monthlyBiltCashRedemption = parseFloat(redemptionInput.value) || 0;
-      const manualRentInput = document.querySelector(`.bilt-manual-rent[data-card="${cardId}"]`);
-      if (manualRentInput) cfg.manualRentAmount = parseFloat(manualRentInput.value) || 2000;
-      const rentDaySelect = document.querySelector(`.bilt-rent-day[data-card="${cardId}"]`);
-      if (rentDaySelect) cfg.manualRentDay = parseInt(rentDaySelect.value);
-      const keywordInput = document.querySelector(`.bilt-rent-keyword[data-card="${cardId}"]`);
-      if (keywordInput) cfg.rentMerchantKeyword = keywordInput.value.trim();
-      const bonusRadio = document.querySelector(`.bilt-bonus-cat[data-card="${cardId}"]:checked`);
-      if (bonusRadio) cfg.bonusCategory = bonusRadio.value;
-      safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
+    if (typeof card?.saveConfigSection === 'function') {
+      card.saveConfigSection(cardId, buildPluginCtx());
     }
 
     // Reprocess transactions without navigating away from config page

@@ -8,6 +8,7 @@ window.CardTracker.cards['us-bank-cash-plus'] = {
   pointValue: 0.01,
   multipliers: {}, // Populated dynamically based on quarterly selections
   baseRate: 1,
+  earningRatesNote: 'Based on quarterly selections above',
   credits: [],
   // Categories are dynamic based on quarterly selection
   categories: ['other'], // Base categories, expanded by getCardCategories()
@@ -299,5 +300,169 @@ window.CardTracker.cards['us-bank-cash-plus'] = {
       if (!seen[all[i]]) { seen[all[i]] = true; unique.push(all[i]); }
     }
     return unique;
+  },
+
+  renderConfigSection: function(cardId, ctx) {
+    var CASH_PLUS_5_LABELS = {
+      'streaming': 'TV, Internet & Streaming',
+      'utilities': 'Home Utilities',
+      'cell-phone': 'Cell Phone Providers',
+      'department-stores': 'Department Stores',
+      'electronics': 'Electronics Stores',
+      'furniture': 'Furniture Stores',
+      'fast-food': 'Fast Food',
+      'fitness': 'Gyms & Fitness Centers',
+      'ground-transport': 'Ground Transportation',
+      'movies': 'Movie Theaters',
+      'sporting-goods': 'Sporting Goods Stores',
+      'clothing': 'Select Clothing Stores'
+    };
+    var CASH_PLUS_2_LABELS = {
+      'gas': 'Gas Stations',
+      'grocery': 'Grocery Stores',
+      'dining': 'Restaurants'
+    };
+    var QUARTERS = [
+      { id: 'Q1', name: 'Q1 (Jan-Mar)' },
+      { id: 'Q2', name: 'Q2 (Apr-Jun)' },
+      { id: 'Q3', name: 'Q3 (Jul-Sep)' },
+      { id: 'Q4', name: 'Q4 (Oct-Dec)' }
+    ];
+
+    var txnYears = [];
+    var seen = {};
+    var txns = ctx.state.transactions || [];
+    for (var i = 0; i < txns.length; i++) {
+      var y = ctx.getYearFromDateString(txns[i].date);
+      if (!seen[y]) { seen[y] = true; txnYears.push(y); }
+    }
+    txnYears.sort(function(a, b) { return b - a; });
+    var currentYear = new Date().getFullYear();
+    var availableYears = txnYears.length > 0 ? txnYears : [currentYear];
+    var selectedCashPlusYear = ctx.state.selectedCashPlusYear || availableYears[0];
+
+    var html = '<div id="quarterlySection">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
+        '<h3 style="font-size:14px;font-weight:600;">Quarterly Category Selection</h3>' +
+        '<select id="cashPlusYearSelect" class="form-select" style="min-width:100px;padding:6px 10px;">';
+    for (var yi = 0; yi < availableYears.length; yi++) {
+      html += '<option value="' + availableYears[yi] + '"' + (availableYears[yi] === selectedCashPlusYear ? ' selected' : '') + '>' + availableYears[yi] + '</option>';
+    }
+    html += '</select></div>' +
+      '<p style="font-size:12px;color:#78716c;margin-bottom:4px;">Select the bonus categories you activated with U.S. Bank for each quarter.</p>' +
+      '<p style="font-size:11px;color:#a8a29e;margin-bottom:12px;">This affects how points are calculated for transactions in that period. $2,000 cap on 5% categories per quarter.</p>' +
+      '<div id="cashPlusQuarters">';
+
+    for (var qi = 0; qi < QUARTERS.length; qi++) {
+      var q = QUARTERS[qi];
+      var yearQuarterKey = selectedCashPlusYear + '-' + q.id;
+      var quarterSelections = ctx.state.cashPlusCategories[yearQuarterKey] || ctx.state.cashPlusCategories[q.id] || { fivePercent: [], twoPercent: '' };
+      var isCurrentQuarter = selectedCashPlusYear === currentYear && ctx.getCurrentQuarter() === q.id;
+      var numSelected = (quarterSelections.fivePercent && quarterSelections.fivePercent.length) || 0;
+
+      html += '<details style="margin-bottom:12px;border:1px solid #e7e5e4;border-radius:8px;' + (isCurrentQuarter ? 'border-color:#059669;' : '') + '"' + (isCurrentQuarter ? ' open' : '') + '>' +
+        '<summary style="padding:12px;cursor:pointer;font-weight:500;font-size:13px;background:' + (isCurrentQuarter ? '#dcfce7' : '#fafaf9') + ';border-radius:7px;list-style:none;display:flex;justify-content:space-between;align-items:center;">' +
+          '<span>' + q.name + (isCurrentQuarter ? ' (Current)' : '') + '</span>' +
+          '<span style="font-size:11px;color:#78716c;">' + numSelected + '/2 categories selected</span>' +
+        '</summary>' +
+        '<div style="padding:12px;">' +
+          '<div style="margin-bottom:12px;">' +
+            '<div style="font-size:12px;font-weight:500;margin-bottom:6px;">5% Categories (select up to 2):</div>' +
+            '<div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:6px;">';
+
+      var fiveKeys = Object.keys(CASH_PLUS_5_LABELS);
+      for (var fi = 0; fi < fiveKeys.length; fi++) {
+        var key = fiveKeys[fi];
+        var label = CASH_PLUS_5_LABELS[key];
+        var isChecked = quarterSelections.fivePercent && quarterSelections.fivePercent.indexOf(key) >= 0;
+        html += '<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid #e7e5e4;border-radius:4px;cursor:pointer;font-size:11px;' + (isChecked ? 'background:#dcfce7;border-color:#059669;' : '') + '">' +
+          '<input type="checkbox" class="cash-plus-5" data-year="' + selectedCashPlusYear + '" data-quarter="' + q.id + '" data-category="' + key + '"' + (isChecked ? ' checked' : '') + '>' +
+          label + '</label>';
+      }
+
+      html += '</div></div><div>' +
+        '<div style="font-size:12px;font-weight:500;margin-bottom:6px;">2% Category (select 1):</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:6px;">';
+
+      var twoKeys = Object.keys(CASH_PLUS_2_LABELS);
+      for (var ti = 0; ti < twoKeys.length; ti++) {
+        var tkey = twoKeys[ti];
+        var tlabel = CASH_PLUS_2_LABELS[tkey];
+        var tChecked = quarterSelections.twoPercent === tkey;
+        html += '<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid #e7e5e4;border-radius:4px;cursor:pointer;font-size:11px;' + (tChecked ? 'background:#fef9c3;border-color:#eab308;' : '') + '">' +
+          '<input type="radio" name="cashPlus2-' + q.id + '" class="cash-plus-2" data-year="' + selectedCashPlusYear + '" data-quarter="' + q.id + '" data-category="' + tkey + '"' + (tChecked ? ' checked' : '') + '>' +
+          tlabel + '</label>';
+      }
+
+      html += '</div></div></div></details>';
+    }
+
+    html += '</div></div>';
+    return html;
+  },
+
+  attachConfigListeners: function(cardId, ctx) {
+    // Limit 5% selections to 2 per quarter
+    document.querySelectorAll('.cash-plus-5').forEach(function(cb) {
+      cb.addEventListener('change', function() {
+        var quarter = cb.dataset.quarter;
+        var checked = document.querySelectorAll('.cash-plus-5[data-quarter="' + quarter + '"]:checked');
+        if (checked.length > 2) {
+          cb.checked = false;
+          alert('You can only select 2 categories for 5% cashback per quarter');
+        }
+        cb.closest('label').style.background = cb.checked ? '#dcfce7' : '';
+        cb.closest('label').style.borderColor = cb.checked ? '#059669' : '#e7e5e4';
+      });
+    });
+    document.querySelectorAll('.cash-plus-2').forEach(function(cb) {
+      cb.addEventListener('change', function() {
+        var quarter = cb.dataset.quarter;
+        document.querySelectorAll('.cash-plus-2[data-quarter="' + quarter + '"]').forEach(function(r) {
+          r.closest('label').style.background = r.checked ? '#fef9c3' : '';
+          r.closest('label').style.borderColor = r.checked ? '#eab308' : '#e7e5e4';
+        });
+      });
+    });
+    // Year selector
+    var cashPlusYearSelect = document.getElementById('cashPlusYearSelect');
+    if (cashPlusYearSelect) {
+      cashPlusYearSelect.addEventListener('change', function(e) {
+        ctx.state.selectedCashPlusYear = parseInt(e.target.value);
+        ctx.renderCardConfig();
+      });
+    }
+  },
+
+  saveConfigSection: function(cardId, ctx) {
+    var defaultYear = ctx.state.availableYears && ctx.state.availableYears.length > 0
+      ? ctx.state.availableYears[0] : new Date().getFullYear();
+    var cashPlusYear = ctx.state.selectedCashPlusYear || defaultYear;
+    ['Q1', 'Q2', 'Q3', 'Q4'].forEach(function(quarterKey) {
+      var yearQuarterKey = cashPlusYear + '-' + quarterKey;
+      var fivePercent = [];
+      document.querySelectorAll('.cash-plus-5[data-quarter="' + quarterKey + '"]:checked').forEach(function(cb) {
+        fivePercent.push(cb.dataset.category);
+      });
+      var twoPercentCb = document.querySelector('.cash-plus-2[data-quarter="' + quarterKey + '"]:checked');
+      var twoPercent = twoPercentCb ? twoPercentCb.dataset.category : '';
+      ctx.state.cashPlusCategories[yearQuarterKey] = { fivePercent: fivePercent, twoPercent: twoPercent };
+    });
+    ctx.safeLocalStorageSet('ccTracker_cashPlusCategories', ctx.state.cashPlusCategories);
+  },
+
+  pluginState: {
+    keys: [{ stateKey: 'cashPlusCategories', localStorageKey: 'ccTracker_cashPlusCategories', default: {} }],
+    exportState: function(ctx) { return { cashPlusCategories: ctx.state.cashPlusCategories }; },
+    importState: function(data, ctx) {
+      if (data.cashPlusCategories) {
+        ctx.state.cashPlusCategories = data.cashPlusCategories;
+        ctx.safeLocalStorageSet('ccTracker_cashPlusCategories', data.cashPlusCategories);
+      }
+    },
+    clearState: function(ctx) {
+      ctx.state.cashPlusCategories = {};
+      localStorage.removeItem('ccTracker_cashPlusCategories');
+    }
   },
 };

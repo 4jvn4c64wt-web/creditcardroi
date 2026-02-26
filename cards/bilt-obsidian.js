@@ -37,5 +37,19 @@ window.CardTracker.cards = window.CardTracker.cards || {};
       this._pluginCardId = 'bilt-obsidian';
       return biltPlugin.getScenarioMultiplier.call(this, category, ctx);
     },
+    renderConfigSection: function(cardId, ctx) {
+      this._pluginCardId = cardId;
+      return biltPlugin.renderConfigSection.call(this, cardId, ctx);
+    },
+    attachConfigListeners: function(cardId, ctx) {
+      this._pluginCardId = cardId;
+      return biltPlugin.attachConfigListeners.call(this, cardId, ctx);
+    },
+    saveConfigSection: function(cardId, ctx) {
+      this._pluginCardId = cardId;
+      return biltPlugin.saveConfigSection.call(this, cardId, ctx);
+    },
+    scenarioPrompt: biltPlugin.scenarioPrompt,
+    pluginState: biltPlugin.pluginState,
   };
 })();

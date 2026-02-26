@@ -33,5 +33,87 @@ window.CardTracker.cards['chase-sapphire-reserve'] = {
     multipliers: { 'chase-travel': 10, 'travel': 3, 'dining': 3, 'lyft': 10 },
     baseRate: 1,
     categories: ['chase-travel', 'travel', 'dining', 'lyft', 'other']
-  }
+  },
+
+  // Plugin hooks
+
+  getMultiplier: function(category, txnDate, merchantDesc, ctx) {
+    var card = this;
+
+    // Lyft partnership date-dependent logic
+    if (category === 'lyft' && card.lyftPartnershipStart) {
+      var lyftStart = new Date(card.lyftPartnershipStart);
+      var txnDateObj = txnDate ? new Date(txnDate) : new Date();
+
+      if (txnDateObj >= lyftStart) {
+        // CSR had 10x Lyft until April 1, 2025, then 5x after
+        if (card.lyft10xEndDate) {
+          var lyft10xEnd = new Date(card.lyft10xEndDate);
+          if (txnDateObj < lyft10xEnd) {
+            return { rate: 10, reason: '10x Lyft (Chase partnership 2020-2025)' };
+          }
+        }
+        // After April 1, 2025: use defined multiplier (5x)
+        if (card.multipliers['lyft']) {
+          return { rate: card.multipliers['lyft'], reason: card.multipliers['lyft'] + 'x Lyft (Chase partnership)' };
+        }
+      }
+      // Before partnership start — fall through to default
+    }
+
+    // Legacy CSR rates (before Oct 26, 2025)
+    if (card.legacyCutoffDate) {
+      var csrCutoff = new Date(card.legacyCutoffDate);
+      var txnDateObj2 = txnDate ? new Date(txnDate) : new Date();
+
+      if (txnDateObj2 < csrCutoff) {
+        if (category === 'chase-travel') return { rate: 10, reason: '10x Chase Travel (Legacy CSR)' };
+        if (category === 'dining') return { rate: 3, reason: '3x dining (Legacy CSR)' };
+
+        // Legacy CSR had 3x on ALL travel — walk up hierarchy
+        var checkCat = category;
+        while (checkCat) {
+          if (checkCat === 'travel' || checkCat === 'flights-direct' ||
+              checkCat === 'hotels-direct' || checkCat === 'car-rental' ||
+              checkCat === 'transit' || checkCat === 'cruise' ||
+              checkCat === 'vacation-rental' || checkCat === 'airbnb') {
+            return { rate: 3, reason: '3x travel (Legacy CSR — ' + category + ')' };
+          }
+          checkCat = ctx.CATEGORY_HIERARCHY[checkCat];
+        }
+
+        return { rate: 1, reason: '1x base (Legacy CSR)' };
+      }
+    }
+
+    // Post-legacy: fall through to default multiplier logic
+    return null;
+  },
+
+  getCategories: function(txnDate, ctx) {
+    var card = this;
+    if (card.legacyCutoffDate) {
+      var csrCutoff = new Date(card.legacyCutoffDate);
+      var txnDateObj = txnDate ? new Date(txnDate) : new Date();
+      if (txnDateObj < csrCutoff) {
+        return card.legacy.categories || ['chase-travel', 'travel', 'dining', 'lyft', 'other'];
+      }
+    }
+    return card.categories;
+  },
+
+  getAnnualFee: function(transactions, detectedFees, ctx) {
+    var card = this;
+    // Detected fees are checked by the default handler first — this hook is only
+    // called when no detected fee was found. Handle legacy fee here.
+    if (card.legacyCutoffDate) {
+      var cutoff = new Date(card.legacyCutoffDate);
+      var cardTxns = transactions.filter(function(t) { return t.cardId === 'chase-sapphire-reserve'; });
+      var hasPostCutoff = cardTxns.some(function(t) {
+        return new Date(t.date) >= cutoff;
+      });
+      return hasPostCutoff ? card.annualFee : card.legacyAnnualFee;
+    }
+    return null; // Use default
+  },
 };

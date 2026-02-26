@@ -33,5 +33,35 @@ window.CardTracker.cards['chase-sapphire-preferred'] = {
     'youtube premium', 'youtube tv'
   ],
   // Lyft partnership started Jan 12, 2020
-  lyftPartnershipStart: '2020-01-12'
+  lyftPartnershipStart: '2020-01-12',
+
+  // Plugin hooks
+
+  getMultiplier: function(category, txnDate, merchantDesc, ctx) {
+    var card = this;
+
+    // Lyft partnership date-dependent logic
+    if (category === 'lyft' && card.lyftPartnershipStart) {
+      var lyftStart = new Date(card.lyftPartnershipStart);
+      var txnDateObj = txnDate ? new Date(txnDate) : new Date();
+
+      if (txnDateObj >= lyftStart && card.multipliers['lyft']) {
+        return { rate: card.multipliers['lyft'], reason: card.multipliers['lyft'] + 'x Lyft (Chase partnership)' };
+      }
+      // Before partnership start — fall through to default (Lyft as transit/travel)
+    }
+
+    // Streaming keyword validation: only give streaming bonus when merchant matches approved service
+    if (category === 'streaming' && card.streamingKeywords && merchantDesc) {
+      var normDesc = merchantDesc.toLowerCase().replace(/[^a-z0-9\s.+]/g, '');
+      var matched = card.streamingKeywords.some(function(kw) { return normDesc.includes(kw); });
+      if (!matched) {
+        return { rate: card.baseRate, reason: card.baseRate + 'x base rate (streaming service not in ' + (card.shortName || card.name) + ' bonus list)' };
+      }
+      // Matched — fall through to standard multiplier (3x streaming)
+    }
+
+    // No other special logic — fall through to default
+    return null;
+  },
 };

@@ -418,6 +418,7 @@ let state = {
   cffCategories: safeLocalStorageGet('ccTracker_cffCategories', {}),
   cffPaypalDecemberOnly: safeLocalStorageGet('ccTracker_cffPaypalDecemberOnly', {}), // Tracks PayPal December-only for Q4 by year
   biltConfig: safeLocalStorageGet('ccTracker_biltConfig', {}),
+  rentLockedTransactions: safeLocalStorageGet('ccTracker_rentLockedTransactions', {}),
   customAnnualBonusPoints: safeLocalStorageGet('ccTracker_annualBonusPoints', {}),
   cardYearToggles: safeLocalStorageGet('ccTracker_cardYearToggles', {}), // { cardId: true } - tracks which cards show card year instead of calendar year
   columnMappings: safeLocalStorageGet('ccTracker_columnMappings', {}), // Remembers mappings by CSV shape
@@ -1019,9 +1020,9 @@ function isBiltCardConfigured(cardId) {
   const cfg = state.biltConfig[cardId];
   if (!cfg) return false;
 
-  // Considered configured if it has a reward option set OR Bilt Cash redemption > 0
+  // Considered configured if it has a reward option set OR rent amount > 0
   return (cfg.rewardOption === 'housing-only' || cfg.rewardOption === 'flexible') ||
-         (cfg.monthlyBiltCashRedemption && cfg.monthlyBiltCashRedemption > 0);
+         (cfg.manualRentAmount && cfg.manualRentAmount > 0);
 }
 
 // Calculate Bilt rent points for a billing cycle based on spending ratio or Bilt Cash
@@ -1062,9 +1063,10 @@ function calculateBiltRentPoints(cardId, rentAmount, everydaySpend, billingMonth
     
     return { points, rate, reason };
   } else {
-    // Flexible Bilt Cash: user specifies how much Bilt Cash to redeem
+    // Flexible Bilt Cash: auto-derive needed Bilt Cash from rent amount
     // $3 Bilt Cash = 100 points on $100 rent (i.e., $30 = 1000 pts on $1000)
-    const monthlyBiltCash = cfg.monthlyBiltCashRedemption || 0;
+    // Bilt Cash is all-or-nothing — assume full funding when rent is configured
+    const monthlyBiltCash = cfg.monthlyBiltCashRedemption || ((rentAmount / 100) * 3);
     const maxPointsUnlocked = (monthlyBiltCash / 3) * 100;
     const points = Math.min(maxPointsUnlocked, rentAmount); // Cap at 1x rent
     const effectiveRate = rentAmount > 0 ? points / rentAmount : 0;
@@ -1087,49 +1089,61 @@ function calculateBiltRentPoints(cardId, rentAmount, everydaySpend, billingMonth
   }
 }
 
-// Detect rent transactions from bank accounts (not cards)
+// Detect rent transactions for Bilt cards using two-filter approach:
+// Filter 1: Amount must be within 10% of configured manualRentAmount
+// Filter 2: Description must match rent keywords AND not contain travel/portal keywords
+// Rent-locked transactions (previously tagged as rent) are preserved across reprocessing.
 function detectBiltRentPayments(transactions, cardId) {
   const cfg = state.biltConfig[cardId] || {};
+  const rentAmount = cfg.manualRentAmount || 0;
   const rentTxns = [];
-  
-  if (cfg.rentDetection === 'manual') {
-    // Manual: look for transactions matching configured amount/day
-    const rentAmount = cfg.manualRentAmount || 0;
-    const rentDay = cfg.manualRentDay || 1;
-    
-    transactions.forEach(txn => {
-      const amt = Math.abs(txn.amount);
-      const txnDate = new Date(txn.date);
-      const day = txnDate.getDate();
-      
-      // Match if amount is close (within $10) and day is close (within 3 days)
-      if (Math.abs(amt - rentAmount) <= 10 && Math.abs(day - rentDay) <= 3) {
-        rentTxns.push({ ...txn, isDetectedRent: true });
-      }
-    });
-  } else {
-    // Auto-detect: look for rent/mortgage keywords or categories
-    const rentKeywords = ['rent', 'mortgage', 'hoa', 'property management', 'apartment', 
-      'avalon', 'equity residential', 'greystar', 'bilt', 'housing'];
-    const rentCategories = ['rent', 'mortgage', 'housing'];
-    
-    transactions.forEach(txn => {
-      const merchant = (txn.merchant || '').toLowerCase();
-      const category = (txn.category || '').toLowerCase();
-      const amt = Math.abs(txn.amount);
-      
-      // Must be a debit (negative or large positive indicating payment)
-      if (amt < 500) return; // Rent is usually > $500
-      
-      const matchesKeyword = rentKeywords.some(kw => merchant.includes(kw));
-      const matchesCategory = rentCategories.some(cat => category.includes(cat));
-      
-      if (matchesKeyword || matchesCategory) {
-        rentTxns.push({ ...txn, isDetectedRent: true });
-      }
-    });
+
+  // Negative keywords — portal/travel purchases that show as "Bilt Rewards"
+  const portalKeywords = ['hotel', 'flight', 'airline', 'airbnb', 'resort', 'cruise',
+    'car rental', 'hertz', 'enterprise', 'marriott', 'hilton', 'hyatt', 'delta',
+    'united', 'american airlines', 'southwest', 'jetblue', 'booking', 'expedia', 'vrbo'];
+
+  transactions.forEach(txn => {
+    // Check rent-locked list FIRST — locked transactions stay as rent regardless
+    if (state.rentLockedTransactions[txn.id]) {
+      rentTxns.push({ ...txn, isDetectedRent: true });
+      return;
+    }
+
+    // No configured rent amount means no new rent detection
+    if (rentAmount <= 0) return;
+
+    // Filter 1: Amount match — within 10% of configured rent amount
+    const amt = Math.abs(txn.amount);
+    const tolerance = rentAmount * 0.10;
+    if (Math.abs(amt - rentAmount) > tolerance) return;
+
+    // Filter 2: Description confirmation
+    const merchant = (txn.merchant || '').toLowerCase();
+    const original = (txn.original || '').toLowerCase();
+    const combined = merchant + ' ' + original;
+
+    // Check positive match: "bilt" or user's custom keyword
+    const rentKeyword = (cfg.rentMerchantKeyword || '').toLowerCase().trim();
+    const matchesPositive = combined.includes('bilt') ||
+      (rentKeyword && combined.includes(rentKeyword));
+
+    if (!matchesPositive) return;
+
+    // Check negative keywords — reject if travel/portal terms found
+    const matchesNegative = portalKeywords.some(kw => combined.includes(kw));
+    if (matchesNegative) return;
+
+    // Both filters passed — tag as rent and lock it
+    rentTxns.push({ ...txn, isDetectedRent: true });
+    state.rentLockedTransactions[txn.id] = true;
+  });
+
+  // Persist newly locked transactions
+  if (rentTxns.length > 0) {
+    safeLocalStorageSet('ccTracker_rentLockedTransactions', state.rentLockedTransactions);
   }
-  
+
   return rentTxns;
 }
 
@@ -1896,7 +1910,35 @@ async function processTransactions(transactions) {
 
   // Save cache
   safeLocalStorageSet('ccTracker_merchantCache', state.merchantCache);
-  
+
+  // Bilt rent detection: reclassify matching transactions as rent
+  // Group transactions by Bilt card, then run two-filter detection
+  const biltCardTxns = {};
+  for (const txn of transactions) {
+    const cardId = state.cardMappings[txn.last4];
+    if (cardId && CARDS[cardId]?.isBilt) {
+      if (!biltCardTxns[cardId]) biltCardTxns[cardId] = [];
+      biltCardTxns[cardId].push(txn);
+    }
+  }
+  for (const [cardId, cardTxns] of Object.entries(biltCardTxns)) {
+    const rentTxns = detectBiltRentPayments(cardTxns, cardId);
+    for (const rt of rentTxns) {
+      // Don't override manual confirmations or merchant rules
+      if (state.confirmedTransactions[rt.id]) continue;
+      const norm = normalize(rt.merchant);
+      const cardKey = cardId + '|' + norm;
+      if (state.merchantRules[cardKey] || state.merchantRules[norm]) continue;
+
+      classifications[rt.id] = {
+        subcategory: 'rent',
+        source: 'bilt-rent-detect',
+        confidence: 100,
+        reason: 'Bilt rent payment (amount + description match)'
+      };
+    }
+  }
+
   // Process each transaction (skip bank accounts and "skip" cards)
   const processed = transactions
     .filter(txn => {
@@ -2168,6 +2210,18 @@ function showMapping(allLast4s) {
       </select>
       ${state.cardMappings[last4] === 'other-no-rewards' ? '<a href="https://docs.google.com/forms/d/e/1FAIpQLSdv50_OOmmuoArTW8FkmCuZhy7WuQH8A0GE1M8mYgTseakdOw/viewform" target="_blank" class="suggest-card-link">Don\'t see your card? Suggest it</a>' : ''}
       ${state.cardMappings[last4] ? '<span class="badge badge-green">Mapped</span>' : '<span class="badge badge-yellow">Needs mapping</span>'}
+      ${(state.cardMappings[last4] && CARDS[state.cardMappings[last4]]?.isBilt) ? `
+      <div class="bilt-rent-mapping-row" style="width:100%;margin-top:8px;padding:8px 12px;background:#fafaf9;border:1px solid #e7e5e4;border-radius:6px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <label style="font-size:12px;font-weight:500;white-space:nowrap;">Monthly rent:</label>
+          <span style="font-size:14px;">$</span>
+          <input type="number" class="bilt-mapping-rent form-input" data-last4="${escapeHtml(last4)}" data-card-id="${escapeHtml(state.cardMappings[last4])}"
+            value="${(state.biltConfig[state.cardMappings[last4]]?.manualRentAmount) || ''}"
+            placeholder="0" style="width:120px;padding:4px 6px;font-size:13px;">
+        </div>
+        <p style="font-size:10px;color:#78716c;margin:4px 0 0 0;">Don't worry if your rent changed during the period you're importing. The tracker will capture anything within 10% of this amount.</p>
+      </div>
+      ` : ''}
     </div>
   `}).join('');
   
@@ -2180,7 +2234,17 @@ function showMapping(allLast4s) {
       showMapping(allLast4s);
     });
   });
-  
+
+  // Bilt rent amount inputs in mapping
+  container.querySelectorAll('.bilt-mapping-rent').forEach(inp => {
+    inp.addEventListener('change', e => {
+      const cardId = e.target.dataset.cardId;
+      if (!state.biltConfig[cardId]) state.biltConfig[cardId] = {};
+      state.biltConfig[cardId].manualRentAmount = parseFloat(e.target.value) || 0;
+      safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
+    });
+  });
+
   const unmapped = creditCardLast4s.filter(l4 => !state.cardMappings[l4]);
   document.getElementById('processBtn').disabled = unmapped.length > 0;
   document.getElementById('mappingError').textContent = unmapped.length > 0 ? `${unmapped.length} card(s) need mapping` : '';
@@ -7473,6 +7537,11 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
         state.confirmedTransactions[txnId] = newCategory;
         safeLocalStorageSet('ccTracker_confirmedTxns', state.confirmedTransactions);
       }
+      // If reclassifying away from rent, remove from rent-locked list
+      if (newCategory !== 'rent' && state.rentLockedTransactions[txnId]) {
+        delete state.rentLockedTransactions[txnId];
+        safeLocalStorageSet('ccTracker_rentLockedTransactions', state.rentLockedTransactions);
+      }
     }
     
     // Capture current filter state before re-rendering
@@ -7594,6 +7663,7 @@ function buildExportData() {
     columnMappings: state.columnMappings,
     customAnnualBonusPoints: state.customAnnualBonusPoints,
     streamingCredits: state.streamingCredits,
+    rentLockedTransactions: state.rentLockedTransactions,
     proAccess: state.proAccess || undefined
   };
   // Add plugin-managed state (cashPlusCategories, cffCategories, biltConfig, etc.)
@@ -7748,7 +7818,8 @@ async function handleFile(file) {
       const objectFields = ['cardMappings', 'customPointValues', 'creditOverrides',
                            'disabledCredits', 'monthlyCredits', 'merchantRules',
                            'confirmedTransactions', 'cashPlusCategories', 'cffCategories',
-                           'biltConfig', 'columnMappings', 'streamingCredits'];
+                           'biltConfig', 'columnMappings', 'streamingCredits',
+                           'rentLockedTransactions'];
       for (const field of objectFields) {
         if (backup[field] && (typeof backup[field] !== 'object' || Array.isArray(backup[field]))) {
           validationErrors.push(`${field} must be an object`);
@@ -7805,6 +7876,10 @@ async function handleFile(file) {
       if (backup.confirmedTransactions) {
         state.confirmedTransactions = backup.confirmedTransactions;
         safeLocalStorageSet('ccTracker_confirmedTxns', backup.confirmedTransactions);
+      }
+      if (backup.rentLockedTransactions) {
+        state.rentLockedTransactions = backup.rentLockedTransactions;
+        safeLocalStorageSet('ccTracker_rentLockedTransactions', backup.rentLockedTransactions);
       }
       // Restore plugin-managed state (cashPlusCategories, cffCategories, biltConfig, etc.)
       for (const [cardId, card] of Object.entries(CARDS)) {
@@ -8263,6 +8338,7 @@ async function initCore() {
       state.merchantRules = {};
       state.merchantCache = {};
       state.confirmedTransactions = {};
+      state.rentLockedTransactions = {};
       state.customAnnualBonusPoints = {};
       state.columnMappings = {};
       state.cardYearToggles = {};
@@ -8282,6 +8358,7 @@ async function initCore() {
       localStorage.removeItem('ccTracker_merchantRules');
       localStorage.removeItem('ccTracker_merchantCache');
       localStorage.removeItem('ccTracker_confirmedTxns');
+      localStorage.removeItem('ccTracker_rentLockedTransactions');
       localStorage.removeItem('ccTracker_annualBonusPoints');
       localStorage.removeItem('ccTracker_columnMappings');
       localStorage.removeItem('ccTracker_cardYearToggles');
@@ -8312,6 +8389,7 @@ async function initCore() {
           state.streamingCredits = {};
           state.merchantRules = {};
           state.confirmedTransactions = {};
+          state.rentLockedTransactions = {};
           state.customAnnualBonusPoints = {};
           state.columnMappings = {};
           state.savedTransactions = [];

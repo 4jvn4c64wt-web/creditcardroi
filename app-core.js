@@ -8353,7 +8353,7 @@ async function initCore() {
           startTour();
         } else if (confirmation === 'SWITCH') {
           // Secret dev tool: switch versions without clearing data
-          const versionChoice = prompt('Switch to which version?\n\n1 = Base (app.html - free)\n2 = Decision Pass (app.html with Decision Pass)\n3 = Pro (app-pro.html)\n\nEnter 1, 2, or 3:');
+          const versionChoice = prompt('Switch to which version?\n\n1 = Base (app-pro.html)\n2 = Decision Pass (app-pro.html with Decision Pass)\n3 = Pro (app-pro.html)\n\nEnter 1, 2, or 3:');
 
           // Clear tier keys first
           localStorage.removeItem('ccTracker_decisionPasses');
@@ -8370,7 +8370,7 @@ async function initCore() {
             state.proAccess = null;
             localStorage.setItem('ccTracker_decisionPasses', JSON.stringify([testDP]));
             alert('Switched to Decision Pass. ' + (window.TIER_CONFIG === 'free' ? 'Reloading...' : 'Redirecting...'));
-            if (window.TIER_CONFIG === 'free') { window.location.reload(); } else { window.location.href = 'app.html'; }
+            window.location.href = 'app-pro.html';
           } else if (versionChoice === '3') {
             // Set up Pro access
             const testPro = {
@@ -8387,7 +8387,7 @@ async function initCore() {
             state.decisionPasses = [];
             state.proAccess = null;
             alert('Switched to Base version. ' + (window.TIER_CONFIG === 'free' ? 'Reloading...' : 'Redirecting...'));
-            if (window.TIER_CONFIG === 'free') { window.location.reload(); } else { window.location.href = 'app.html'; }
+            window.location.href = 'app-pro.html';
           }
         } else if (confirmation === 'TESTDP-PASS-001' || confirmation === 'TESTPRO-PASS-001') {
           // Secret reset: revert to free tier (clear DP and Pro access only)

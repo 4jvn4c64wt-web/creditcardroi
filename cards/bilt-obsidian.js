@@ -13,7 +13,7 @@ window.CardTracker.cards = window.CardTracker.cards || {};
     // Bilt 2.0: 3x dining OR grocery (user choice), 2x travel, 1x other
     multipliers: { 'dining': 3, 'travel': 2 },
     baseRate: 1,
-    credits: [{ name: 'Bilt Travel Credit', amount: 100, keywords: ['BILT TRAVEL'], manual: false }],
+    credits: [{ name: 'Bilt Travel Credit', amount: 100, keywords: ['BILT TRAVEL'], manual: false, frequency: 'annual' }],
     categories: ['rent', 'dining', 'grocery', 'travel', 'other'],
     isBilt: true,
     hasObsidianBonus: true, // Can choose 3x dining OR grocery

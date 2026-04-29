@@ -287,6 +287,21 @@ window.CardTracker.cards['us-bank-cash-plus'] = {
     return { rate: 1, reason: '1% base rate' };
   },
 
+  getDisplayRate: function(category, txnDate, ctx) {
+    var txnQuarter;
+    if (txnDate) {
+      var month;
+      if (txnDate.includes('-')) { month = parseInt(txnDate.split('-')[1]); }
+      else if (txnDate.includes('/')) { month = parseInt(txnDate.split('/')[0]); }
+      if (month) txnQuarter = 'Q' + Math.ceil(month / 3);
+    }
+    if (!txnQuarter) txnQuarter = 'Q' + Math.ceil((new Date().getMonth() + 1) / 3);
+    var selected = ctx.state.cashPlusCategories[txnQuarter] || { fivePercent: [], twoPercent: '' };
+    if (selected.fivePercent && selected.fivePercent.indexOf(category) !== -1) return { rate: 5, bonus: true };
+    if (selected.twoPercent === category) return { rate: 2, bonus: true };
+    return { rate: 1, bonus: false };
+  },
+
   getCategories: function(txnDate, ctx) {
     // Show ALL possible 5% and 2% categories so user can always recategorize
     var allPossible5Pct = ['streaming', 'utilities', 'cell-phone', 'department-stores',

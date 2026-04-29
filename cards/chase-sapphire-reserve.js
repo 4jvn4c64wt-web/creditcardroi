@@ -90,6 +90,20 @@ window.CardTracker.cards['chase-sapphire-reserve'] = {
     return null;
   },
 
+  getDisplayRate: function(category, txnDate, ctx) {
+    var card = this;
+    if (card.legacyCutoffDate) {
+      var cutoff = new Date(card.legacyCutoffDate);
+      var txnDateObj = txnDate ? new Date(txnDate) : new Date();
+      if (txnDateObj < cutoff) {
+        var legacyMult = card.legacy && card.legacy.multipliers && card.legacy.multipliers[category];
+        return { rate: legacyMult || (card.legacy && card.legacy.baseRate) || 1, bonus: !!legacyMult };
+      }
+    }
+    var mult = card.multipliers[category];
+    return { rate: mult || card.baseRate || 1, bonus: !!mult };
+  },
+
   getCategories: function(txnDate, ctx) {
     var card = this;
     if (card.legacyCutoffDate) {

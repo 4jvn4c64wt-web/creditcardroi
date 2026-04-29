@@ -1355,4 +1355,97 @@ window.CardTracker.biltPlugin = {
       localStorage.removeItem('ccTracker_biltConfig');
     },
   },
+
+  // =========================================================================
+  // isBiltCardConfigured — true if card has transactions or meaningful config
+  // =========================================================================
+  isBiltCardConfigured: function(cardId, ctx) {
+    if (ctx.state.results && ctx.state.results.processed) {
+      var hasTransactions = ctx.state.results.processed.some(function(t) {
+        return t.cardId === cardId && !t.isPayment;
+      });
+      if (hasTransactions) return true;
+    }
+    var cfg = ctx.state.biltConfig[cardId];
+    if (!cfg) return false;
+    return (cfg.rewardOption === 'housing-only' || cfg.rewardOption === 'flexible') ||
+           (cfg.monthlyBiltCashRedemption && cfg.monthlyBiltCashRedemption > 0);
+  },
+
+  // =========================================================================
+  // calculateBiltRentPoints — points/rate/reason for a rent payment
+  // =========================================================================
+  calculateBiltRentPoints: function(cardId, rentAmount, everydaySpend, billingMonth, billingYear, ctx) {
+    var card = ctx.CARDS[cardId];
+    var cfg = ctx.state.biltConfig[cardId] || {};
+    if (!card || !card.isBilt) return { points: 0, rate: 0, reason: 'Not a Bilt card' };
+
+    var BILT_2_START = window.CardTracker.biltPlugin.BILT_2_START;
+    var cycleDate = new Date(billingYear, billingMonth - 1, 15);
+    if (cycleDate.getTime() < BILT_2_START.getTime()) {
+      var legacyRate = (card.legacy && card.legacy.multipliers && card.legacy.multipliers.rent) || 1;
+      return { points: Math.round(rentAmount * legacyRate), rate: legacyRate, reason: legacyRate + 'x rent (legacy Bilt)' };
+    }
+
+    if (cfg.rewardOption === 'housing-only') {
+      var ratio = rentAmount > 0 ? everydaySpend / rentAmount : 0;
+      var tiers = window.CardTracker.biltPlugin.RENT_TIERS;
+      var floor = window.CardTracker.biltPlugin.RENT_POINTS_FLOOR;
+      var rate = 0;
+      var tier = '< 25%';
+      for (var i = 0; i < tiers.length; i++) {
+        if (ratio >= tiers[i].minRatio) { rate = tiers[i].rate; tier = tiers[i].label; break; }
+      }
+      var points = rate > 0 ? Math.round(rentAmount * rate) : (rentAmount > 0 ? floor : 0);
+      var reason = rate > 0
+        ? rate + 'x rent (' + tier + ' spend ratio: $' + everydaySpend.toFixed(0) + '/$' + rentAmount.toFixed(0) + ')'
+        : floor + ' pts floor (' + tier + ' spend ratio)';
+      return { points: points, rate: rate, reason: reason };
+    } else {
+      var unredeemed = (cfg.biltCashUnredeemedMonths && cfg.biltCashUnredeemedMonths[billingYear]) || [];
+      var monthIdx = (billingMonth || 1) - 1;
+      if (unredeemed.indexOf(monthIdx) !== -1) {
+        return { points: 0, rate: 0, reason: 'Bilt Cash not redeemed this month (config)' };
+      }
+      return { points: Math.round(rentAmount), rate: 1, reason: '1x rent (Bilt Cash redeemed for full value)' };
+    }
+  },
+
+  // =========================================================================
+  // detectBiltRentPayments — find rent transactions from a list
+  // =========================================================================
+  detectBiltRentPayments: function(transactions, cardId, ctx) {
+    var cfg = ctx.state.biltConfig[cardId] || {};
+    var rentTxns = [];
+
+    if (cfg.rentDetection === 'manual') {
+      var rentAmount = cfg.manualRentAmount || 0;
+      var rentDay = cfg.manualRentDay || 1;
+      transactions.forEach(function(txn) {
+        var amt = Math.abs(txn.amount);
+        var txnDate = new Date(txn.date);
+        var day = txnDate.getDate();
+        if (Math.abs(amt - rentAmount) <= 10 && Math.abs(day - rentDay) <= 3) {
+          rentTxns.push(Object.assign({}, txn, { isDetectedRent: true }));
+        }
+      });
+    } else {
+      var rentKeywords = cfg.rentKeywords || ['rent', 'mortgage', 'hoa', 'property management', 'apartment',
+        'avalon', 'equity residential', 'greystar', 'bilt', 'housing'];
+      var rentCategories = ['rent', 'mortgage', 'housing'];
+      transactions.forEach(function(txn) {
+        var merchant = (txn.merchant || '').toLowerCase();
+        var category = (txn.category || '').toLowerCase();
+        var amt = Math.abs(txn.amount);
+        if (amt < 500) return;
+        var matchesKeyword = rentKeywords.some(function(kw) { return merchant.includes(kw); });
+        var matchesCategory = rentCategories.some(function(cat) { return category.includes(cat); });
+        if (matchesKeyword || matchesCategory) {
+          rentTxns.push(Object.assign({}, txn, { isDetectedRent: true }));
+        }
+      });
+    }
+    return rentTxns;
+  },
+
 };

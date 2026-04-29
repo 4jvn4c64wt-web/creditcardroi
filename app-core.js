@@ -1013,122 +1013,16 @@ function getAnnualBonusValue(cardId, year = null) {
   return getAnnualBonusPoints(cardId) * getPointValue(cardId);
 }
 
-// Helper to check if a Bilt card is actually configured (not just has empty config object)
-// Returns true if the card is in the wallet OR has meaningful configuration
 function isBiltCardConfigured(cardId) {
-  // Check if card has actual transactions in the wallet
-  if (state.results && state.results.processed) {
-    const hasTransactions = state.results.processed.some(t =>
-      t.cardId === cardId && !t.isPayment
-    );
-    if (hasTransactions) return true;
-  }
-
-  // Check if card has meaningful configuration
-  const cfg = state.biltConfig[cardId];
-  if (!cfg) return false;
-
-  // Considered configured if it has a reward option set OR Bilt Cash redemption > 0
-  return (cfg.rewardOption === 'housing-only' || cfg.rewardOption === 'flexible') ||
-         (cfg.monthlyBiltCashRedemption && cfg.monthlyBiltCashRedemption > 0);
+  return window.CardTracker.biltPlugin.isBiltCardConfigured(cardId, buildPluginCtx());
 }
 
-// Calculate Bilt rent points for a billing cycle based on spending ratio or Bilt Cash
-// Returns { points, rate, reason } for the rent payment
 function calculateBiltRentPoints(cardId, rentAmount, everydaySpend, billingMonth, billingYear) {
-  const card = CARDS[cardId];
-  const cfg = state.biltConfig[cardId] || {};
-  
-  if (!card || !card.isBilt) return { points: 0, rate: 0, reason: 'Not a Bilt card' };
-  
-  // Check if this is legacy period
-  const cycleDate = new Date(billingYear, billingMonth - 1, 15); // Mid-month as proxy
-  if (cycleDate.getTime() < window.CardTracker.biltPlugin.BILT_2_START.getTime()) {
-    // Legacy: flat rate based on card
-    const legacyRate = card.legacy?.multipliers?.rent || 1;
-    return { points: Math.round(rentAmount * legacyRate), rate: legacyRate, reason: `${legacyRate}x rent (legacy Bilt)` };
-  }
-  
-  // Bilt 2.0 logic
-  if (cfg.rewardOption === 'housing-only') {
-    // Housing-only: rate based on everyday spend ratio
-    const ratio = rentAmount > 0 ? everydaySpend / rentAmount : 0;
-    let rate = 0;
-    let tier = '< 25%';
-    
-    const tiers = window.CardTracker.biltPlugin.RENT_TIERS;
-    for (const t of tiers) {
-      if (ratio >= t.minRatio) { rate = t.rate; tier = t.label; break; }
-    }
-    
-    // Minimum floor if below threshold but rent was paid
-    const points = rate > 0 ? Math.round(rentAmount * rate) : (rentAmount > 0 ? window.CardTracker.biltPlugin.RENT_POINTS_FLOOR : 0);
-    const reason = rate > 0
-      ? `${rate}x rent (${tier} spend ratio: $${everydaySpend.toFixed(0)}/$${rentAmount.toFixed(0)})`
-      : `${window.CardTracker.biltPlugin.RENT_POINTS_FLOOR} pts floor (${tier} spend ratio)`;
-    
-    return { points, rate, reason };
-  } else {
-    // Bilt Cash mode: assume the user redeems enough Bilt Cash to fully
-    // fund 1x rent points, unless the user has marked this month as
-    // "not redeemed" in the Bilt Card Config.
-    const unredeemed = (cfg.biltCashUnredeemedMonths && cfg.biltCashUnredeemedMonths[billingYear]) || [];
-    const monthIdx = (billingMonth || 1) - 1;
-    if (unredeemed.indexOf(monthIdx) !== -1) {
-      return { points: 0, rate: 0, reason: 'Bilt Cash not redeemed this month (config)' };
-    }
-    return {
-      points: Math.round(rentAmount),
-      rate: 1,
-      reason: '1x rent (Bilt Cash redeemed for full value)'
-    };
-  }
+  return window.CardTracker.biltPlugin.calculateBiltRentPoints(cardId, rentAmount, everydaySpend, billingMonth, billingYear, buildPluginCtx());
 }
 
-// Detect rent transactions from bank accounts (not cards)
 function detectBiltRentPayments(transactions, cardId) {
-  const cfg = state.biltConfig[cardId] || {};
-  const rentTxns = [];
-  
-  if (cfg.rentDetection === 'manual') {
-    // Manual: look for transactions matching configured amount/day
-    const rentAmount = cfg.manualRentAmount || 0;
-    const rentDay = cfg.manualRentDay || 1;
-    
-    transactions.forEach(txn => {
-      const amt = Math.abs(txn.amount);
-      const txnDate = new Date(txn.date);
-      const day = txnDate.getDate();
-      
-      // Match if amount is close (within $10) and day is close (within 3 days)
-      if (Math.abs(amt - rentAmount) <= 10 && Math.abs(day - rentDay) <= 3) {
-        rentTxns.push({ ...txn, isDetectedRent: true });
-      }
-    });
-  } else {
-    // Auto-detect: look for rent/mortgage keywords or categories
-    const rentKeywords = ['rent', 'mortgage', 'hoa', 'property management', 'apartment', 
-      'avalon', 'equity residential', 'greystar', 'bilt', 'housing'];
-    const rentCategories = ['rent', 'mortgage', 'housing'];
-    
-    transactions.forEach(txn => {
-      const merchant = (txn.merchant || '').toLowerCase();
-      const category = (txn.category || '').toLowerCase();
-      const amt = Math.abs(txn.amount);
-      
-      // Must be a debit (negative or large positive indicating payment)
-      if (amt < 500) return; // Rent is usually > $500
-      
-      const matchesKeyword = rentKeywords.some(kw => merchant.includes(kw));
-      const matchesCategory = rentCategories.some(cat => category.includes(cat));
-      
-      if (matchesKeyword || matchesCategory) {
-        rentTxns.push({ ...txn, isDetectedRent: true });
-      }
-    });
-  }
-  
-  return rentTxns;
+  return window.CardTracker.biltPlugin.detectBiltRentPayments(transactions, cardId, buildPluginCtx());
 }
 
 function getMultiplier(cardId, category, txnDate = null, merchantDesc = '') {

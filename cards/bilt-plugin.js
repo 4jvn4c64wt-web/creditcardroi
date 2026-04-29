@@ -185,15 +185,20 @@ window.CardTracker.biltPlugin = {
     if (!card) return '';
     var state = ctx.state;
     var cfg = state.biltConfig[cardId] || {
+      rewardMode: 'bilt-cash',
       rewardOption: 'flexible',
       rentDetection: 'auto',
       manualRentAmount: 2000,
       manualRentDay: 1,
       rentMerchantKeyword: '',
       bonusCategory: 'dining',
-      countBiltCashAsCredit: true
+      countBiltCashAsCredit: true,
+      biltCashRedemptions: []
     };
-    var isFlexible = cfg.rewardOption !== 'housing-only';
+    // Backwards compat: rewardMode is the new top-level toggle. Map from legacy rewardOption.
+    var rewardMode = cfg.rewardMode;
+    if (!rewardMode) rewardMode = (cfg.rewardOption === 'housing-only') ? 'housing-only' : 'bilt-cash';
+    var isHousingOnly = rewardMode === 'housing-only';
     var isManualRent = cfg.rentDetection === 'manual';
 
     // Get available years from processed transactions
@@ -229,13 +234,13 @@ window.CardTracker.biltPlugin = {
     var netBiltSpend = Math.max(0, biltNonRentSpend - biltRefunds);
     var biltCashEarned = netBiltSpend * 0.04;
 
-    // Calculate rent amount for helper text
-    var rent = cfg.manualRentAmount || 2000;
-    var monthlyBiltCashRedemption = cfg.monthlyBiltCashRedemption || 0;
+    // Calculate rent amount for helper text. The Monthly Rent Payment input at the
+    // top of the section is the canonical rent amount (cfg.manualRentAmount).
+    var rent = cfg.manualRentAmount || 0;
     var cashFor100 = (rent / 100) * 3;
-    var cashFor75 = cashFor100 * 0.75;
-    var cashFor50 = cashFor100 * 0.50;
-    var cashFor25 = cashFor100 * 0.25;
+    // In Bilt Cash mode the monthly Bilt Cash redemption is always derived from
+    // rent (enough to fully fund 1x rent points). Housing-only mode does not use it.
+    // (cashFor100 is reused below for the inline display.)
 
     var yearOptions = '<option value="all"' + (selectedBiltYear === 'all' ? ' selected' : '') + '>All Years</option>';
     for (var yi = 0; yi < availableBiltYears.length; yi++) {
@@ -248,6 +253,43 @@ window.CardTracker.biltPlugin = {
       dayOptions += '<option value="' + di + '"' + (parseInt(cfg.manualRentDay) === di ? ' selected' : '') + '>' + di + suffix + '</option>';
     }
 
+    // Build redemption ledger for the selected year
+    var allRedemptions = Array.isArray(cfg.biltCashRedemptions) ? cfg.biltCashRedemptions.slice() : [];
+    var filteredRedemptions = allRedemptions.filter(function(r) {
+      if (selectedBiltYear === 'all') return true;
+      if (!r || !r.date) return false;
+      var ry = ctx.getYearFromDateString(r.date);
+      return ry === parseInt(selectedBiltYear);
+    });
+    filteredRedemptions.sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
+    var redemptionsTotal = filteredRedemptions.reduce(function(sum, r) { return sum + (parseFloat(r.amount) || 0); }, 0);
+
+    var redemptionsListHtml;
+    if (filteredRedemptions.length === 0) {
+      redemptionsListHtml = '<div style="font-size:11px;color:#a8a29e;font-style:italic;padding:8px 4px;">No redemptions recorded' + (selectedBiltYear === 'all' ? '.' : ' for ' + selectedBiltYear + '.') + '</div>';
+    } else {
+      redemptionsListHtml = filteredRedemptions.map(function(r) {
+        var amt = parseFloat(r.amount) || 0;
+        return '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:6px 8px;border-bottom:1px solid #f1f0ed;font-size:11px;">' +
+          '<div style="flex:1;min-width:0;">' +
+            '<div style="font-weight:500;color:#44403c;">' + ctx.escapeHtml(r.description || '(no description)') + '</div>' +
+            '<div style="font-size:10px;color:#a8a29e;">' + ctx.escapeHtml(r.date || '') + '</div>' +
+          '</div>' +
+          '<div style="display:flex;align-items:center;gap:6px;">' +
+            '<span style="font-weight:600;color:#166534;white-space:nowrap;">$' + amt.toFixed(2) + '</span>' +
+            '<button class="bilt-redemption-remove" data-card="' + cardId + '" data-id="' + ctx.escapeHtml(r.id || '') + '" title="Remove" style="background:none;border:none;cursor:pointer;color:#a8a29e;font-size:14px;line-height:1;padding:0 2px;">&times;</button>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    var todayStr = (function() {
+      var dt = new Date();
+      var mm = String(dt.getMonth() + 1).padStart(2, '0');
+      var dd = String(dt.getDate()).padStart(2, '0');
+      return dt.getFullYear() + '-' + mm + '-' + dd;
+    })();
+
     var html = '<div style="margin-bottom:16px;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
         '<h3 style="font-size:14px;font-weight:600;margin:0;">&#127968; Bilt Rewards Configuration</h3>' +
@@ -255,93 +297,111 @@ window.CardTracker.biltPlugin = {
       '</div>' +
       '<p style="font-size:11px;color:#78716c;margin-bottom:12px;">Bilt 2.0 began February 7, 2026. Transactions before this date use legacy earning rates.</p>' +
 
-      // Bilt Cash Earned
-      '<div style="margin-bottom:16px;padding:12px;background:#fafaf9;border:1px solid #e7e5e4;border-radius:8px;">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
-          '<span style="font-size:12px;font-weight:600;">&#128176; Bilt Cash Earned (' + (selectedBiltYear === 'all' ? 'All Time' : selectedBiltYear) + ')</span>' +
-          '<span style="font-size:18px;font-weight:700;color:#166534;">$' + biltCashEarned.toFixed(2) + '</span>' +
-        '</div>' +
-        '<p style="font-size:10px;color:#78716c;margin-bottom:8px;">4% of $' + netBiltSpend.toFixed(2) + ' non-rent Bilt card spend (post-Feb 7, 2026)</p>' +
-        '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;">' +
-          '<input type="checkbox" class="bilt-cash-as-credit" data-card="' + cardId + '"' + (cfg.countBiltCashAsCredit !== false ? ' checked' : '') + '>' +
-          '<span>Count Bilt Cash as statement credit</span>' +
-        '</label>' +
-      '</div>' +
-
-      // Reward Option
-      '<div style="margin-bottom:16px;padding:12px;border:1px solid #e7e5e4;border-radius:8px;">' +
-        '<label style="display:block;font-size:12px;font-weight:500;margin-bottom:8px;">Which reward option do you use? (for rent points)</label>' +
+      // Primary Selection — Reward Mode (top of section)
+      '<div style="margin-bottom:16px;padding:12px;border:1px solid #e7e5e4;border-radius:8px;background:#fff;">' +
+        '<label style="display:block;font-size:12px;font-weight:600;margin-bottom:8px;">Reward Mode</label>' +
         '<div style="display:flex;flex-direction:column;gap:8px;">' +
-          '<label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;padding:8px;border-radius:6px;border:1px solid ' + (isFlexible ? '#d4d4d4' : 'transparent') + ';">' +
-            '<input type="radio" name="biltRewardOption-' + cardId + '" value="flexible"' + (isFlexible ? ' checked' : '') + ' class="bilt-reward-option" data-card="' + cardId + '" style="margin-top:2px;">' +
+          '<label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;padding:8px;border-radius:6px;border:1px solid ' + (isHousingOnly ? '#059669' : '#d4d4d4') + ';background:' + (isHousingOnly ? '#f0fdf4' : '#fff') + ';">' +
+            '<input type="radio" name="biltRewardMode-' + cardId + '" value="housing-only"' + (isHousingOnly ? ' checked' : '') + ' class="bilt-reward-mode" data-card="' + cardId + '" style="margin-top:2px;accent-color:#059669;">' +
             '<div>' +
-              '<span style="font-size:12px;font-weight:500;">Flexible Bilt Cash</span>' +
-              '<p style="font-size:10px;color:#78716c;margin:2px 0 0 0;">Redeem Bilt Cash for up to 1x rent points</p>' +
+              '<span style="font-size:12px;font-weight:600;">Housing Only Rewards</span>' +
+              '<p style="font-size:10px;color:#78716c;margin:2px 0 0 0;">Earn rent points automatically based on monthly spending ratio. Bilt Cash earning and redemption are not used.</p>' +
             '</div>' +
           '</label>' +
-          '<label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;padding:8px;border-radius:6px;border:1px solid ' + (!isFlexible ? '#d4d4d4' : 'transparent') + ';">' +
-            '<input type="radio" name="biltRewardOption-' + cardId + '" value="housing-only"' + (!isFlexible ? ' checked' : '') + ' class="bilt-reward-option" data-card="' + cardId + '" style="margin-top:2px;">' +
+          '<label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;padding:8px;border-radius:6px;border:1px solid ' + (!isHousingOnly ? '#059669' : '#d4d4d4') + ';background:' + (!isHousingOnly ? '#f0fdf4' : '#fff') + ';">' +
+            '<input type="radio" name="biltRewardMode-' + cardId + '" value="bilt-cash"' + (!isHousingOnly ? ' checked' : '') + ' class="bilt-reward-mode" data-card="' + cardId + '" style="margin-top:2px;accent-color:#059669;">' +
             '<div>' +
-              '<span style="font-size:12px;font-weight:500;">Housing-only Rewards</span>' +
-              '<p style="font-size:10px;color:#78716c;margin:2px 0 0 0;">Earn rent points automatically based on spending ratio</p>' +
+              '<span style="font-size:12px;font-weight:600;">Bilt Cash</span>' +
+              '<p style="font-size:10px;color:#78716c;margin:2px 0 0 0;">Earn 4% Bilt Cash on non-rent spend and redeem it for rent points or other rewards.</p>' +
             '</div>' +
           '</label>' +
         '</div>' +
       '</div>' +
 
-      // Flexible Bilt Cash Section
-      '<div id="biltFlexibleSection-' + cardId + '" style="' + (isFlexible ? '' : 'display:none;') + 'margin-bottom:16px;padding:12px;background:#fafaf9;border:1px solid #e7e5e4;border-radius:8px;">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
-          '<label style="font-size:12px;font-weight:500;">How much Bilt Cash do you redeem monthly for rent?</label>' +
-          '<a href="#" class="bilt-calc-helper" data-card="' + cardId + '" style="font-size:11px;color:#2563eb;text-decoration:none;">How much do I need?</a>' +
-        '</div>' +
-        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">' +
-          '<span style="font-size:14px;">$</span>' +
-          '<input type="number" class="bilt-monthly-redemption form-input" data-card="' + cardId + '" value="' + monthlyBiltCashRedemption + '" style="width:100px;padding:6px;">' +
+      // Rent & Automation header (Monthly Rent Payment with auto-derived Bilt Cash hint)
+      '<div style="margin-bottom:16px;padding:12px;border:1px solid #e7e5e4;border-radius:8px;background:#fff;">' +
+        '<label style="display:block;font-size:12px;font-weight:600;margin-bottom:8px;">Monthly Rent Payment</label>' +
+        '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">' +
+          '<span style="font-size:14px;color:#44403c;">$</span>' +
+          '<input type="number" min="0" step="1" class="bilt-rent-amount-top form-input" data-card="' + cardId + '" value="' + (rent || '') + '" placeholder="0" style="width:140px;padding:6px;">' +
           '<span style="font-size:11px;color:#78716c;">/ month</span>' +
+          (isHousingOnly ? '' :
+            '<span class="bilt-monthly-redemption-display" data-card="' + cardId + '" style="font-size:11px;color:#a8a29e;font-style:italic;margin-left:4px;">' +
+              '&rarr; $<span class="bilt-cash-needed-display">' + cashFor100.toFixed(2) + '</span> Bilt Cash redeemed/mo' +
+            '</span>'
+          ) +
         '</div>' +
-      '</div>' +
+        '<p style="font-size:11px;color:#78716c;margin:0;">' +
+          (isHousingOnly
+            ? 'Used to compute your monthly spend ratio for housing-only rent points.'
+            : 'Bilt Cash redeemed for rent points is auto-calculated from rent ($3 Bilt Cash = 100 points per $100 rent).'
+          ) +
+        '</p>' +
+      '</div>';
 
-      // Bilt Cash Calculator Modal
-      '<div id="biltCalcModal-' + cardId + '" style="display:none;margin-bottom:16px;padding:12px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
-          '<span style="font-size:12px;font-weight:600;">&#129518; Bilt Cash Calculator</span>' +
-          '<button class="bilt-calc-close" data-card="' + cardId + '" style="background:none;border:none;cursor:pointer;font-size:16px;color:#78716c;">&times;</button>' +
-        '</div>' +
-        '<div style="margin-bottom:8px;">' +
-          '<label style="font-size:11px;display:block;margin-bottom:4px;">What is your monthly rent?</label>' +
-          '<div style="display:flex;align-items:center;gap:4px;">' +
-            '<span>$</span>' +
-            '<input type="number" class="bilt-calc-rent form-input" data-card="' + cardId + '" value="' + rent + '" style="width:120px;padding:4px;">' +
+    // ====================== HOUSING-ONLY SECTION ======================
+    if (isHousingOnly) {
+      html +=
+        '<div style="margin-bottom:16px;padding:12px;background:#fafaf9;border:1px solid #e7e5e4;border-radius:8px;">' +
+          '<p style="font-size:11px;color:#78716c;margin-bottom:8px;"><strong>Housing-only mode:</strong> Your rent points multiplier is calculated automatically based on your everyday spend ratio.</p>' +
+          '<div style="font-size:10px;color:#78716c;">' +
+            '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:2px;">' +
+              '<span>25-49% spend &rarr; 0.5x</span>' +
+              '<span>50-74% spend &rarr; 0.75x</span>' +
+              '<span>75-99% spend &rarr; 1x</span>' +
+              '<span>100%+ spend &rarr; 1.25x</span>' +
+            '</div>' +
+            '<p style="margin-top:6px;">Below 25% = 250 points floor</p>' +
           '</div>' +
-        '</div>' +
-        '<div style="font-size:11px;color:#1e40af;background:#eff6ff;padding:8px;border-radius:4px;">' +
-          '<div style="font-weight:600;margin-bottom:4px;">Bilt Cash needed for rent points:</div>' +
-          '<div class="bilt-calc-results" data-card="' + cardId + '">' +
-            '<div>100% (1x): $<span class="calc-100">' + cashFor100.toFixed(2) + '</span>/mo</div>' +
-            '<div>75%: $<span class="calc-75">' + cashFor75.toFixed(2) + '</span>/mo</div>' +
-            '<div>50%: $<span class="calc-50">' + cashFor50.toFixed(2) + '</span>/mo</div>' +
-            '<div>25%: $<span class="calc-25">' + cashFor25.toFixed(2) + '</span>/mo</div>' +
-          '</div>' +
-          '<p style="margin-top:6px;font-size:10px;color:#3b82f6;">Formula: $3 Bilt Cash = 100 points on $100 rent</p>' +
-        '</div>' +
-      '</div>' +
+        '</div>';
+    } else {
+      // ====================== BILT CASH SECTION ======================
 
-      // Housing-only Section
-      '<div id="biltHousingSection-' + cardId + '" style="' + (!isFlexible ? '' : 'display:none;') + 'margin-bottom:16px;padding:12px;background:#fafaf9;border:1px solid #e7e5e4;border-radius:8px;">' +
-        '<p style="font-size:11px;color:#78716c;margin-bottom:8px;"><strong>Housing-only mode:</strong> Your rent points multiplier is calculated automatically based on your everyday spend ratio.</p>' +
-        '<div style="font-size:10px;color:#78716c;">' +
-          '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:2px;">' +
-            '<span>25-49% spend &rarr; 0.5x</span>' +
-            '<span>50-74% spend &rarr; 0.75x</span>' +
-            '<span>75-99% spend &rarr; 1x</span>' +
-            '<span>100%+ spend &rarr; 1.25x</span>' +
-          '</div>' +
-          '<p style="margin-top:6px;">Below 25% = 250 points floor</p>' +
-        '</div>' +
-      '</div>' +
+      var pastExpanded = state.biltPastRedemptionsExpanded && state.biltPastRedemptionsExpanded[cardId];
+      var arrowChar = pastExpanded ? '&#9662;' : '&#9656;'; // ▼ vs ▶
 
-      // Rent Detection
+      // Bilt Cash Redeemed ledger (replaces "Bilt Cash Earned" box)
+      html +=
+        '<div style="margin-bottom:16px;padding:12px;background:#fafaf9;border:1px solid #e7e5e4;border-radius:8px;">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
+            '<span style="font-size:12px;font-weight:600;">&#128176; Bilt Cash Redeemed (' + (selectedBiltYear === 'all' ? 'All Time' : selectedBiltYear) + ')</span>' +
+            '<span style="font-size:18px;font-weight:700;color:#166534;">$' + redemptionsTotal.toFixed(2) + '</span>' +
+          '</div>' +
+          '<p style="font-size:10px;color:#78716c;margin-bottom:8px;">Bilt Cash earned in this window: $' + biltCashEarned.toFixed(2) + ' (4% of $' + netBiltSpend.toFixed(2) + ' non-rent Bilt spend, post-Feb 7, 2026).</p>' +
+          '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;margin-bottom:10px;">' +
+            '<input type="checkbox" class="bilt-cash-as-credit" data-card="' + cardId + '"' + (cfg.countBiltCashAsCredit !== false ? ' checked' : '') + '>' +
+            '<span>Count Bilt Cash as statement credit</span>' +
+          '</label>' +
+
+          // Add redemption form
+          '<div style="border-top:1px solid #e7e5e4;padding-top:10px;margin-top:6px;">' +
+            '<div style="font-size:11px;font-weight:600;color:#44403c;margin-bottom:6px;">Add a redemption</div>' +
+            '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start;">' +
+              '<div style="display:flex;align-items:center;gap:4px;">' +
+                '<span style="font-size:12px;">$</span>' +
+                '<input type="number" min="0" step="0.01" class="bilt-redemption-amount form-input" data-card="' + cardId + '" placeholder="0.00" style="width:90px;padding:5px;font-size:11px;">' +
+              '</div>' +
+              '<input type="text" class="bilt-redemption-desc form-input" data-card="' + cardId + '" placeholder="Description" style="flex:1;min-width:140px;padding:5px;font-size:11px;">' +
+              '<input type="date" class="bilt-redemption-date form-input" data-card="' + cardId + '" value="' + todayStr + '" style="padding:5px;font-size:11px;">' +
+              '<button class="bilt-redemption-add" data-card="' + cardId + '" type="button" style="padding:6px 12px;font-size:11px;font-weight:600;background:#059669;color:#fff;border:none;border-radius:6px;cursor:pointer;">Add</button>' +
+            '</div>' +
+          '</div>' +
+
+          // Past redemptions (collapsible)
+          '<div style="margin-top:10px;">' +
+            '<button type="button" class="bilt-past-toggle" data-card="' + cardId + '" style="display:flex;align-items:center;gap:6px;width:100%;background:none;border:none;padding:4px 0;cursor:pointer;font-size:11px;font-weight:600;color:#44403c;text-align:left;">' +
+              '<span class="bilt-past-arrow">' + arrowChar + '</span>' +
+              '<span>Past Redemptions (' + filteredRedemptions.length + ')</span>' +
+            '</button>' +
+            '<div class="bilt-past-list" data-card="' + cardId + '" style="' + (pastExpanded ? '' : 'display:none;') + 'margin-top:4px;max-height:140px;overflow-y:auto;border:1px solid #e7e5e4;border-radius:6px;background:#fff;">' +
+              redemptionsListHtml +
+            '</div>' +
+          '</div>' +
+        '</div>';
+    }
+
+    // Rent Detection (kept for both modes — drives transaction matching)
+    html +=
       '<div style="margin-bottom:16px;padding:12px;border:1px solid #e7e5e4;border-radius:8px;">' +
         '<label style="display:block;font-size:12px;font-weight:500;margin-bottom:8px;">How should we detect rent payments?</label>' +
         '<div style="display:flex;flex-direction:column;gap:8px;">' +
@@ -357,13 +417,6 @@ window.CardTracker.biltPlugin = {
         '<div id="biltManualRent-' + cardId + '" style="' + (isManualRent ? '' : 'display:none;') + 'margin-top:12px;padding:10px;background:#f5f5f4;border-radius:6px;">' +
           '<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:8px;">' +
             '<div>' +
-              '<label style="font-size:10px;display:block;margin-bottom:2px;">Monthly Amount:</label>' +
-              '<div style="display:flex;align-items:center;gap:4px;">' +
-                '<span>$</span>' +
-                '<input type="number" class="bilt-manual-rent form-input" data-card="' + cardId + '" value="' + (cfg.manualRentAmount || 2000) + '" style="width:100px;padding:4px;">' +
-              '</div>' +
-            '</div>' +
-            '<div>' +
               '<label style="font-size:10px;display:block;margin-bottom:2px;">Day of month:</label>' +
               '<select class="bilt-rent-day form-select" data-card="' + cardId + '" style="padding:4px;">' + dayOptions + '</select>' +
             '</div>' +
@@ -372,6 +425,7 @@ window.CardTracker.biltPlugin = {
             '<label style="font-size:10px;display:block;margin-bottom:2px;">Merchant keyword (optional, e.g. &quot;BILT&quot; or your landlord name):</label>' +
             '<input type="text" class="bilt-rent-keyword form-input" data-card="' + cardId + '" value="' + ctx.escapeHtml(cfg.rentMerchantKeyword || '') + '" placeholder="Leave blank to use amount+date" style="width:100%;padding:4px;font-size:11px;">' +
           '</div>' +
+          '<p style="font-size:10px;color:#a8a29e;margin:6px 0 0 0;">Monthly rent amount is set at the top of this section.</p>' +
         '</div>' +
       '</div>';
 
@@ -411,50 +465,6 @@ window.CardTracker.biltPlugin = {
       });
     }
 
-    // Calculator helper link
-    document.querySelectorAll('.bilt-calc-helper').forEach(function(link) {
-      link.addEventListener('click', function(e) {
-        e.preventDefault();
-        var cid = link.dataset.card;
-        document.getElementById('biltCalcModal-' + cid).style.display = '';
-      });
-    });
-
-    // Calculator close button
-    document.querySelectorAll('.bilt-calc-close').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        var cid = btn.dataset.card;
-        document.getElementById('biltCalcModal-' + cid).style.display = 'none';
-      });
-    });
-
-    // Calculator rent input - recalculate on change (debounced for storage, immediate for UI)
-    document.querySelectorAll('.bilt-calc-rent').forEach(function(input) {
-      var debouncedSave = _biltDebounce(function(cid, rentVal) {
-        if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
-        state.biltConfig[cid].manualRentAmount = rentVal;
-        ctx.safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
-      }, 300);
-
-      input.addEventListener('input', function() {
-        var cid = input.dataset.card;
-        var rentVal = parseFloat(input.value) || 0;
-        var cashFor100 = (rentVal / 100) * 3;
-
-        // Immediate UI update
-        var results = document.querySelector('.bilt-calc-results[data-card="' + cid + '"]');
-        if (results) {
-          results.querySelector('.calc-100').textContent = cashFor100.toFixed(2);
-          results.querySelector('.calc-75').textContent = (cashFor100 * 0.75).toFixed(2);
-          results.querySelector('.calc-50').textContent = (cashFor100 * 0.50).toFixed(2);
-          results.querySelector('.calc-25').textContent = (cashFor100 * 0.25).toFixed(2);
-        }
-
-        // Debounced storage save
-        debouncedSave(cid, rentVal);
-      });
-    });
-
     // Bilt Cash as credit checkbox
     document.querySelectorAll('.bilt-cash-as-credit').forEach(function(checkbox) {
       checkbox.addEventListener('change', function() {
@@ -465,29 +475,104 @@ window.CardTracker.biltPlugin = {
       });
     });
 
-    // Monthly Bilt Cash redemption for rent
-    document.querySelectorAll('.bilt-monthly-redemption').forEach(function(input) {
-      input.addEventListener('change', function() {
-        var cid = input.dataset.card;
-        if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
-        state.biltConfig[cid].monthlyBiltCashRedemption = parseFloat(input.value) || 0;
-        ctx.safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
-      });
-    });
-
-    // Reward option
-    document.querySelectorAll('.bilt-reward-option').forEach(function(radio) {
+    // Primary reward mode toggle (Housing Only / Bilt Cash)
+    document.querySelectorAll('.bilt-reward-mode').forEach(function(radio) {
       radio.addEventListener('change', function() {
         var cid = radio.dataset.card;
         if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
-        state.biltConfig[cid].rewardOption = radio.value;
+        state.biltConfig[cid].rewardMode = radio.value;
+        // Keep legacy rewardOption synced for downstream multiplier logic
+        state.biltConfig[cid].rewardOption = radio.value === 'housing-only' ? 'housing-only' : 'flexible';
+        // In Bilt Cash mode, derive monthly redemption from rent automatically.
+        if (radio.value !== 'housing-only') {
+          var rentNow = state.biltConfig[cid].manualRentAmount || 0;
+          state.biltConfig[cid].monthlyBiltCashRedemption = (rentNow / 100) * 3;
+        }
         ctx.safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
-        document.getElementById('biltFlexibleSection-' + cid).style.display = radio.value === 'flexible' ? '' : 'none';
-        document.getElementById('biltHousingSection-' + cid).style.display = radio.value === 'housing-only' ? '' : 'none';
-        // Update radio label backgrounds
-        document.querySelectorAll('[name="biltRewardOption-' + cid + '"]').forEach(function(r) {
-          r.closest('label').style.background = r.checked ? (r.value === 'flexible' ? '#fef9c3' : '#dcfce7') : '';
+        ctx.renderCardConfig();
+      });
+    });
+
+    // Monthly Rent Payment input (top of section — canonical rent amount).
+    // In Bilt Cash mode, derives monthlyBiltCashRedemption automatically.
+    document.querySelectorAll('.bilt-rent-amount-top').forEach(function(input) {
+      var debouncedSave = _biltDebounce(function(cid, rentVal) {
+        if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
+        state.biltConfig[cid].manualRentAmount = rentVal;
+        var mode = state.biltConfig[cid].rewardMode
+          || (state.biltConfig[cid].rewardOption === 'housing-only' ? 'housing-only' : 'bilt-cash');
+        if (mode !== 'housing-only') {
+          state.biltConfig[cid].monthlyBiltCashRedemption = (rentVal / 100) * 3;
+        }
+        ctx.safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
+      }, 300);
+
+      input.addEventListener('input', function() {
+        var cid = input.dataset.card;
+        var rentVal = parseFloat(input.value) || 0;
+        var cashFor100 = (rentVal / 100) * 3;
+
+        // Immediate UI: update the grey-text monthly Bilt Cash display
+        var displaySpan = document.querySelector('.bilt-monthly-redemption-display[data-card="' + cid + '"] .bilt-cash-needed-display');
+        if (displaySpan) displaySpan.textContent = cashFor100.toFixed(2);
+
+        debouncedSave(cid, rentVal);
+      });
+    });
+
+    // Past Redemptions collapsible toggle
+    document.querySelectorAll('.bilt-past-toggle').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var cid = btn.dataset.card;
+        if (!state.biltPastRedemptionsExpanded) state.biltPastRedemptionsExpanded = {};
+        var expanded = !state.biltPastRedemptionsExpanded[cid];
+        state.biltPastRedemptionsExpanded[cid] = expanded;
+        var list = document.querySelector('.bilt-past-list[data-card="' + cid + '"]');
+        if (list) list.style.display = expanded ? '' : 'none';
+        var arrow = btn.querySelector('.bilt-past-arrow');
+        if (arrow) arrow.innerHTML = expanded ? '&#9662;' : '&#9656;';
+      });
+    });
+
+    // Add a Bilt Cash redemption (ledger)
+    document.querySelectorAll('.bilt-redemption-add').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var cid = btn.dataset.card;
+        var amtInput = document.querySelector('.bilt-redemption-amount[data-card="' + cid + '"]');
+        var descInput = document.querySelector('.bilt-redemption-desc[data-card="' + cid + '"]');
+        var dateInput = document.querySelector('.bilt-redemption-date[data-card="' + cid + '"]');
+        var amt = parseFloat(amtInput && amtInput.value) || 0;
+        var desc = (descInput && descInput.value || '').trim();
+        var date = (dateInput && dateInput.value || '').trim();
+        if (amt <= 0 || !date) {
+          if (amtInput) amtInput.focus();
+          return;
+        }
+        if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
+        if (!Array.isArray(state.biltConfig[cid].biltCashRedemptions)) state.biltConfig[cid].biltCashRedemptions = [];
+        state.biltConfig[cid].biltCashRedemptions.push({
+          id: 'r' + Date.now() + Math.floor(Math.random() * 1000),
+          amount: amt,
+          description: desc,
+          date: date
         });
+        if (!state.biltPastRedemptionsExpanded) state.biltPastRedemptionsExpanded = {};
+        state.biltPastRedemptionsExpanded[cid] = true;
+        ctx.safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
+        ctx.renderCardConfig();
+      });
+    });
+
+    // Remove a Bilt Cash redemption
+    document.querySelectorAll('.bilt-redemption-remove').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var cid = btn.dataset.card;
+        var rid = btn.dataset.id;
+        var cfg = state.biltConfig[cid];
+        if (!cfg || !Array.isArray(cfg.biltCashRedemptions)) return;
+        cfg.biltCashRedemptions = cfg.biltCashRedemptions.filter(function(r) { return r.id !== rid; });
+        ctx.safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
+        ctx.renderCardConfig();
       });
     });
 
@@ -498,18 +583,8 @@ window.CardTracker.biltPlugin = {
         if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
         state.biltConfig[cid].rentDetection = radio.value;
         ctx.safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
-        document.getElementById('biltManualRent-' + cid).style.display = radio.value === 'manual' ? '' : 'none';
-      });
-    });
-
-    // Manual rent amount
-    document.querySelectorAll('.bilt-manual-rent').forEach(function(input) {
-      input.addEventListener('change', function() {
-        var cid = input.dataset.card;
-        if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
-        state.biltConfig[cid].manualRentAmount = parseFloat(input.value) || 2000;
-        ctx.safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
-        ctx.renderCardConfig();
+        var manualBlock = document.getElementById('biltManualRent-' + cid);
+        if (manualBlock) manualBlock.style.display = radio.value === 'manual' ? '' : 'none';
       });
     });
 
@@ -552,8 +627,11 @@ window.CardTracker.biltPlugin = {
     if (!state.biltConfig[cardId]) state.biltConfig[cardId] = {};
     var cfg = state.biltConfig[cardId];
 
-    var rewardRadio = document.querySelector('.bilt-reward-option[data-card="' + cardId + '"]:checked');
-    if (rewardRadio) cfg.rewardOption = rewardRadio.value;
+    var modeRadio = document.querySelector('.bilt-reward-mode[data-card="' + cardId + '"]:checked');
+    if (modeRadio) {
+      cfg.rewardMode = modeRadio.value;
+      cfg.rewardOption = modeRadio.value === 'housing-only' ? 'housing-only' : 'flexible';
+    }
 
     var rentRadio = document.querySelector('.bilt-rent-detection[data-card="' + cardId + '"]:checked');
     if (rentRadio) cfg.rentDetection = rentRadio.value;
@@ -561,11 +639,13 @@ window.CardTracker.biltPlugin = {
     var cashCheckbox = document.querySelector('.bilt-cash-as-credit[data-card="' + cardId + '"]');
     if (cashCheckbox) cfg.countBiltCashAsCredit = cashCheckbox.checked;
 
-    var redemptionInput = document.querySelector('.bilt-monthly-redemption[data-card="' + cardId + '"]');
-    if (redemptionInput) cfg.monthlyBiltCashRedemption = parseFloat(redemptionInput.value) || 0;
+    var rentTopInput = document.querySelector('.bilt-rent-amount-top[data-card="' + cardId + '"]');
+    if (rentTopInput) cfg.manualRentAmount = parseFloat(rentTopInput.value) || 0;
 
-    var manualRentInput = document.querySelector('.bilt-manual-rent[data-card="' + cardId + '"]');
-    if (manualRentInput) cfg.manualRentAmount = parseFloat(manualRentInput.value) || 2000;
+    // In Bilt Cash mode, monthly redemption is always derived from rent.
+    if (cfg.rewardMode !== 'housing-only' && cfg.rewardOption !== 'housing-only') {
+      cfg.monthlyBiltCashRedemption = ((cfg.manualRentAmount || 0) / 100) * 3;
+    }
 
     var rentDaySelect = document.querySelector('.bilt-rent-day[data-card="' + cardId + '"]');
     if (rentDaySelect) cfg.manualRentDay = parseInt(rentDaySelect.value);

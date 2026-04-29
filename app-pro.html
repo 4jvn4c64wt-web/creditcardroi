@@ -299,6 +299,22 @@
       .cardscenarios-result-amount { font-size: 28px; }
       .cardscenarios-credit-row { gap: 6px; }
     }
+    .shell-title { cursor: pointer; }
+    .shell-title:hover { opacity: 0.75; }
+    #savedToast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #1c1917;
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      pointer-events: none;
+      opacity: 0;
+      z-index: 9999;
+    }
   </style>
 </head>
 <body>
@@ -738,6 +754,8 @@
 <script src="app-core.js"></script>
 <script src="app-pro.js"></script>
 <script src="tutorial.js"></script>
+
+  <div id="savedToast">Saved</div>
 
   <!-- Cloudflare Web Analytics -->
   <script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "3f280a5796c945fa9547e574c16da7b5"}'></script><!-- End Cloudflare Web Analytics -->

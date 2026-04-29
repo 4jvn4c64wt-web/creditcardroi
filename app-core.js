@@ -7271,9 +7271,19 @@ function renderCreditCalendar() {
   const todayMonth = now.getMonth();
 
   if (!_calendarState) {
-    _calendarState = { year: state.selectedYear || todayYear, enabledCards: null };
+    _calendarState = {
+      year: state.selectedYear || todayYear,
+      enabledCards: null,
+      monthExpanded: {},
+      cardGroupCollapsed: {},
+      unusedOnly: false
+    };
   }
   const cs = _calendarState;
+  if (!cs.monthExpanded) cs.monthExpanded = {};
+  if (!cs.cardGroupCollapsed) cs.cardGroupCollapsed = {};
+  if (cs.unusedOnly === undefined) cs.unusedOnly = false;
+
   const year = cs.year;
   const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -7300,12 +7310,62 @@ function renderCreditCalendar() {
   }
   const activeCards = walletCards.filter(w => !!cs.enabledCards[w.cardId]);
 
-  // Calendar months where each frequency type has a period deadline
   function deadlineMonthsForFreq(freq) {
     if (freq === 'monthly') return [0,1,2,3,4,5,6,7,8,9,10,11];
     if (freq === 'quarterly') return [2,5,8,11];
     if (freq === 'semi-annual') return [5,11];
-    return [11]; // annual (calendar-year)
+    return [11];
+  }
+
+  function isMonthExpanded(m) {
+    const v = cs.monthExpanded[m];
+    return v !== undefined ? v : (year === todayYear && m === todayMonth);
+  }
+
+  function isCardGroupCollapsed(m, cardId) {
+    const v = cs.cardGroupCollapsed[m + ':' + cardId];
+    return v !== undefined ? v : false;
+  }
+
+  // Compute all credit data for a given month, grouped by card
+  function getMonthCardGroups(m) {
+    return activeCards.map(({ cardId, card }) => {
+      const trackable = card.credits.filter(cr => {
+        const freq = cr.frequency || 'annual';
+        if (freq === 'none') return false;
+        if ((state.disabledCredits[cardId] || []).indexOf(cr.name) >= 0) return false;
+        if (freq === 'annual' && cr.resetBasis === 'anniversary') return false;
+        return deadlineMonthsForFreq(freq).indexOf(m) >= 0;
+      });
+      if (trackable.length === 0) return null;
+      const credits = trackable.map(cr => {
+        const freq = cr.frequency || 'annual';
+        let periodIndex, periodLabel;
+        if (freq === 'monthly') { periodIndex = m; periodLabel = 'monthly'; }
+        else if (freq === 'quarterly') { periodIndex = Math.floor(m / 3); periodLabel = 'quarterly'; }
+        else if (freq === 'semi-annual') { periodIndex = m < 6 ? 0 : 1; periodLabel = 'semi-annual'; }
+        else { periodIndex = 0; periodLabel = 'annual'; }
+        const status = getCreditPeriodStatus(cardId, cr, year, periodIndex);
+        const displayStatus = status.isComplete ? 'done' : (status.usedAmount > 0 ? 'partial' : 'urgent');
+        return { cr, freq, periodLabel, status, displayStatus };
+      });
+      return { cardId, card, credits };
+    }).filter(Boolean);
+  }
+
+  // Collapsed summary line shown in month header
+  function buildMonthSummary(cardGroups) {
+    let total = 0, done = 0, totalAmt = 0, usedAmt = 0;
+    cardGroups.forEach(({ credits }) => credits.forEach(c => {
+      total++;
+      if (c.displayStatus === 'done') done++;
+      totalAmt += c.status.periodAmount;
+      usedAmt += Math.min(c.status.usedAmount, c.status.periodAmount);
+    }));
+    if (total === 0) return '';
+    if (done === total) return `✓ All ${total} credits used`;
+    const unused = totalAmt - usedAmt;
+    return `${done} of ${total} used · $${Math.round(unused)} remaining`;
   }
 
   // Build 12 month cards
@@ -7313,73 +7373,94 @@ function renderCreditCalendar() {
     const isCurrentMonth = year === todayYear && m === todayMonth;
     const isPast = year < todayYear || (year === todayYear && m < todayMonth);
 
-    let sectionsHtml = '';
-    activeCards.forEach(({ cardId, card }) => {
-      const trackable = card.credits.filter(cr => {
-        const freq = cr.frequency || 'annual';
-        if (freq === 'none') return false;
-        if ((state.disabledCredits[cardId] || []).indexOf(cr.name) >= 0) return false;
-        // Anniversary-basis annual credits have no fixed calendar deadline month
-        if (freq === 'annual' && cr.resetBasis === 'anniversary') return false;
-        return deadlineMonthsForFreq(freq).indexOf(m) >= 0;
-      });
-      if (trackable.length === 0) return;
+    const cardGroups = getMonthCardGroups(m);
+    const allDone = cardGroups.length > 0 && cardGroups.every(g => g.credits.every(c => c.displayStatus === 'done'));
 
-      const color = getCardColor(cardId);
-      const rows = trackable.map(cr => {
-        const freq = cr.frequency || 'annual';
-        let periodIndex, periodLabel, deadlineStr;
-        if (freq === 'monthly') {
-          periodIndex = m;
-          periodLabel = 'monthly';
-          deadlineStr = 'Expires ' + monthName.slice(0, 3) + ' ' + new Date(year, m + 1, 0).getDate();
-        } else if (freq === 'quarterly') {
-          periodIndex = Math.floor(m / 3);
-          periodLabel = 'quarterly';
-          deadlineStr = 'Q' + (periodIndex + 1) + ' ends ' + ['Mar 31','Jun 30','Sep 30','Dec 31'][periodIndex];
-        } else if (freq === 'semi-annual') {
-          periodIndex = m < 6 ? 0 : 1;
-          periodLabel = 'semi-annual';
-          deadlineStr = m < 6 ? 'Expires Jun 30' : 'Expires Dec 31';
-        } else {
-          periodIndex = 0;
-          periodLabel = 'annual';
-          deadlineStr = 'Expires Dec 31';
-        }
-        const status = getCreditPeriodStatus(cardId, cr, year, periodIndex);
-        const displayStatus = status.isComplete ? 'done' : (status.usedAmount > 0 ? 'partial' : 'urgent');
-        return _calBuildCreditRow(cardId, { cr, freq, periodLabel, deadlineStr, status, displayStatus }, year, m);
-      }).join('');
+    // In unusedOnly mode, filter to only uncompleted credits
+    const displayGroups = cs.unusedOnly
+      ? cardGroups.map(g => ({ ...g, credits: g.credits.filter(c => c.displayStatus !== 'done') })).filter(g => g.credits.length > 0)
+      : cardGroups;
 
-      sectionsHtml += `<div style="margin-bottom:10px;">
-        <div style="display:flex;align-items:center;gap:5px;margin-bottom:5px;">
-          <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${color};flex-shrink:0;"></span>
-          <span style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">${escapeHtml(card.shortName || card.name)}</span>
-        </div>
-        ${rows}
-      </div>`;
-    });
+    const expanded = isMonthExpanded(m) && !(cs.unusedOnly && allDone);
 
-    const headerBg = isCurrentMonth ? '#eff6ff' : '#f9fafb';
-    const headerColor = isCurrentMonth ? '#1d4ed8' : '#374151';
+    const headerBg = isCurrentMonth ? '#eff6ff' : isPast ? '#f3f4f6' : '#f9fafb';
+    const headerColor = isCurrentMonth ? '#1d4ed8' : '#1c1917';
     const borderColor = isCurrentMonth ? '#bfdbfe' : '#e5e7eb';
-    const fadedStyle = isPast && !isCurrentMonth ? 'opacity:0.6;' : '';
+    const fadedStyle = isPast && !isCurrentMonth ? 'opacity:0.65;' : '';
+    const arrowRot = expanded ? 'rotate(90deg)' : 'rotate(0deg)';
+    const summary = buildMonthSummary(cardGroups);
+
+    let bodyHtml = '';
+    if (expanded) {
+      if (displayGroups.length === 0) {
+        const msg = cs.unusedOnly ? 'All credits used this month' : 'No deadlines this month';
+        bodyHtml = `<div style="padding:12px 14px;color:#a8a29e;font-size:12px;text-align:center;">${msg}</div>`;
+      } else {
+        let groupsHtml = '';
+        displayGroups.forEach(({ cardId, card, credits }) => {
+          const color = getCardColor(cardId);
+          const grpCollapsed = isCardGroupCollapsed(m, cardId);
+          const grpArrow = grpCollapsed ? 'rotate(0deg)' : 'rotate(90deg)';
+          const doneCount = credits.filter(c => c.displayStatus === 'done').length;
+          const grpBadge = doneCount === credits.length
+            ? `<span style="font-size:10px;color:#16a34a;font-weight:500;">✓ All done</span>`
+            : doneCount > 0
+              ? `<span style="font-size:10px;color:#9ca3af;">${doneCount}/${credits.length} done</span>`
+              : '';
+
+          const sortedCredits = [...credits].sort((a, b) => {
+            const o = { urgent: 0, partial: 1, done: 2 };
+            return o[a.displayStatus] - o[b.displayStatus];
+          });
+
+          const rowsHtml = grpCollapsed ? '' : sortedCredits.map(c =>
+            _calBuildCreditRow(cardId, c, year, m)
+          ).join('');
+
+          groupsHtml += `<div style="border:1px solid #e5e7eb;border-radius:7px;overflow:hidden;margin-bottom:6px;">
+            <button class="cal-cardgrp-btn" data-month="${m}" data-card-id="${escapeHtml(cardId)}"
+              style="width:100%;display:flex;align-items:center;gap:7px;padding:8px 10px;background:${color}14;border:none;cursor:pointer;font-family:inherit;text-align:left;">
+              <span style="display:inline-block;transition:transform .15s;transform:${grpArrow};font-size:9px;color:#78716c;">&#9654;</span>
+              <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${color};flex-shrink:0;"></span>
+              <span style="font-size:12px;font-weight:600;color:#1c1917;flex:1;">${escapeHtml(card.shortName || card.name)}</span>
+              ${grpBadge}
+            </button>
+            ${grpCollapsed ? '' : `<div style="padding:6px 8px;display:flex;flex-direction:column;gap:4px;">${rowsHtml}</div>`}
+          </div>`;
+        });
+        bodyHtml = `<div style="padding:8px 10px 4px;">${groupsHtml}</div>`;
+      }
+    }
 
     return `<div style="border:1px solid ${borderColor};border-radius:10px;overflow:hidden;${fadedStyle}">
-      <div style="padding:8px 12px;background:${headerBg};border-bottom:1px solid ${borderColor};display:flex;align-items:center;gap:8px;">
-        <span style="font-size:13px;font-weight:700;color:${headerColor};">${monthName}</span>
-        ${isCurrentMonth ? '<span style="font-size:10px;font-weight:600;color:#1d4ed8;background:#dbeafe;padding:1px 7px;border-radius:8px;">Now</span>' : ''}
-      </div>
-      <div style="padding:10px 10px 6px;">
-        ${sectionsHtml || '<div style="color:#c4b5a0;font-size:11px;text-align:center;padding:10px 0;">No deadlines</div>'}
-      </div>
+      <button class="cal-month-btn" data-month="${m}"
+        style="width:100%;display:flex;align-items:center;gap:8px;padding:9px 12px;background:${headerBg};border:none;cursor:pointer;font-family:inherit;text-align:left;">
+        <span style="display:inline-block;transition:transform .15s;transform:${arrowRot};font-size:9px;color:#6b7280;flex-shrink:0;">&#9654;</span>
+        <span style="font-size:13px;font-weight:700;color:${headerColor};flex-shrink:0;">${monthName}</span>
+        ${isCurrentMonth ? '<span style="font-size:10px;font-weight:600;color:#1d4ed8;background:#dbeafe;padding:1px 7px;border-radius:8px;flex-shrink:0;">Now</span>' : ''}
+        ${!expanded && summary ? `<span style="font-size:11px;color:#6b7280;flex:1;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-left:4px;">${escapeHtml(summary)}</span>` : '<span style="flex:1;"></span>'}
+      </button>
+      ${bodyHtml}
     </div>`;
   }).join('');
 
+  const unusedBtnStyle = cs.unusedOnly
+    ? 'background:#1c1917;color:#fff;border-color:#1c1917;'
+    : 'background:#fff;color:#374151;border-color:#d1d5db;';
+
   container.innerHTML = `
+    <style>
+      .cal-toggle-btn { transition: background .12s, border-color .12s; }
+      .cal-toggle-btn.cal-can-use:hover { background:#dcfce7 !important; border-color:#16a34a !important; color:#16a34a !important; }
+      .cal-toggle-btn.cal-can-undo:hover { background:#fee2e2 !important; border-color:#dc2626 !important; color:#dc2626 !important; }
+      .cal-info-tooltip.cal-tip-visible { display:block !important; }
+    </style>
     <div style="max-width:1100px;margin:0 auto;padding:24px;">
-      <div style="margin-bottom:20px;">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;">
         <span style="font-size:22px;font-weight:700;color:#1c1917;">${year}</span>
+        <button id="calUnusedOnly" style="padding:5px 13px;font-size:12px;font-weight:500;border:1px solid;border-radius:6px;cursor:pointer;font-family:inherit;${unusedBtnStyle}">
+          Unused only
+        </button>
       </div>
       <div style="display:grid;grid-template-columns:minmax(0,1fr) 170px;gap:20px;align-items:start;">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
@@ -7391,7 +7472,7 @@ function renderCreditCalendar() {
       </div>
     </div>`;
 
-  // Event listeners
+  // Card filter chips
   container.querySelectorAll('.cal-chip').forEach(btn => {
     btn.addEventListener('click', () => {
       cs.enabledCards[btn.dataset.cardId] = !cs.enabledCards[btn.dataset.cardId];
@@ -7399,103 +7480,159 @@ function renderCreditCalendar() {
     });
   });
 
-  container.querySelectorAll('.cal-log-btn').forEach(btn => {
+  // Unused only toggle
+  document.getElementById('calUnusedOnly')?.addEventListener('click', () => {
+    cs.unusedOnly = !cs.unusedOnly;
+    renderCreditCalendar();
+  });
+
+  // Month expand/collapse
+  container.querySelectorAll('.cal-month-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const { cardId, creditName, month: mStr, year: yStr } = btn.dataset;
+      const m = parseInt(btn.dataset.month);
+      cs.monthExpanded[m] = !isMonthExpanded(m);
+      renderCreditCalendar();
+    });
+  });
+
+  // Card group expand/collapse
+  container.querySelectorAll('.cal-cardgrp-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const m = parseInt(btn.dataset.month);
+      const key = m + ':' + btn.dataset.cardId;
+      cs.cardGroupCollapsed[key] = !isCardGroupCollapsed(m, btn.dataset.cardId);
+      renderCreditCalendar();
+    });
+  });
+
+  // Manual credit toggle (mark used / undo)
+  container.querySelectorAll('.cal-toggle-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const { cardId, creditName, month: mStr, year: yStr, isDone, freq: freqStr } = btn.dataset;
       const monthIdx = parseInt(mStr), logYear = parseInt(yStr);
       if (!state.monthlyCredits[cardId]) state.monthlyCredits[cardId] = {};
       if (!state.monthlyCredits[cardId][creditName]) state.monthlyCredits[cardId][creditName] = {};
       if (!state.monthlyCredits[cardId][creditName][logYear]) state.monthlyCredits[cardId][creditName][logYear] = [];
       const claimed = state.monthlyCredits[cardId][creditName][logYear];
-      if (claimed.indexOf(monthIdx) < 0) { claimed.push(monthIdx); safeLocalStorageSet('ccTracker_monthlyCredits', state.monthlyCredits); }
+      if (isDone === 'true') {
+        // Undo: remove all months in this period
+        let periodMonths;
+        if (freqStr === 'monthly') periodMonths = [monthIdx];
+        else if (freqStr === 'quarterly') { const qi = Math.floor(monthIdx / 3); periodMonths = [qi*3, qi*3+1, qi*3+2]; }
+        else if (freqStr === 'semi-annual') periodMonths = monthIdx < 6 ? [0,1,2,3,4,5] : [6,7,8,9,10,11];
+        else periodMonths = [0,1,2,3,4,5,6,7,8,9,10,11];
+        state.monthlyCredits[cardId][creditName][logYear] = claimed.filter(m => periodMonths.indexOf(m) < 0);
+      } else {
+        if (claimed.indexOf(monthIdx) < 0) claimed.push(monthIdx);
+      }
+      safeLocalStorageSet('ccTracker_monthlyCredits', state.monthlyCredits);
       renderCreditCalendar();
     });
   });
+
+  // Auto-tx info tooltip toggle
+  container.querySelectorAll('.cal-info-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const tip = btn.parentElement.querySelector('.cal-info-tooltip');
+      if (tip) tip.classList.toggle('cal-tip-visible');
+    });
+  });
+
+  // Dismiss tooltips on outside click
+  container.addEventListener('click', () => {
+    container.querySelectorAll('.cal-info-tooltip.cal-tip-visible').forEach(t => t.classList.remove('cal-tip-visible'));
+  });
 }
 
-// Renders a single credit row inside a card accordion body.
-// creditData: { cr, freq, periodLabel, deadlineStr, status, displayStatus }
+// Renders a single credit row. creditData: { cr, freq, periodLabel, status, displayStatus }
 function _calBuildCreditRow(cardId, creditData, year, month) {
-  const { cr, periodLabel, deadlineStr, status, displayStatus } = creditData;
+  const { cr, freq, periodLabel, status, displayStatus } = creditData;
   const { periodAmount, usedAmount, isComplete, transactions } = status;
   const color = getCardColor(cardId);
   const icon = getCreditIcon(cr.name);
 
-  // Status indicator circle
-  let circleStyle, circleContent;
-  if (isComplete) {
-    circleStyle = `display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#16a34a;color:#fff;font-size:11px;flex-shrink:0;`;
-    circleContent = '✓';
-  } else if (displayStatus === 'partial') {
-    circleStyle = `display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#fef9c3;border:2px solid #d97706;color:#d97706;font-size:11px;flex-shrink:0;`;
-    circleContent = '◐';
-  } else {
-    circleStyle = `display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#fff;border:2px solid #d1d5db;color:#9ca3af;font-size:11px;flex-shrink:0;`;
-    circleContent = '○';
-  }
-
-  // Amount display
-  let amountStr = '';
-  if (isComplete) {
-    amountStr = `<span style="font-size:12px;color:#16a34a;font-weight:500;">$${periodAmount} used</span>`;
-  } else if (displayStatus === 'partial') {
-    amountStr = `<span style="font-size:12px;color:#d97706;font-weight:500;">$${usedAmount} of $${periodAmount}</span>`;
-  } else {
-    amountStr = `<span style="font-size:12px;color:#6b7280;">$${periodAmount} available</span>`;
-  }
-
-  // Progress bar (only when partial)
-  let progressBar = '';
-  if (displayStatus === 'partial' && periodAmount > 0) {
-    const pct = Math.min(100, Math.round((usedAmount / periodAmount) * 100));
-    progressBar = `<div style="height:3px;background:#e5e7eb;border-radius:2px;margin-top:4px;overflow:hidden;">
-      <div style="height:100%;width:${pct}%;background:#d97706;border-radius:2px;"></div>
-    </div>`;
-  }
-
-  // Auto-detected transaction pills
-  let txPills = '';
-  if (!cr.manual && transactions && transactions.length > 0) {
-    const pills = transactions.slice(0, 3).map(tx => {
-      const desc = tx.description ? tx.description.slice(0, 22) : '';
-      const amt = tx.amount ? ` $${Math.abs(tx.amount).toFixed(2)}` : '';
-      return `<span style="display:inline-block;background:#dbeafe;color:#1d4ed8;font-size:10px;padding:1px 6px;border-radius:10px;white-space:nowrap;">Auto${amt}${desc ? ' · ' + desc : ''}</span>`;
-    }).join('');
-    txPills = `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;">${pills}</div>`;
-  }
-
-  // Log Credit Used button for manual, incomplete credits
-  let logBtn = '';
-  if (cr.manual && !isComplete) {
-    const alreadyLogged = usedAmount > 0;
-    const btnLabel = alreadyLogged ? 'Log Again' : 'Log Used';
-    logBtn = `<button class="cal-log-btn"
+  // Toggle element: clickable button for manual credits, static indicator for auto
+  let toggleEl;
+  if (cr.manual) {
+    const btnClass = isComplete ? 'cal-toggle-btn cal-can-undo' : 'cal-toggle-btn cal-can-use';
+    const btnStyle = isComplete
+      ? `width:20px;height:20px;border-radius:50%;background:#16a34a;border:2px solid #16a34a;color:#fff;font-size:11px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;padding:0;font-family:inherit;`
+      : `width:20px;height:20px;border-radius:50%;background:#fff;border:2px dashed #d1d5db;color:transparent;font-size:11px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;padding:0;font-family:inherit;`;
+    toggleEl = `<button class="${btnClass}"
       data-card-id="${escapeHtml(cardId)}"
       data-credit-name="${escapeHtml(cr.name)}"
       data-month="${month}"
       data-year="${year}"
-      style="margin-top:6px;padding:3px 10px;font-size:11px;font-weight:500;color:#fff;background:#16a34a;border:none;border-radius:5px;cursor:pointer;font-family:inherit;">${btnLabel}</button>`;
+      data-is-done="${isComplete}"
+      data-freq="${escapeHtml(freq)}"
+      title="${isComplete ? 'Click to unmark as used' : 'Click to mark as used'}"
+      style="${btnStyle}">${isComplete ? '✓' : '✓'}</button>`;
+  } else {
+    let sStyle;
+    if (isComplete) {
+      sStyle = `width:20px;height:20px;border-radius:50%;background:#16a34a;color:#fff;font-size:11px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;`;
+    } else if (displayStatus === 'partial') {
+      sStyle = `width:20px;height:20px;border-radius:50%;background:#fef9c3;border:2px solid #d97706;color:#d97706;font-size:11px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;`;
+    } else {
+      sStyle = `width:20px;height:20px;border-radius:50%;background:#fff;border:2px solid #e5e7eb;color:#d1d5db;font-size:11px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;`;
+    }
+    const content = isComplete ? '✓' : displayStatus === 'partial' ? '◐' : '○';
+    toggleEl = `<span style="${sStyle}">${content}</span>`;
   }
 
-  const freqLabel = periodLabel ? `<span style="font-size:11px;color:#9ca3af;font-weight:400;">(${periodLabel})</span>` : '';
-  const deadlineEl = deadlineStr ? `<span style="font-size:11px;color:#9ca3af;">${deadlineStr}</span>` : '';
+  // Amount line
+  let amountStr;
+  if (isComplete) {
+    amountStr = `<span style="font-size:11px;color:#16a34a;">$${Math.round(periodAmount)} used</span>`;
+  } else if (displayStatus === 'partial') {
+    amountStr = `<span style="font-size:11px;color:#d97706;">$${Math.round(usedAmount)} of $${Math.round(periodAmount)}</span>`;
+  } else {
+    amountStr = `<span style="font-size:11px;color:#6b7280;">$${Math.round(periodAmount)}</span>`;
+  }
 
-  return `<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:6px;background:${isComplete ? '#f0fdf4' : displayStatus === 'partial' ? '#fffdf0' : '#fff'};border:1px solid ${isComplete ? '#bbf7d0' : displayStatus === 'partial' ? '#fde68a' : '#f3f4f6'};">
-    <span style="${circleStyle}">${circleContent}</span>
-    <span style="font-size:16px;color:${color};">${icon}</span>
+  // Progress bar when partial
+  let progressBar = '';
+  if (displayStatus === 'partial' && periodAmount > 0) {
+    const pct = Math.min(100, Math.round((usedAmount / periodAmount) * 100));
+    progressBar = `<div style="height:2px;background:#e5e7eb;border-radius:1px;margin-top:3px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:#d97706;"></div></div>`;
+  }
+
+  // ⓘ tooltip for auto-detected transaction details
+  let infoEl = '';
+  if (!cr.manual && transactions && transactions.length > 0) {
+    const txRows = transactions.slice(0, 5).map(tx => {
+      const desc = tx.description ? escapeHtml(tx.description.slice(0, 32)) : '';
+      const amt = tx.amount ? ` · $${Math.abs(tx.amount).toFixed(2)}` : '';
+      return `<div>${desc}${amt}</div>`;
+    }).join('');
+    infoEl = `<div class="cal-info-wrap" style="position:relative;flex-shrink:0;align-self:flex-start;margin-top:2px;">
+      <button class="cal-info-btn" title="View matched transactions"
+        style="width:16px;height:16px;border-radius:50%;border:1px solid #d1d5db;background:#f9fafb;font-size:10px;color:#6b7280;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;font-family:inherit;">ⓘ</button>
+      <div class="cal-info-tooltip" style="display:none;position:absolute;z-index:20;right:0;top:20px;background:#1c1917;color:#e7e5e4;border-radius:6px;padding:7px 9px;font-size:10px;min-width:160px;max-width:240px;white-space:normal;line-height:1.6;box-shadow:0 4px 12px rgba(0,0,0,.2);">
+        ${txRows}
+      </div>
+    </div>`;
+  }
+
+  const freqLabel = periodLabel ? `<span style="font-size:10px;color:#9ca3af;">(${periodLabel})</span>` : '';
+  const rowBg = isComplete ? '#f0fdf4' : displayStatus === 'partial' ? '#fffdf0' : '#fff';
+  const rowBorder = isComplete ? '#bbf7d0' : displayStatus === 'partial' ? '#fde68a' : '#f0f0f0';
+
+  return `<div style="display:flex;align-items:flex-start;gap:7px;padding:6px 8px;border-radius:6px;background:${rowBg};border:1px solid ${rowBorder};">
+    ${toggleEl}
+    <span style="font-size:15px;color:${color};flex-shrink:0;margin-top:1px;">${icon}</span>
     <div style="flex:1;min-width:0;">
-      <div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;">
-        <span style="font-size:13px;font-weight:500;color:#1c1917;">${escapeHtml(cr.name)}</span>
+      <div style="display:flex;align-items:baseline;gap:5px;flex-wrap:wrap;">
+        <span style="font-size:12px;font-weight:500;color:#1c1917;">${escapeHtml(cr.name)}</span>
         ${freqLabel}
       </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:2px;flex-wrap:wrap;">
-        ${amountStr}
-        ${deadlineEl}
-      </div>
+      <div style="margin-top:2px;">${amountStr}</div>
       ${progressBar}
-      ${txPills}
-      ${logBtn}
     </div>
+    ${infoEl}
   </div>`;
 }
 

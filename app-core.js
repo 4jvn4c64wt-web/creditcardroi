@@ -2536,6 +2536,11 @@ function showCardConfigEditor(preselectedCardId = null) {
         ` : ''}
         -->
         <div style="${creditsLockedStyle}">${creditsSection}</div>
+
+        <!-- Global footer warning: shown on every Card Config page -->
+        <div style="margin-top:8px;padding:10px 14px;background:#fefce8;border:1px solid #fde68a;border-left:4px solid #facc15;border-radius:6px;font-size:12px;color:#713f12;">
+          <strong style="font-weight:600;">Heads up:</strong> Please check the date at the top of the screen to confirm you are saving information for the correct year.
+        </div>
       </div>
     `;
     

@@ -8297,32 +8297,10 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
   let validCategories = getCardCategories(cardId, txn?.date);
   const card = CARDS[cardId];
   
-  // For CFF and Cash+, ONLY show the currently selected quarterly categories + base categories + other
-  // (Don't show all possible selectable categories - only the ones user has actually selected)
-  
   // Always ensure current category is in the list
   if (currentCategory && !validCategories.includes(currentCategory)) {
     validCategories.push(currentCategory);
   }
-  
-  // Get the quarter from the transaction date (for quarterly category cards)
-  function getQuarterFromDate(dateStr) {
-    let month;
-    if (dateStr?.includes('-')) {
-      month = parseInt(dateStr.split('-')[1]);
-    } else if (dateStr?.includes('/')) {
-      month = parseInt(dateStr.split('/')[0]);
-    } else {
-      month = new Date().getMonth() + 1;
-    }
-    return `Q${Math.ceil(month / 3)}`;
-  }
-  
-  const txnQuarter = txn ? getQuarterFromDate(txn.date) : getCurrentQuarter();
-  const txnYear = txn && txn.date ? (txn.date.includes('-') ? parseInt(txn.date.split('-')[0]) : parseInt(txn.date.split('/')[2])) : new Date().getFullYear();
-  const cffQuarterKey = `${txnYear}-${txnQuarter}`;
-  const cffEntries = (window.CardTracker.cffQuarterlyData || {})[cffQuarterKey] || [];
-  const cashPlusSelected = state.cashPlusCategories[txnQuarter] || { fivePercent: [], twoPercent: '' };
 
   function getDisplayRate(cat) {
     // Plugin hook: card-specific display rate (implemented in card files)
@@ -8334,32 +8312,19 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
     const mult = getMultiplier(cardId, cat, txn?.date, txn?.merchant);
     return { rate: mult.rate, bonus: mult.rate > (card.baseRate || 1) };
   }
-  
+
   // Check if this is a low-confidence transaction
   const isLowConfidence = txn && txn.confidence < CONFIDENCE_THRESHOLD;
-  
-  // For Freedom Flex, filter to only show base + selected quarterly categories for this transaction's quarter
-  if (cardId === 'chase-freedom-flex') {
-    const baseCats = ['chase-travel', 'dining', 'drugstore'];
-    const cffQuarterlyCats = cffEntries.map(e => e.key);
-    const allowedCats = [...new Set([...baseCats, ...cffQuarterlyCats, 'other'])];
-    // Also include current category if not in list
-    if (currentCategory && !allowedCats.includes(currentCategory)) {
-      allowedCats.push(currentCategory);
+
+  if (typeof card.getCategoryFilter === 'function') {
+    const filtered = card.getCategoryFilter(txn?.date, currentCategory, buildPluginCtx());
+    if (filtered != null) {
+      // Always include current category so the user can see what it is
+      if (currentCategory && !filtered.includes(currentCategory)) {
+        filtered.push(currentCategory);
+      }
+      validCategories = validCategories.filter(c => filtered.includes(c));
     }
-    validCategories = validCategories.filter(c => allowedCats.includes(c));
-  }
-  
-  // For Cash+, filter to only show selected categories for this transaction's quarter
-  if (cardId === 'us-bank-cash-plus') {
-    const allowedCats = [...(cashPlusSelected.fivePercent || [])];
-    if (cashPlusSelected.twoPercent) allowedCats.push(cashPlusSelected.twoPercent);
-    allowedCats.push('other');
-    // Also include current category if not in list
-    if (currentCategory && !allowedCats.includes(currentCategory)) {
-      allowedCats.push(currentCategory);
-    }
-    validCategories = validCategories.filter(c => allowedCats.includes(c));
   }
   
   content.innerHTML = `

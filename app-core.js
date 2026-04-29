@@ -7284,6 +7284,21 @@ function renderCreditCalendar() {
   if (!cs.cardGroupCollapsed) cs.cardGroupCollapsed = {};
   if (cs.unusedOnly === undefined) cs.unusedOnly = false;
 
+  // Collect available years from uploaded transactions
+  const txYearSet = new Set();
+  if (state.results && state.results.processed) {
+    state.results.processed.forEach(t => {
+      if (!t.date) return;
+      let y;
+      if (t.date.indexOf('-') >= 0) y = parseInt(t.date.split('-')[0]);
+      else if (t.date.indexOf('/') >= 0) { const p = t.date.split('/'); y = parseInt(p[2].length === 2 ? '20' + p[2] : p[2]); }
+      if (y > 2000 && y < 2100) txYearSet.add(y);
+    });
+  }
+  const availableYears = Array.from(txYearSet).sort((a, b) => b - a);
+  if (availableYears.length === 0) availableYears.push(todayYear);
+  if (availableYears.indexOf(cs.year) < 0) cs.year = availableYears[0];
+
   const year = cs.year;
   const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -7327,7 +7342,6 @@ function renderCreditCalendar() {
     return v !== undefined ? v : false;
   }
 
-  // Compute all credit data for a given month, grouped by card
   function getMonthCardGroups(m) {
     return activeCards.map(({ cardId, card }) => {
       const trackable = card.credits.filter(cr => {
@@ -7353,7 +7367,6 @@ function renderCreditCalendar() {
     }).filter(Boolean);
   }
 
-  // Collapsed summary line shown in month header
   function buildMonthSummary(cardGroups) {
     let total = 0, done = 0, totalAmt = 0, usedAmt = 0;
     cardGroups.forEach(({ credits }) => credits.forEach(c => {
@@ -7375,20 +7388,20 @@ function renderCreditCalendar() {
 
     const cardGroups = getMonthCardGroups(m);
     const allDone = cardGroups.length > 0 && cardGroups.every(g => g.credits.every(c => c.displayStatus === 'done'));
-
-    // In unusedOnly mode, filter to only uncompleted credits
     const displayGroups = cs.unusedOnly
       ? cardGroups.map(g => ({ ...g, credits: g.credits.filter(c => c.displayStatus !== 'done') })).filter(g => g.credits.length > 0)
       : cardGroups;
 
     const expanded = isMonthExpanded(m) && !(cs.unusedOnly && allDone);
+    const summary = buildMonthSummary(cardGroups);
 
     const headerBg = isCurrentMonth ? '#eff6ff' : isPast ? '#f3f4f6' : '#f9fafb';
     const headerColor = isCurrentMonth ? '#1d4ed8' : '#1c1917';
     const borderColor = isCurrentMonth ? '#bfdbfe' : '#e5e7eb';
     const fadedStyle = isPast && !isCurrentMonth ? 'opacity:0.65;' : '';
     const arrowRot = expanded ? 'rotate(90deg)' : 'rotate(0deg)';
-    const summary = buildMonthSummary(cardGroups);
+    // border-radius on button adjusts based on whether a body follows
+    const btnRadius = expanded ? '10px 10px 0 0' : '10px';
 
     let bodyHtml = '';
     if (expanded) {
@@ -7407,19 +7420,13 @@ function renderCreditCalendar() {
             : doneCount > 0
               ? `<span style="font-size:10px;color:#9ca3af;">${doneCount}/${credits.length} done</span>`
               : '';
+          const sortedCredits = [...credits].sort((a, b) => ({ urgent:0, partial:1, done:2 }[a.displayStatus] - { urgent:0, partial:1, done:2 }[b.displayStatus]));
+          const rowsHtml = grpCollapsed ? '' : sortedCredits.map(c => _calBuildCreditRow(cardId, c, year, m)).join('');
+          const grpBtnRadius = grpCollapsed ? '7px' : '7px 7px 0 0';
 
-          const sortedCredits = [...credits].sort((a, b) => {
-            const o = { urgent: 0, partial: 1, done: 2 };
-            return o[a.displayStatus] - o[b.displayStatus];
-          });
-
-          const rowsHtml = grpCollapsed ? '' : sortedCredits.map(c =>
-            _calBuildCreditRow(cardId, c, year, m)
-          ).join('');
-
-          groupsHtml += `<div style="border:1px solid #e5e7eb;border-radius:7px;overflow:hidden;margin-bottom:6px;">
+          groupsHtml += `<div style="border:1px solid #e5e7eb;border-radius:7px;margin-bottom:6px;">
             <button class="cal-cardgrp-btn" data-month="${m}" data-card-id="${escapeHtml(cardId)}"
-              style="width:100%;display:flex;align-items:center;gap:7px;padding:8px 10px;background:${color}14;border:none;cursor:pointer;font-family:inherit;text-align:left;">
+              style="width:100%;display:flex;align-items:center;gap:7px;padding:8px 10px;background:${color}14;border:none;cursor:pointer;font-family:inherit;text-align:left;border-radius:${grpBtnRadius};">
               <span style="display:inline-block;transition:transform .15s;transform:${grpArrow};font-size:9px;color:#78716c;">&#9654;</span>
               <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${color};flex-shrink:0;"></span>
               <span style="font-size:12px;font-weight:600;color:#1c1917;flex:1;">${escapeHtml(card.shortName || card.name)}</span>
@@ -7432,9 +7439,9 @@ function renderCreditCalendar() {
       }
     }
 
-    return `<div style="border:1px solid ${borderColor};border-radius:10px;overflow:hidden;${fadedStyle}">
+    return `<div style="border:1px solid ${borderColor};border-radius:10px;${fadedStyle}">
       <button class="cal-month-btn" data-month="${m}"
-        style="width:100%;display:flex;align-items:center;gap:8px;padding:9px 12px;background:${headerBg};border:none;cursor:pointer;font-family:inherit;text-align:left;">
+        style="width:100%;display:flex;align-items:center;gap:8px;padding:9px 12px;background:${headerBg};border:none;cursor:pointer;font-family:inherit;text-align:left;border-radius:${btnRadius};">
         <span style="display:inline-block;transition:transform .15s;transform:${arrowRot};font-size:9px;color:#6b7280;flex-shrink:0;">&#9654;</span>
         <span style="font-size:13px;font-weight:700;color:${headerColor};flex-shrink:0;">${monthName}</span>
         ${isCurrentMonth ? '<span style="font-size:10px;font-weight:600;color:#1d4ed8;background:#dbeafe;padding:1px 7px;border-radius:8px;flex-shrink:0;">Now</span>' : ''}
@@ -7444,30 +7451,74 @@ function renderCreditCalendar() {
     </div>`;
   }).join('');
 
+  // Build sidebar
+  let yearSelectorHtml = '';
+  if (availableYears.length > 1) {
+    const btns = availableYears.map(y => {
+      const active = y === year;
+      return `<button class="cal-year-btn" data-year="${y}" style="padding:3px 10px;font-size:12px;border:1px solid ${active ? '#1c1917' : '#e7e5e4'};border-radius:5px;background:${active ? '#1c1917' : '#fff'};color:${active ? '#fff' : '#374151'};cursor:pointer;font-family:inherit;">${y}</button>`;
+    }).join('');
+    yearSelectorHtml = `<div style="margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:600;color:#78716c;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:7px;">Year</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;">${btns}</div>
+    </div>`;
+  }
+
   const unusedBtnStyle = cs.unusedOnly
     ? 'background:#1c1917;color:#fff;border-color:#1c1917;'
     : 'background:#fff;color:#374151;border-color:#d1d5db;';
+
+  const cardChipsHtml = walletCards.map(({ cardId, card }) => {
+    const on = !!cs.enabledCards[cardId];
+    const color = getCardColor(cardId);
+    return `<button class="cal-chip" data-card-id="${escapeHtml(cardId)}" style="display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;margin-bottom:4px;border:1px solid ${on ? color + '44' : '#f0eeec'};border-radius:6px;background:${on ? color + '0f' : '#fafaf9'};cursor:pointer;font-family:inherit;text-align:left;">
+      <span style="flex-shrink:0;width:14px;height:14px;border-radius:3px;border:2px solid ${color};background:${on ? color : 'transparent'};display:inline-flex;align-items:center;justify-content:center;font-size:9px;color:#fff;font-weight:700;">${on ? '✓' : ''}</span>
+      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0;"></span>
+      <span style="font-size:11px;font-weight:500;color:${on ? '#1c1917' : '#a8a29e'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(card.shortName || card.name)}</span>
+    </button>`;
+  }).join('');
+
+  // Set-it-and-forget-it note: credits with frequency:'none'
+  const noneRows = [];
+  walletCards.forEach(({ cardId, card }) => {
+    const nones = (card.credits || []).filter(cr => (cr.frequency || 'annual') === 'none');
+    if (nones.length > 0) noneRows.push({ card, nones });
+  });
+  let noneNoteHtml = '';
+  if (noneRows.length > 0) {
+    const items = noneRows.map(({ card, nones }) =>
+      `<div style="margin-bottom:3px;"><strong>${escapeHtml(card.shortName || card.name)}:</strong> ${nones.map(cr => escapeHtml(cr.name)).join(', ')}</div>`
+    ).join('');
+    noneNoteHtml = `<div style="margin-top:10px;border-top:1px solid #f0eeec;padding-top:10px;">
+      <p style="font-size:10px;color:#a8a29e;font-style:italic;line-height:1.5;margin:0 0 5px;">Set-it-and-forget-it benefits not shown here:</p>
+      <div style="font-size:10px;color:#a8a29e;line-height:1.6;">${items}</div>
+    </div>`;
+  }
 
   container.innerHTML = `
     <style>
       .cal-toggle-btn { transition: background .12s, border-color .12s; }
       .cal-toggle-btn.cal-can-use:hover { background:#dcfce7 !important; border-color:#16a34a !important; color:#16a34a !important; }
       .cal-toggle-btn.cal-can-undo:hover { background:#fee2e2 !important; border-color:#dc2626 !important; color:#dc2626 !important; }
-      .cal-info-tooltip.cal-tip-visible { display:block !important; }
     </style>
     <div style="max-width:1100px;margin:0 auto;padding:24px;">
-      <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;">
+      <div style="margin-bottom:20px;">
         <span style="font-size:22px;font-weight:700;color:#1c1917;">${year}</span>
-        <button id="calUnusedOnly" style="padding:5px 13px;font-size:12px;font-weight:500;border:1px solid;border-radius:6px;cursor:pointer;font-family:inherit;${unusedBtnStyle}">
-          Unused only
-        </button>
       </div>
-      <div style="display:grid;grid-template-columns:minmax(0,1fr) 170px;gap:20px;align-items:start;">
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) 180px;gap:20px;align-items:start;">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
           ${monthGridHtml}
         </div>
         <div style="position:sticky;top:16px;">
-          ${_calBuildCardToggleSidebar(walletCards, cs.enabledCards)}
+          <div style="background:#fff;border:1px solid #e7e5e4;border-radius:8px;padding:12px;">
+            ${yearSelectorHtml}
+            <div style="margin-bottom:10px;">
+              <button id="calUnusedOnly" style="width:100%;padding:5px 10px;font-size:12px;font-weight:500;border:1px solid;border-radius:6px;cursor:pointer;font-family:inherit;${unusedBtnStyle}">Unused only</button>
+            </div>
+            <div style="font-size:11px;font-weight:600;color:#78716c;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px;">Cards</div>
+            ${cardChipsHtml}
+            ${noneNoteHtml}
+          </div>
         </div>
       </div>
     </div>`;
@@ -7476,6 +7527,16 @@ function renderCreditCalendar() {
   container.querySelectorAll('.cal-chip').forEach(btn => {
     btn.addEventListener('click', () => {
       cs.enabledCards[btn.dataset.cardId] = !cs.enabledCards[btn.dataset.cardId];
+      renderCreditCalendar();
+    });
+  });
+
+  // Year selector
+  container.querySelectorAll('.cal-year-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      cs.year = parseInt(btn.dataset.year);
+      cs.monthExpanded = {};
+      cs.cardGroupCollapsed = {};
       renderCreditCalendar();
     });
   });
@@ -7517,7 +7578,6 @@ function renderCreditCalendar() {
       if (!state.monthlyCredits[cardId][creditName][logYear]) state.monthlyCredits[cardId][creditName][logYear] = [];
       const claimed = state.monthlyCredits[cardId][creditName][logYear];
       if (isDone === 'true') {
-        // Undo: remove all months in this period
         let periodMonths;
         if (freqStr === 'monthly') periodMonths = [monthIdx];
         else if (freqStr === 'quarterly') { const qi = Math.floor(monthIdx / 3); periodMonths = [qi*3, qi*3+1, qi*3+2]; }
@@ -7532,20 +7592,28 @@ function renderCreditCalendar() {
     });
   });
 
-  // Auto-tx info tooltip toggle
-  container.querySelectorAll('.cal-info-btn').forEach(btn => {
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      const tip = btn.parentElement.querySelector('.cal-info-tooltip');
-      if (tip) tip.classList.toggle('cal-tip-visible');
+  // Fixed tooltip for auto-detected status circles (escapes overflow:hidden)
+  let _calTip = document.getElementById('calGlobalTip');
+  if (!_calTip) {
+    _calTip = document.createElement('div');
+    _calTip.id = 'calGlobalTip';
+    _calTip.style.cssText = 'display:none;position:fixed;z-index:9999;background:#1c1917;color:#e7e5e4;border-radius:5px;padding:5px 9px;font-size:11px;pointer-events:none;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.25);';
+    document.body.appendChild(_calTip);
+  }
+  container.querySelectorAll('.cal-auto-circle').forEach(el => {
+    el.addEventListener('mouseenter', () => {
+      const rect = el.getBoundingClientRect();
+      _calTip.textContent = el.dataset.tooltip || 'Auto-detected from transactions';
+      _calTip.style.display = 'block';
+      const tipW = _calTip.offsetWidth;
+      const left = Math.max(8, Math.min(rect.left + rect.width / 2 - tipW / 2, window.innerWidth - tipW - 8));
+      _calTip.style.left = left + 'px';
+      _calTip.style.top = Math.max(4, rect.top - 34) + 'px';
     });
-  });
-
-  // Dismiss tooltips on outside click
-  container.addEventListener('click', () => {
-    container.querySelectorAll('.cal-info-tooltip.cal-tip-visible').forEach(t => t.classList.remove('cal-tip-visible'));
+    el.addEventListener('mouseleave', () => { _calTip.style.display = 'none'; });
   });
 }
+
 
 // Renders a single credit row. creditData: { cr, freq, periodLabel, status, displayStatus }
 function _calBuildCreditRow(cardId, creditData, year, month) {
@@ -7573,14 +7641,18 @@ function _calBuildCreditRow(cardId, creditData, year, month) {
   } else {
     let sStyle;
     if (isComplete) {
-      sStyle = `width:20px;height:20px;border-radius:50%;background:#16a34a;color:#fff;font-size:11px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;`;
+      sStyle = `width:20px;height:20px;border-radius:50%;background:#16a34a;color:#fff;font-size:11px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;cursor:default;`;
     } else if (displayStatus === 'partial') {
-      sStyle = `width:20px;height:20px;border-radius:50%;background:#fef9c3;border:2px solid #d97706;color:#d97706;font-size:11px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;`;
+      sStyle = `width:20px;height:20px;border-radius:50%;background:#fef9c3;border:2px solid #d97706;color:#d97706;font-size:11px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;cursor:default;`;
     } else {
-      sStyle = `width:20px;height:20px;border-radius:50%;background:#fff;border:2px solid #e5e7eb;color:#d1d5db;font-size:11px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;`;
+      sStyle = `width:20px;height:20px;border-radius:50%;background:#fff;border:2px solid #e5e7eb;color:#d1d5db;font-size:11px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;cursor:default;`;
     }
     const content = isComplete ? '✓' : displayStatus === 'partial' ? '◐' : '○';
-    toggleEl = `<span style="${sStyle}">${content}</span>`;
+    const txCount = transactions ? transactions.length : 0;
+    const tipText = txCount > 0
+      ? `Auto-detected · ${txCount} transaction${txCount !== 1 ? 's' : ''} matched`
+      : 'Auto-detected from transactions';
+    toggleEl = `<span class="cal-auto-circle" data-tooltip="${escapeHtml(tipText)}" style="${sStyle}">${content}</span>`;
   }
 
   // Amount line
@@ -7600,23 +7672,6 @@ function _calBuildCreditRow(cardId, creditData, year, month) {
     progressBar = `<div style="height:2px;background:#e5e7eb;border-radius:1px;margin-top:3px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:#d97706;"></div></div>`;
   }
 
-  // ⓘ tooltip for auto-detected transaction details
-  let infoEl = '';
-  if (!cr.manual && transactions && transactions.length > 0) {
-    const txRows = transactions.slice(0, 5).map(tx => {
-      const desc = tx.description ? escapeHtml(tx.description.slice(0, 32)) : '';
-      const amt = tx.amount ? ` · $${Math.abs(tx.amount).toFixed(2)}` : '';
-      return `<div>${desc}${amt}</div>`;
-    }).join('');
-    infoEl = `<div class="cal-info-wrap" style="position:relative;flex-shrink:0;align-self:flex-start;margin-top:2px;">
-      <button class="cal-info-btn" title="View matched transactions"
-        style="width:16px;height:16px;border-radius:50%;border:1px solid #d1d5db;background:#f9fafb;font-size:10px;color:#6b7280;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;font-family:inherit;">ⓘ</button>
-      <div class="cal-info-tooltip" style="display:none;position:absolute;z-index:20;right:0;top:20px;background:#1c1917;color:#e7e5e4;border-radius:6px;padding:7px 9px;font-size:10px;min-width:160px;max-width:240px;white-space:normal;line-height:1.6;box-shadow:0 4px 12px rgba(0,0,0,.2);">
-        ${txRows}
-      </div>
-    </div>`;
-  }
-
   const freqLabel = periodLabel ? `<span style="font-size:10px;color:#9ca3af;">(${periodLabel})</span>` : '';
   const rowBg = isComplete ? '#f0fdf4' : displayStatus === 'partial' ? '#fffdf0' : '#fff';
   const rowBorder = isComplete ? '#bbf7d0' : displayStatus === 'partial' ? '#fde68a' : '#f0f0f0';
@@ -7632,7 +7687,6 @@ function _calBuildCreditRow(cardId, creditData, year, month) {
       <div style="margin-top:2px;">${amountStr}</div>
       ${progressBar}
     </div>
-    ${infoEl}
   </div>`;
 }
 

@@ -2358,7 +2358,10 @@ function showCardConfigEditor(preselectedCardId = null) {
       const txnYears = [...new Set(state.transactions.map(t => getYearFromDateString(t.date)))].sort().reverse();
       const currentYear = new Date().getFullYear();
       const availableYears = txnYears.length > 0 ? txnYears : [currentYear];
-      const selectedCreditYear = state.selectedCreditYear || availableYears[0];
+      // Bilt cards share the year picker at the top of the Bilt section.
+      const selectedCreditYear = card.isBilt
+        ? (state.selectedBiltYear && state.selectedBiltYear !== 'all' ? parseInt(state.selectedBiltYear) : availableYears[0])
+        : (state.selectedCreditYear || availableYears[0]);
 
       // Helper to render the Paramount+/Peacock streaming benefit sub-section
       const renderStreamingBenefitSection = (selectedCreditYear) => {
@@ -2432,9 +2435,9 @@ function showCardConfigEditor(preselectedCardId = null) {
         <div id="configCreditsSection">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
             <h3 style="font-size:14px;font-weight:600;">Statement Credits</h3>
-            <select id="creditYearSelect" class="form-select" style="min-width:100px;padding:6px 10px;">
+            ${card.isBilt ? `<span style="font-size:11px;color:#78716c;">Year: ${selectedCreditYear}</span>` : `<select id="creditYearSelect" class="form-select" style="min-width:100px;padding:6px 10px;">
               ${availableYears.map(y => `<option value="${y}" ${y === selectedCreditYear ? 'selected' : ''}>${y}</option>`).join('')}
-            </select>
+            </select>`}
           </div>
           <p style="font-size:12px;color:#78716c;margin-bottom:4px;">Toggle credits on/off to include/exclude from ROI calculation.</p>
           <p style="font-size:11px;color:#a8a29e;margin-bottom:12px;">⚡ = Credits your account automatically (like Uber Cash). Click months you've received to track them.</p>
@@ -2536,11 +2539,6 @@ function showCardConfigEditor(preselectedCardId = null) {
         ` : ''}
         -->
         <div style="${creditsLockedStyle}">${creditsSection}</div>
-
-        <!-- Global footer warning: shown on every Card Config page -->
-        <div style="margin-top:8px;padding:10px 14px;background:#fefce8;border:1px solid #fde68a;border-left:4px solid #facc15;border-radius:6px;font-size:12px;color:#713f12;">
-          <strong style="font-weight:600;">Heads up:</strong> Please check the date at the top of the screen to confirm you are saving information for the correct year.
-        </div>
       </div>
     `;
     

@@ -414,10 +414,6 @@ let state = {
   streamingSectionExpanded: false,
   merchantRules: safeLocalStorageGet('ccTracker_merchantRules', {}),
   confirmedTransactions: safeLocalStorageGet('ccTracker_confirmedTxns', {}), // txnId -> category (single-txn confirmations)
-  cashPlusCategories: safeLocalStorageGet('ccTracker_cashPlusCategories', {}),
-  cffCategories: safeLocalStorageGet('ccTracker_cffCategories', {}),
-  cffPaypalDecemberOnly: safeLocalStorageGet('ccTracker_cffPaypalDecemberOnly', {}), // Tracks PayPal December-only for Q4 by year
-  biltConfig: safeLocalStorageGet('ccTracker_biltConfig', {}),
   customAnnualBonusPoints: safeLocalStorageGet('ccTracker_annualBonusPoints', {}),
   cardYearToggles: safeLocalStorageGet('ccTracker_cardYearToggles', {}), // { cardId: true } - tracks which cards show card year instead of calendar year
   columnMappings: safeLocalStorageGet('ccTracker_columnMappings', {}), // Remembers mappings by CSV shape
@@ -472,6 +468,19 @@ let state = {
   tourActive: false,
   featureEducation: safeLocalStorageGet('ccTracker_featureEducation', {}) // tracks which feature tutorials have been shown
 };
+
+// Initialize plugin-managed state fields declared in card pluginState.stateFields
+// Idempotent: the undefined check means fields set by the state object above are not overwritten.
+// Note: all three Bilt cards share one pluginState — biltConfig is encountered 3 times, safely skipped after first.
+for (const [_cardId, _card] of Object.entries(CARDS)) {
+  if (_card.pluginState && _card.pluginState.stateFields) {
+    for (const field of _card.pluginState.stateFields) {
+      if (state[field.key] === undefined) {
+        state[field.key] = safeLocalStorageGet(field.storageKey, field.defaultValue);
+      }
+    }
+  }
+}
 
 // =============================================================================
 // DECISION PASS & TIER LOGIC
@@ -8511,7 +8520,8 @@ function buildExportData() {
     streamingCredits: state.streamingCredits,
     proAccess: state.proAccess || undefined
   };
-  // Add plugin-managed state (cashPlusCategories, cffCategories, biltConfig, etc.)
+  // Plugin-managed state fields (declared in card pluginState.stateFields, initialized by plugin loop)
+  // Currently: biltConfig (Bilt cards), cffCategories + cffPaypalDecemberOnly (CFF), cashPlusCategories (Cash+)
   for (const [cardId, card] of Object.entries(CARDS)) {
     if (card.pluginState?.exportState) {
       Object.assign(exportData, card.pluginState.exportState(buildPluginCtx()));
@@ -8721,7 +8731,8 @@ async function handleFile(file) {
         state.confirmedTransactions = backup.confirmedTransactions;
         safeLocalStorageSet('ccTracker_confirmedTxns', backup.confirmedTransactions);
       }
-      // Restore plugin-managed state (cashPlusCategories, cffCategories, biltConfig, etc.)
+      // Plugin-managed state fields (declared in card pluginState.stateFields, initialized by plugin loop)
+      // Currently: biltConfig (Bilt cards), cffCategories + cffPaypalDecemberOnly (CFF), cashPlusCategories (Cash+)
       for (const [cardId, card] of Object.entries(CARDS)) {
         if (card.pluginState?.importState) {
           card.pluginState.importState(backup, buildPluginCtx());
@@ -9181,7 +9192,8 @@ async function initCore() {
       state.customAnnualBonusPoints = {};
       state.columnMappings = {};
       state.cardYearToggles = {};
-      // Clear plugin-managed state (cashPlusCategories, cffCategories, biltConfig, etc.)
+      // Plugin-managed state fields (declared in card pluginState.stateFields, initialized by plugin loop)
+      // Currently: biltConfig (Bilt cards), cffCategories + cffPaypalDecemberOnly (CFF), cashPlusCategories (Cash+)
       for (const [cardId, card] of Object.entries(CARDS)) {
         if (card.pluginState?.clearState) {
           card.pluginState.clearState(buildPluginCtx());
@@ -9235,7 +9247,8 @@ async function initCore() {
           state.detectedAnnualFees = {};
           state.dpBannersDismissed = {};
 
-          // Clear plugin-managed state
+          // Plugin-managed state fields (declared in card pluginState.stateFields, initialized by plugin loop)
+          // Currently: biltConfig (Bilt cards), cffCategories + cffPaypalDecemberOnly (CFF), cashPlusCategories (Cash+)
           for (const [cardId, card] of Object.entries(CARDS)) {
             if (card.pluginState?.clearState) {
               card.pluginState.clearState(buildPluginCtx());

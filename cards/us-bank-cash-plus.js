@@ -483,6 +483,9 @@ window.CardTracker.cards['us-bank-cash-plus'] = {
   },
 
   pluginState: {
+    stateFields: [
+      { key: 'cashPlusCategories', storageKey: 'ccTracker_cashPlusCategories', defaultValue: {} }
+    ],
     keys: [{ stateKey: 'cashPlusCategories', localStorageKey: 'ccTracker_cashPlusCategories', default: {} }],
     exportState: function(ctx) { return { cashPlusCategories: ctx.state.cashPlusCategories }; },
     importState: function(data, ctx) {

@@ -1337,6 +1337,9 @@ window.CardTracker.biltPlugin = {
   // pluginState — export/import/clear for biltConfig
   // =========================================================================
   pluginState: {
+    stateFields: [
+      { key: 'biltConfig', storageKey: 'ccTracker_biltConfig', defaultValue: {} }
+    ],
     keys: [{ stateKey: 'biltConfig', localStorageKey: 'ccTracker_biltConfig', default: {} }],
     exportState: function(ctx) {
       return { biltConfig: ctx.state.biltConfig };

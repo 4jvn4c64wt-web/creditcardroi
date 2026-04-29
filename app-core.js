@@ -8325,92 +8325,14 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
   const cashPlusSelected = state.cashPlusCategories[txnQuarter] || { fivePercent: [], twoPercent: '' };
 
   function getDisplayRate(cat) {
-    if (cardId === 'chase-freedom-flex') {
-      // Check stored quarterly bonus categories first
-      const entry = cffEntries.find(e => e.key === cat);
-      if (entry) return { rate: entry.rate, bonus: true };
-      if (card.multipliers[cat]) return { rate: card.multipliers[cat], bonus: true };
-      return { rate: card.baseRate, bonus: false };
+    // Plugin hook: card-specific display rate (implemented in card files)
+    if (typeof card.getDisplayRate === 'function') {
+      const result = card.getDisplayRate(cat, txn?.date, buildPluginCtx());
+      if (result != null) return result;
     }
-    if (cardId === 'us-bank-cash-plus') {
-      if (cashPlusSelected.fivePercent?.includes(cat)) return { rate: 5, bonus: true };
-      if (cashPlusSelected.twoPercent === cat) return { rate: 2, bonus: true };
-      return { rate: 1, bonus: false };
-    }
-    // Bilt cards: check for legacy mode (before Feb 7, 2026)
-    if (card?.isBilt) {
-      let txnDateObj;
-      if (txn?.date) {
-        if (txn.date.includes('-')) {
-          const [year, month, day] = txn.date.split('-').map(Number);
-          txnDateObj = new Date(year, month - 1, day);
-        } else if (txn.date.includes('/')) {
-          const parts = txn.date.split('/');
-          const month = parseInt(parts[0]);
-          const day = parseInt(parts[1]);
-          let year = parseInt(parts[2]);
-          if (year < 100) year += 2000;
-          txnDateObj = new Date(year, month - 1, day);
-        } else {
-          txnDateObj = new Date(txn.date);
-        }
-      } else {
-        txnDateObj = new Date();
-      }
-      const isLegacy = txnDateObj.getTime() < window.CardTracker.biltPlugin.BILT_2_START.getTime();
-
-      if (isLegacy) {
-        // Legacy Bilt: 3x dining, 2x travel, 1x everything else (including rent)
-        if (cat === 'rent') return { rate: 1, bonus: false };
-        const legacyMult = card.legacy?.multipliers?.[cat];
-        return { rate: legacyMult || card.legacy?.baseRate || 1, bonus: !!legacyMult };
-      } else {
-        // Bilt 2.0: rent has variable "up to" rate
-        if (cat === 'rent') {
-          const cfg = state.biltConfig[cardId] || {};
-          if (cfg.rewardOption === 'housing-only') {
-            return { rate: 'up to ' + window.CardTracker.biltPlugin.RENT_TIERS[0].rate, bonus: true, isVariable: true };
-          } else {
-            return { rate: 'up to 1', bonus: true, isVariable: true };
-          }
-        }
-        // Bilt 2.0: use current multipliers/baseRate
-        const mult = card?.multipliers?.[cat];
-        return { rate: mult || card?.baseRate || 1, bonus: !!mult };
-      }
-    }
-    // CSR legacy mode (before Oct 26, 2025)
-    if (cardId === 'chase-sapphire-reserve' && card.legacyCutoffDate) {
-      let txnDateObj;
-      if (txn?.date) {
-        if (txn.date.includes('-')) {
-          const [year, month, day] = txn.date.split('-').map(Number);
-          txnDateObj = new Date(year, month - 1, day);
-        } else if (txn.date.includes('/')) {
-          const parts = txn.date.split('/');
-          const month = parseInt(parts[0]);
-          const day = parseInt(parts[1]);
-          let year = parseInt(parts[2]);
-          if (year < 100) year += 2000;
-          txnDateObj = new Date(year, month - 1, day);
-        } else {
-          txnDateObj = new Date(txn.date);
-        }
-      } else {
-        txnDateObj = new Date();
-      }
-      const cutoffParts = card.legacyCutoffDate.split('-').map(Number);
-      const cutoffDate = new Date(cutoffParts[0], cutoffParts[1] - 1, cutoffParts[2]);
-      const isLegacy = txnDateObj < cutoffDate;
-
-      if (isLegacy) {
-        // CSR Legacy: 10x chase-travel, 3x travel, 3x dining, 10x lyft, 1x base
-        const legacyMult = card.legacy?.multipliers?.[cat];
-        return { rate: legacyMult || card.legacy?.baseRate || 1, bonus: !!legacyMult };
-      }
-    }
-    const mult = card?.multipliers?.[cat];
-    return { rate: mult || card?.baseRate || 1, bonus: !!mult };
+    // Default fallback: derive rate from getMultiplier
+    const mult = getMultiplier(cardId, cat, txn?.date, txn?.merchant);
+    return { rate: mult.rate, bonus: mult.rate > (card.baseRate || 1) };
   }
   
   // Check if this is a low-confidence transaction

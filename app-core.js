@@ -7272,17 +7272,21 @@ function renderCreditCalendar() {
 
   if (!_calendarState) {
     _calendarState = {
-      zoom: 'monthly',
       year: state.selectedYear || todayYear,
       month: todayMonth,
       notShownExpanded: false,
-      enabledCards: null
+      enabledCards: null,
+      cardAccordion: {}
     };
   }
   const cs = _calendarState;
-  const year = cs.year;
+  if (!cs.cardAccordion) cs.cardAccordion = {};
 
-  // Collect unique card IDs that are in the wallet (from mappings + transactions)
+  const year = cs.year;
+  const month = cs.month;
+  const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  // Collect wallet cards
   const seenIds = new Set();
   Object.values(state.cardMappings || {}).forEach(v => {
     if (v && v !== 'skip' && v !== 'other-no-rewards' && CARDS[v]) seenIds.add(v);
@@ -7292,22 +7296,105 @@ function renderCreditCalendar() {
       if (t.cardId && t.cardId !== 'skip' && t.cardId !== 'other-no-rewards' && CARDS[t.cardId]) seenIds.add(t.cardId);
     });
   }
-
   const walletCards = [];
   seenIds.forEach(cardId => {
     const card = CARDS[cardId];
     if (!card || !card.credits || card.credits.length === 0) return;
-    const hasTrackable = card.credits.some(cr => (cr.frequency || 'annual') !== 'none');
-    if (!hasTrackable) return;
+    if (!card.credits.some(cr => (cr.frequency || 'annual') !== 'none')) return;
     walletCards.push({ cardId, card });
   });
-
   if (cs.enabledCards === null) {
     cs.enabledCards = {};
     walletCards.forEach(w => { cs.enabledCards[w.cardId] = true; });
   }
 
-  // Collect frequency:'none' credits for the notice, grouped by card
+  // Build credit data per enabled card — compute period status and urgency
+  const activeCards = walletCards.filter(w => !!cs.enabledCards[w.cardId]);
+  const cardData = activeCards.map(({ cardId, card }) => {
+    const trackable = card.credits.filter(cr =>
+      (cr.frequency || 'annual') !== 'none' && (state.disabledCredits[cardId] || []).indexOf(cr.name) < 0
+    );
+    const credits = trackable.map(cr => {
+      const freq = cr.frequency || 'annual';
+      let periodIndex = 0, periodLabel = '', deadlineStr = '';
+      if (freq === 'monthly') {
+        periodIndex = month;
+        periodLabel = 'monthly';
+        deadlineStr = 'Expires ' + MONTH_NAMES[month].slice(0, 3) + ' ' + new Date(year, month + 1, 0).getDate();
+      } else if (freq === 'quarterly') {
+        periodIndex = Math.floor(month / 3);
+        periodLabel = 'quarterly';
+        deadlineStr = 'Q' + (periodIndex + 1) + ' ends ' + ['Mar 31','Jun 30','Sep 30','Dec 31'][periodIndex];
+      } else if (freq === 'semi-annual') {
+        periodIndex = month < 6 ? 0 : 1;
+        periodLabel = 'semi-annual';
+        deadlineStr = periodIndex === 0 ? 'Expires Jun 30' : 'Expires Dec 31';
+      } else {
+        periodIndex = 0;
+        periodLabel = 'annual';
+        deadlineStr = cr.resetBasis === 'anniversary' ? 'Resets on anniversary' : 'Expires Dec 31';
+      }
+      const status = getCreditPeriodStatus(cardId, cr, year, periodIndex);
+      const displayStatus = status.isComplete ? 'done' : (status.usedAmount > 0 ? 'partial' : 'urgent');
+      return { cr, freq, periodLabel, deadlineStr, status, displayStatus };
+    });
+    const urgentCount = credits.filter(c => c.displayStatus === 'urgent').length;
+    const partialCount = credits.filter(c => c.displayStatus === 'partial').length;
+    const allDone = urgentCount === 0 && partialCount === 0;
+    const sortKey = urgentCount > 0 ? 0 : partialCount > 0 ? 1 : 2;
+    return { cardId, card, credits, urgentCount, partialCount, allDone, sortKey };
+  });
+  cardData.sort((a, b) => a.sortKey - b.sortKey || (a.card.name || '').localeCompare(b.card.name || ''));
+
+  // Accordion open/closed logic — collapsed by default only when all credits are done
+  function isCollapsed(cd) {
+    const explicit = cs.cardAccordion[cd.cardId];
+    return explicit !== undefined ? explicit : cd.allDone;
+  }
+
+  // Build accordion HTML
+  let accordionHtml = '';
+  if (cardData.length === 0) {
+    accordionHtml = `<div style="text-align:center;padding:48px;color:#a8a29e;background:#fafaf9;border-radius:8px;border:1px solid #e7e5e4;">No active cards. Use the sidebar to enable cards.</div>`;
+  } else {
+    cardData.forEach(cd => {
+      const color = getCardColor(cd.cardId);
+      const collapsed = isCollapsed(cd);
+
+      const statusTag = cd.allDone
+        ? `<span style="font-size:11px;font-weight:500;color:#16a34a;background:#dcfce7;padding:2px 7px;border-radius:10px;">✓ All done</span>`
+        : cd.urgentCount > 0
+          ? `<span style="font-size:11px;font-weight:500;color:#dc2626;background:#fee2e2;padding:2px 7px;border-radius:10px;">${cd.urgentCount} action${cd.urgentCount > 1 ? 's' : ''} needed</span>`
+          : `<span style="font-size:11px;font-weight:500;color:#d97706;background:#fef9c3;padding:2px 7px;border-radius:10px;">${cd.partialCount} in progress</span>`;
+
+      const arrowStyle = `display:inline-block;transition:transform .15s;transform:${collapsed ? 'rotate(0deg)' : 'rotate(90deg)'};font-size:10px;color:#78716c;`;
+      const headerBg = cd.allDone ? '#fafaf9' : cd.urgentCount > 0 ? '#fff8f8' : '#fffdf0';
+      const borderColor = cd.allDone ? '#e7e5e4' : cd.urgentCount > 0 ? '#fecaca' : '#fde68a';
+
+      let bodyHtml = '';
+      if (!collapsed) {
+        const sorted = [...cd.credits].sort((a, b) => {
+          const o = { urgent: 0, partial: 1, done: 2 };
+          return o[a.displayStatus] - o[b.displayStatus];
+        });
+        bodyHtml = `<div style="padding:10px 12px;display:flex;flex-direction:column;gap:8px;border-top:1px solid ${borderColor};">
+          ${sorted.map(c => _calBuildCreditRow(cd.cardId, c, year, month)).join('')}
+        </div>`;
+      }
+
+      accordionHtml += `<div style="margin-bottom:8px;border:1px solid ${borderColor};border-radius:8px;overflow:hidden;">
+        <button class="cal-accord-btn" data-card-id="${escapeHtml(cd.cardId)}" style="width:100%;display:flex;align-items:center;gap:10px;padding:10px 14px;background:${headerBg};border:none;cursor:pointer;font-family:inherit;text-align:left;">
+          <span style="${arrowStyle}">&#9654;</span>
+          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:600;color:#1c1917;flex:1;">${escapeHtml(cd.card.shortName || cd.card.name)}</span>
+          ${statusTag}
+        </button>
+        ${bodyHtml}
+      </div>`;
+    });
+  }
+
+  // Not-shown notice
   const noneByCard = {};
   walletCards.forEach(({ cardId, card }) => {
     card.credits.forEach(cr => {
@@ -7317,102 +7404,38 @@ function renderCreditCalendar() {
       }
     });
   });
-  const hasNoneCredits = Object.keys(noneByCard).length > 0;
-
-  const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-
-  // Zoom segmented control (chips removed — toggles live with each card in the side panel)
-  const zoomLabels = { monthly: 'Month', twomonth: '2-Month', annual: 'Annual' };
-  const zoomBtns = ['monthly', 'twomonth', 'annual'].map(z => {
-    const active = cs.zoom === z;
-    return `<button class="cal-zoom-btn" data-zoom="${z}" style="padding:6px 14px;border:1px solid ${active ? '#1c1917' : '#e7e5e4'};border-radius:6px;background:${active ? '#1c1917' : '#fff'};color:${active ? '#fff' : '#78716c'};font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;">${zoomLabels[z]}</button>`;
-  }).join('');
-
-  // "Not shown" notice
   let noneNoticeHtml = '';
-  if (hasNoneCredits) {
+  if (Object.keys(noneByCard).length > 0) {
     const listHtml = Object.keys(noneByCard).map(cid => {
       const nc = noneByCard[cid];
-      return `<div style="margin-bottom:5px;"><strong>${escapeHtml(nc.cardName)}:</strong> ${nc.credits.map(c => escapeHtml(c)).join(', ')}</div>`;
+      return `<div style="margin-bottom:4px;font-size:12px;"><strong>${escapeHtml(nc.cardName)}:</strong> ${nc.credits.map(c => escapeHtml(c)).join(', ')}</div>`;
     }).join('');
-    noneNoticeHtml = `
-      <div style="margin-bottom:16px;border:1px solid #e7e5e4;border-radius:8px;overflow:hidden;">
-        <button id="calNoneToggle" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#fafaf9;border:none;cursor:pointer;font-family:inherit;font-size:13px;color:#78716c;">
-          <span>Some benefits not shown in calendar</span>
-          <span id="calNoneArrow" style="display:inline-block;transition:transform .2s;transform:${cs.notShownExpanded ? 'rotate(90deg)' : 'rotate(0deg)'};">&#9654;</span>
-        </button>
-        <div id="calNoneContent" style="display:${cs.notShownExpanded ? 'block' : 'none'};padding:12px 14px;font-size:12px;color:#78716c;">
-          <p style="margin:0 0 8px;">These are set-and-forget benefits that don't require monthly action. They're still tracked in Card Config.</p>
-          ${listHtml}
-        </div>
-      </div>`;
-  }
-
-  // Month navigation bar (monthly and two-month views)
-  let navHtml = '';
-  if (cs.zoom === 'monthly') {
-    navHtml = `
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
-        <button id="calPrevMonth" style="padding:6px 14px;border:1px solid #e7e5e4;border-radius:6px;background:#fff;cursor:pointer;font-size:15px;font-family:inherit;">&#8592;</button>
-        <span style="font-size:15px;font-weight:600;min-width:180px;text-align:center;">${MONTH_NAMES[cs.month]} ${year}</span>
-        <button id="calNextMonth" style="padding:6px 14px;border:1px solid #e7e5e4;border-radius:6px;background:#fff;cursor:pointer;font-size:15px;font-family:inherit;">&#8594;</button>
-      </div>`;
-  } else if (cs.zoom === 'twomonth') {
-    const m2 = cs.month === 11 ? 0 : cs.month + 1;
-    const y2 = cs.month === 11 ? year + 1 : year;
-    navHtml = `
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
-        <button id="calPrevMonth" style="padding:6px 14px;border:1px solid #e7e5e4;border-radius:6px;background:#fff;cursor:pointer;font-size:15px;font-family:inherit;">&#8592;</button>
-        <span style="font-size:15px;font-weight:600;min-width:300px;text-align:center;">${MONTH_NAMES[cs.month]} ${year} &amp; ${MONTH_NAMES[m2]} ${y2}</span>
-        <button id="calNextMonth" style="padding:6px 14px;border:1px solid #e7e5e4;border-radius:6px;background:#fff;cursor:pointer;font-size:15px;font-family:inherit;">&#8594;</button>
-      </div>`;
-  }
-
-  const activeCards = walletCards.filter(w => !!cs.enabledCards[w.cardId]);
-
-  const toggleSidebar = _calBuildCardToggleSidebar(walletCards, cs.enabledCards);
-
-  let contentHtml = '';
-  let containerMaxWidth = '1280px';
-  if (walletCards.length === 0) {
-    contentHtml = `<div style="text-align:center;padding:48px 24px;color:#78716c;font-size:14px;background:#fafaf9;border-radius:8px;border:1px solid #e7e5e4;">No cards with trackable credits. Add a card with credits to start tracking.</div>`;
-  } else if (cs.zoom === 'monthly') {
-    // Side panel handles both card toggles and credit details
-    contentHtml = `<div style="display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:20px;align-items:start;">
-      <div>${_calBuildMonthGrid(activeCards, year, cs.month, todayYear, todayMonth)}</div>
-      <div>${_calBuildMonthSidePanel(walletCards, cs.enabledCards, year, cs.month, todayYear, todayMonth)}</div>
-    </div>`;
-  } else if (cs.zoom === 'twomonth') {
-    const m2 = cs.month === 11 ? 0 : cs.month + 1;
-    const y2 = cs.month === 11 ? year + 1 : year;
-    contentHtml = `<div style="display:grid;grid-template-columns:minmax(0,1fr) 160px;gap:20px;align-items:start;">
-      <div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
-          <div>${_calBuildMonthGrid(activeCards, year, cs.month, todayYear, todayMonth)}</div>
-          <div>${_calBuildMonthGrid(activeCards, y2, m2, todayYear, todayMonth)}</div>
-        </div>
-      </div>
-      <div>${toggleSidebar}</div>
-    </div>`;
-  } else {
-    contentHtml = `<div style="display:grid;grid-template-columns:minmax(0,1fr) 160px;gap:20px;align-items:start;">
-      <div>${_calBuildAnnualGrid(activeCards, year, todayYear, todayMonth)}</div>
-      <div>${toggleSidebar}</div>
+    noneNoticeHtml = `<div style="border:1px solid #e7e5e4;border-radius:8px;overflow:hidden;margin-bottom:16px;">
+      <button id="calNoneToggle" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:#fafaf9;border:none;cursor:pointer;font-family:inherit;font-size:12px;color:#78716c;">
+        <span>Some set-and-forget benefits not shown</span>
+        <span id="calNoneArrow" style="transition:transform .15s;display:inline-block;transform:${cs.notShownExpanded ? 'rotate(90deg)' : 'rotate(0deg)'};">&#9654;</span>
+      </button>
+      <div id="calNoneContent" style="display:${cs.notShownExpanded ? 'block' : 'none'};padding:10px 14px;">${listHtml}</div>
     </div>`;
   }
 
   container.innerHTML = `
-    <div style="max-width:${containerMaxWidth};margin:0 auto;padding:24px;">
-      <div style="display:flex;align-items:center;justify-content:flex-end;margin-bottom:16px;">
-        <div style="display:flex;gap:6px;">${zoomBtns}</div>
+    <div style="max-width:860px;margin:0 auto;padding:24px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button id="calPrevMonth" style="padding:5px 12px;border:1px solid #e7e5e4;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;font-family:inherit;">&#8592;</button>
+          <span style="font-size:15px;font-weight:600;min-width:155px;text-align:center;">${MONTH_NAMES[month]} ${year}</span>
+          <button id="calNextMonth" style="padding:5px 12px;border:1px solid #e7e5e4;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;font-family:inherit;">&#8594;</button>
+        </div>
       </div>
       ${noneNoticeHtml}
-      ${navHtml}
-      <div id="calContent">${contentHtml}</div>
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) 160px;gap:20px;align-items:start;">
+        <div>${accordionHtml}</div>
+        <div>${_calBuildCardToggleSidebar(walletCards, cs.enabledCards)}</div>
+      </div>
     </div>`;
 
-  // --- Event listeners ---
-
+  // Event listeners
   container.querySelectorAll('.cal-chip').forEach(btn => {
     btn.addEventListener('click', () => {
       cs.enabledCards[btn.dataset.cardId] = !cs.enabledCards[btn.dataset.cardId];
@@ -7420,24 +7443,16 @@ function renderCreditCalendar() {
     });
   });
 
-  container.querySelectorAll('.cal-zoom-btn').forEach(btn => {
-    btn.addEventListener('click', () => { cs.zoom = btn.dataset.zoom; renderCreditCalendar(); });
-  });
-
-  const prevBtn = document.getElementById('calPrevMonth');
-  if (prevBtn) prevBtn.addEventListener('click', () => {
+  document.getElementById('calPrevMonth')?.addEventListener('click', () => {
     if (cs.month === 0) { cs.month = 11; cs.year--; } else cs.month--;
     renderCreditCalendar();
   });
-
-  const nextBtn = document.getElementById('calNextMonth');
-  if (nextBtn) nextBtn.addEventListener('click', () => {
+  document.getElementById('calNextMonth')?.addEventListener('click', () => {
     if (cs.month === 11) { cs.month = 0; cs.year++; } else cs.month++;
     renderCreditCalendar();
   });
 
-  const noneToggle = document.getElementById('calNoneToggle');
-  if (noneToggle) noneToggle.addEventListener('click', () => {
+  document.getElementById('calNoneToggle')?.addEventListener('click', () => {
     cs.notShownExpanded = !cs.notShownExpanded;
     const el = document.getElementById('calNoneContent');
     const arrow = document.getElementById('calNoneArrow');
@@ -7445,30 +7460,112 @@ function renderCreditCalendar() {
     if (arrow) arrow.style.transform = cs.notShownExpanded ? 'rotate(90deg)' : 'rotate(0deg)';
   });
 
-  container.querySelectorAll('.cal-log-btn').forEach(btn => {
+  container.querySelectorAll('.cal-accord-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const { cardId, creditName, month: mStr, year: yStr } = btn.dataset;
-      const monthIdx = parseInt(mStr);
-      const logYear = parseInt(yStr);
-      if (!state.monthlyCredits[cardId]) state.monthlyCredits[cardId] = {};
-      if (!state.monthlyCredits[cardId][creditName]) state.monthlyCredits[cardId][creditName] = {};
-      if (!state.monthlyCredits[cardId][creditName][logYear]) state.monthlyCredits[cardId][creditName][logYear] = [];
-      const claimed = state.monthlyCredits[cardId][creditName][logYear];
-      if (claimed.indexOf(monthIdx) < 0) {
-        claimed.push(monthIdx);
-        safeLocalStorageSet('ccTracker_monthlyCredits', state.monthlyCredits);
-      }
+      const cd = cardData.find(c => c.cardId === btn.dataset.cardId);
+      if (cd) cs.cardAccordion[cd.cardId] = !isCollapsed(cd);
       renderCreditCalendar();
     });
   });
 
-  container.querySelectorAll('.cal-annual-cell[data-month], .cal-mini-month[data-month]').forEach(cell => {
-    cell.addEventListener('click', () => {
-      cs.zoom = 'monthly';
-      cs.month = parseInt(cell.dataset.month);
+  container.querySelectorAll('.cal-log-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const { cardId, creditName, month: mStr, year: yStr } = btn.dataset;
+      const monthIdx = parseInt(mStr), logYear = parseInt(yStr);
+      if (!state.monthlyCredits[cardId]) state.monthlyCredits[cardId] = {};
+      if (!state.monthlyCredits[cardId][creditName]) state.monthlyCredits[cardId][creditName] = {};
+      if (!state.monthlyCredits[cardId][creditName][logYear]) state.monthlyCredits[cardId][creditName][logYear] = [];
+      const claimed = state.monthlyCredits[cardId][creditName][logYear];
+      if (claimed.indexOf(monthIdx) < 0) { claimed.push(monthIdx); safeLocalStorageSet('ccTracker_monthlyCredits', state.monthlyCredits); }
       renderCreditCalendar();
     });
   });
+}
+
+// Renders a single credit row inside a card accordion body.
+// creditData: { cr, freq, periodLabel, deadlineStr, status, displayStatus }
+function _calBuildCreditRow(cardId, creditData, year, month) {
+  const { cr, periodLabel, deadlineStr, status, displayStatus } = creditData;
+  const { periodAmount, usedAmount, isComplete, transactions } = status;
+  const color = getCardColor(cardId);
+  const icon = getCreditIcon(cr.name);
+
+  // Status indicator circle
+  let circleStyle, circleContent;
+  if (isComplete) {
+    circleStyle = `display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#16a34a;color:#fff;font-size:11px;flex-shrink:0;`;
+    circleContent = '✓';
+  } else if (displayStatus === 'partial') {
+    circleStyle = `display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#fef9c3;border:2px solid #d97706;color:#d97706;font-size:11px;flex-shrink:0;`;
+    circleContent = '◐';
+  } else {
+    circleStyle = `display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#fff;border:2px solid #d1d5db;color:#9ca3af;font-size:11px;flex-shrink:0;`;
+    circleContent = '○';
+  }
+
+  // Amount display
+  let amountStr = '';
+  if (isComplete) {
+    amountStr = `<span style="font-size:12px;color:#16a34a;font-weight:500;">$${periodAmount} used</span>`;
+  } else if (displayStatus === 'partial') {
+    amountStr = `<span style="font-size:12px;color:#d97706;font-weight:500;">$${usedAmount} of $${periodAmount}</span>`;
+  } else {
+    amountStr = `<span style="font-size:12px;color:#6b7280;">$${periodAmount} available</span>`;
+  }
+
+  // Progress bar (only when partial)
+  let progressBar = '';
+  if (displayStatus === 'partial' && periodAmount > 0) {
+    const pct = Math.min(100, Math.round((usedAmount / periodAmount) * 100));
+    progressBar = `<div style="height:3px;background:#e5e7eb;border-radius:2px;margin-top:4px;overflow:hidden;">
+      <div style="height:100%;width:${pct}%;background:#d97706;border-radius:2px;"></div>
+    </div>`;
+  }
+
+  // Auto-detected transaction pills
+  let txPills = '';
+  if (!cr.manual && transactions && transactions.length > 0) {
+    const pills = transactions.slice(0, 3).map(tx => {
+      const desc = tx.description ? tx.description.slice(0, 22) : '';
+      const amt = tx.amount ? ` $${Math.abs(tx.amount).toFixed(2)}` : '';
+      return `<span style="display:inline-block;background:#dbeafe;color:#1d4ed8;font-size:10px;padding:1px 6px;border-radius:10px;white-space:nowrap;">Auto${amt}${desc ? ' · ' + desc : ''}</span>`;
+    }).join('');
+    txPills = `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;">${pills}</div>`;
+  }
+
+  // Log Credit Used button for manual, incomplete credits
+  let logBtn = '';
+  if (cr.manual && !isComplete) {
+    const alreadyLogged = usedAmount > 0;
+    const btnLabel = alreadyLogged ? 'Log Again' : 'Log Used';
+    logBtn = `<button class="cal-log-btn"
+      data-card-id="${escapeHtml(cardId)}"
+      data-credit-name="${escapeHtml(cr.name)}"
+      data-month="${month}"
+      data-year="${year}"
+      style="margin-top:6px;padding:3px 10px;font-size:11px;font-weight:500;color:#fff;background:#16a34a;border:none;border-radius:5px;cursor:pointer;font-family:inherit;">${btnLabel}</button>`;
+  }
+
+  const freqLabel = periodLabel ? `<span style="font-size:11px;color:#9ca3af;font-weight:400;">(${periodLabel})</span>` : '';
+  const deadlineEl = deadlineStr ? `<span style="font-size:11px;color:#9ca3af;">${deadlineStr}</span>` : '';
+
+  return `<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:6px;background:${isComplete ? '#f0fdf4' : displayStatus === 'partial' ? '#fffdf0' : '#fff'};border:1px solid ${isComplete ? '#bbf7d0' : displayStatus === 'partial' ? '#fde68a' : '#f3f4f6'};">
+    <span style="${circleStyle}">${circleContent}</span>
+    <span style="font-size:16px;color:${color};">${icon}</span>
+    <div style="flex:1;min-width:0;">
+      <div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;">
+        <span style="font-size:13px;font-weight:500;color:#1c1917;">${escapeHtml(cr.name)}</span>
+        ${freqLabel}
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:2px;flex-wrap:wrap;">
+        ${amountStr}
+        ${deadlineEl}
+      </div>
+      ${progressBar}
+      ${txPills}
+      ${logBtn}
+    </div>
+  </div>`;
 }
 
 // Card-specific colors. Falls back to a hashed palette for unknown cards.

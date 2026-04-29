@@ -1062,28 +1062,19 @@ function calculateBiltRentPoints(cardId, rentAmount, everydaySpend, billingMonth
     
     return { points, rate, reason };
   } else {
-    // Flexible Bilt Cash: user specifies how much Bilt Cash to redeem
-    // $3 Bilt Cash = 100 points on $100 rent (i.e., $30 = 1000 pts on $1000)
-    const monthlyBiltCash = cfg.monthlyBiltCashRedemption || 0;
-    const maxPointsUnlocked = (monthlyBiltCash / 3) * 100;
-    const points = Math.min(maxPointsUnlocked, rentAmount); // Cap at 1x rent
-    const effectiveRate = rentAmount > 0 ? points / rentAmount : 0;
-
-    // For unconfigured cards, use conservative 1x default
-    const isConfigured = isBiltCardConfigured(cardId);
-    if (effectiveRate <= 0 && !isConfigured && rentAmount > 0) {
-      return {
-        points: Math.round(rentAmount * 1),
-        rate: 1,
-        reason: '1x rent (estimated - configure card for actual rate)'
-      };
+    // Bilt Cash mode: assume the user redeems enough Bilt Cash to fully
+    // fund 1x rent points, unless the user has marked this month as
+    // "not redeemed" in the Bilt Card Config.
+    const unredeemed = (cfg.biltCashUnredeemedMonths && cfg.biltCashUnredeemedMonths[billingYear]) || [];
+    const monthIdx = (billingMonth || 1) - 1;
+    if (unredeemed.indexOf(monthIdx) !== -1) {
+      return { points: 0, rate: 0, reason: 'Bilt Cash not redeemed this month (config)' };
     }
-
-    const reason = points > 0
-      ? `~${(effectiveRate * 100).toFixed(0)}% rent via $${monthlyBiltCash} Bilt Cash`
-      : 'No Bilt Cash allocated for rent';
-
-    return { points: Math.round(points), rate: effectiveRate, reason };
+    return {
+      points: Math.round(rentAmount),
+      rate: 1,
+      reason: '1x rent (Bilt Cash redeemed for full value)'
+    };
   }
 }
 

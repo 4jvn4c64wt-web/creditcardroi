@@ -7325,6 +7325,23 @@ function renderCreditCalendar() {
   }
   const activeCards = walletCards.filter(w => !!cs.enabledCards[w.cardId]);
 
+  // Empty state: no cards with trackable credits
+  if (walletCards.length === 0) {
+    container.innerHTML = `
+      <div style="max-width:480px;margin:72px auto;text-align:center;padding:24px;">
+        <div style="font-size:44px;margin-bottom:16px;">💳</div>
+        <h2 style="font-size:18px;font-weight:700;color:#1c1917;margin:0 0 10px;">No cards with trackable credits</h2>
+        <p style="font-size:13px;color:#78716c;line-height:1.6;margin:0 0 24px;">Add a card that has periodic credits — like dining, travel, or Uber Cash — to start tracking deadlines here.</p>
+        <button id="calAddCardBtn" style="padding:9px 22px;font-size:13px;font-weight:600;background:#1c1917;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit;">Add Card Now</button>
+      </div>`;
+    document.getElementById('calAddCardBtn')?.addEventListener('click', () => {
+      document.getElementById('resultsSection').classList.add('hidden');
+      document.getElementById('uploadSection').classList.remove('hidden');
+      window.scrollTo(0, 0);
+    });
+    return;
+  }
+
   function deadlineMonthsForFreq(freq) {
     if (freq === 'monthly') return [0,1,2,3,4,5,6,7,8,9,10,11];
     if (freq === 'quarterly') return [2,5,8,11];
@@ -7367,7 +7384,7 @@ function renderCreditCalendar() {
     }).filter(Boolean);
   }
 
-  function buildMonthSummary(cardGroups) {
+  function buildMonthSummary(cardGroups, m) {
     let total = 0, done = 0, totalAmt = 0, usedAmt = 0;
     cardGroups.forEach(({ credits }) => credits.forEach(c => {
       total++;
@@ -7378,7 +7395,8 @@ function renderCreditCalendar() {
     if (total === 0) return '';
     if (done === total) return `✓ All ${total} credits used`;
     const unused = totalAmt - usedAmt;
-    return `${done} of ${total} used · $${Math.round(unused)} remaining`;
+    const isPastMonth = year < todayYear || (year === todayYear && m < todayMonth);
+    return `${done} of ${total} used · $${Math.round(unused)} ${isPastMonth ? 'expired' : 'remaining'}`;
   }
 
   // Build 12 month cards
@@ -7393,7 +7411,7 @@ function renderCreditCalendar() {
       : cardGroups;
 
     const expanded = isMonthExpanded(m) && !(cs.unusedOnly && allDone);
-    const summary = buildMonthSummary(cardGroups);
+    const summary = buildMonthSummary(cardGroups, m);
 
     const headerBg = isCurrentMonth ? '#eff6ff' : isPast ? '#f3f4f6' : '#f9fafb';
     const headerColor = isCurrentMonth ? '#1d4ed8' : '#1c1917';
@@ -7464,9 +7482,11 @@ function renderCreditCalendar() {
     </div>`;
   }
 
-  const unusedBtnStyle = cs.unusedOnly
-    ? 'background:#1c1917;color:#fff;border-color:#1c1917;'
-    : 'background:#fff;color:#374151;border-color:#d1d5db;';
+  const unusedChkBg = cs.unusedOnly ? '#1c1917' : 'transparent';
+  const unusedChkBorder = cs.unusedOnly ? '#1c1917' : '#d1d5db';
+  const unusedRowBorder = cs.unusedOnly ? '#1c191733' : '#f0eeec';
+  const unusedRowBg = cs.unusedOnly ? '#1c19170c' : '#fafaf9';
+  const unusedLabelColor = cs.unusedOnly ? '#1c1917' : '#78716c';
 
   const cardChipsHtml = walletCards.map(({ cardId, card }) => {
     const on = !!cs.enabledCards[cardId];
@@ -7489,8 +7509,12 @@ function renderCreditCalendar() {
     const items = noneRows.map(({ card, nones }) =>
       `<div style="margin-bottom:3px;"><strong>${escapeHtml(card.shortName || card.name)}:</strong> ${nones.map(cr => escapeHtml(cr.name)).join(', ')}</div>`
     ).join('');
+    const tipText = "These credits are activated once and stay active — like a membership or enrollment. Unlike the credits above, they don’t need to be redeemed each month.";
     noneNoteHtml = `<div style="margin-top:10px;border-top:1px solid #f0eeec;padding-top:10px;">
-      <p style="font-size:10px;color:#a8a29e;font-style:italic;line-height:1.5;margin:0 0 5px;">Set-it-and-forget-it benefits not shown here:</p>
+      <div style="display:flex;align-items:flex-start;gap:5px;margin-bottom:5px;">
+        <span style="font-size:10px;color:#a8a29e;font-style:italic;line-height:1.5;">Set-it-and-forget-it benefits not shown here:</span>
+        <span class="cal-auto-circle" data-tooltip="${escapeHtml(tipText)}" style="display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;min-width:13px;border-radius:50%;border:1px solid #d1d5db;background:#f9fafb;font-size:9px;color:#9ca3af;cursor:default;margin-top:1px;">ⓘ</span>
+      </div>
       <div style="font-size:10px;color:#a8a29e;line-height:1.6;">${items}</div>
     </div>`;
   }
@@ -7512,9 +7536,10 @@ function renderCreditCalendar() {
         <div style="position:sticky;top:16px;">
           <div style="background:#fff;border:1px solid #e7e5e4;border-radius:8px;padding:12px;">
             ${yearSelectorHtml}
-            <div style="margin-bottom:10px;">
-              <button id="calUnusedOnly" style="width:100%;padding:5px 10px;font-size:12px;font-weight:500;border:1px solid;border-radius:6px;cursor:pointer;font-family:inherit;${unusedBtnStyle}">Unused only</button>
-            </div>
+            <button id="calUnusedOnly" style="display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;margin-bottom:10px;border:1px solid ${unusedRowBorder};border-radius:6px;background:${unusedRowBg};cursor:pointer;font-family:inherit;text-align:left;">
+              <span style="flex-shrink:0;width:14px;height:14px;border-radius:3px;border:2px solid ${unusedChkBorder};background:${unusedChkBg};display:inline-flex;align-items:center;justify-content:center;font-size:9px;color:#fff;font-weight:700;">${cs.unusedOnly ? '✓' : ''}</span>
+              <span style="font-size:11px;font-weight:500;color:${unusedLabelColor};">Unused only</span>
+            </button>
             <div style="font-size:11px;font-weight:600;color:#78716c;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px;">Cards</div>
             ${cardChipsHtml}
             ${noneNoteHtml}

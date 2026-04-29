@@ -7271,19 +7271,10 @@ function renderCreditCalendar() {
   const todayMonth = now.getMonth();
 
   if (!_calendarState) {
-    _calendarState = {
-      year: state.selectedYear || todayYear,
-      month: todayMonth,
-      notShownExpanded: false,
-      enabledCards: null,
-      cardAccordion: {}
-    };
+    _calendarState = { year: state.selectedYear || todayYear, enabledCards: null };
   }
   const cs = _calendarState;
-  if (!cs.cardAccordion) cs.cardAccordion = {};
-
   const year = cs.year;
-  const month = cs.month;
   const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
   // Collect wallet cards
@@ -7307,131 +7298,96 @@ function renderCreditCalendar() {
     cs.enabledCards = {};
     walletCards.forEach(w => { cs.enabledCards[w.cardId] = true; });
   }
-
-  // Build credit data per enabled card — compute period status and urgency
   const activeCards = walletCards.filter(w => !!cs.enabledCards[w.cardId]);
-  const cardData = activeCards.map(({ cardId, card }) => {
-    const trackable = card.credits.filter(cr =>
-      (cr.frequency || 'annual') !== 'none' && (state.disabledCredits[cardId] || []).indexOf(cr.name) < 0
-    );
-    const credits = trackable.map(cr => {
-      const freq = cr.frequency || 'annual';
-      let periodIndex = 0, periodLabel = '', deadlineStr = '';
-      if (freq === 'monthly') {
-        periodIndex = month;
-        periodLabel = 'monthly';
-        deadlineStr = 'Expires ' + MONTH_NAMES[month].slice(0, 3) + ' ' + new Date(year, month + 1, 0).getDate();
-      } else if (freq === 'quarterly') {
-        periodIndex = Math.floor(month / 3);
-        periodLabel = 'quarterly';
-        deadlineStr = 'Q' + (periodIndex + 1) + ' ends ' + ['Mar 31','Jun 30','Sep 30','Dec 31'][periodIndex];
-      } else if (freq === 'semi-annual') {
-        periodIndex = month < 6 ? 0 : 1;
-        periodLabel = 'semi-annual';
-        deadlineStr = periodIndex === 0 ? 'Expires Jun 30' : 'Expires Dec 31';
-      } else {
-        periodIndex = 0;
-        periodLabel = 'annual';
-        deadlineStr = cr.resetBasis === 'anniversary' ? 'Resets on anniversary' : 'Expires Dec 31';
-      }
-      const status = getCreditPeriodStatus(cardId, cr, year, periodIndex);
-      const displayStatus = status.isComplete ? 'done' : (status.usedAmount > 0 ? 'partial' : 'urgent');
-      return { cr, freq, periodLabel, deadlineStr, status, displayStatus };
-    });
-    const urgentCount = credits.filter(c => c.displayStatus === 'urgent').length;
-    const partialCount = credits.filter(c => c.displayStatus === 'partial').length;
-    const allDone = urgentCount === 0 && partialCount === 0;
-    const sortKey = urgentCount > 0 ? 0 : partialCount > 0 ? 1 : 2;
-    return { cardId, card, credits, urgentCount, partialCount, allDone, sortKey };
-  });
-  cardData.sort((a, b) => a.sortKey - b.sortKey || (a.card.name || '').localeCompare(b.card.name || ''));
 
-  // Accordion open/closed logic — collapsed by default only when all credits are done
-  function isCollapsed(cd) {
-    const explicit = cs.cardAccordion[cd.cardId];
-    return explicit !== undefined ? explicit : cd.allDone;
+  // Calendar months where each frequency type has a period deadline
+  function deadlineMonthsForFreq(freq) {
+    if (freq === 'monthly') return [0,1,2,3,4,5,6,7,8,9,10,11];
+    if (freq === 'quarterly') return [2,5,8,11];
+    if (freq === 'semi-annual') return [5,11];
+    return [11]; // annual (calendar-year)
   }
 
-  // Build accordion HTML
-  let accordionHtml = '';
-  if (cardData.length === 0) {
-    accordionHtml = `<div style="text-align:center;padding:48px;color:#a8a29e;background:#fafaf9;border-radius:8px;border:1px solid #e7e5e4;">No active cards. Use the sidebar to enable cards.</div>`;
-  } else {
-    cardData.forEach(cd => {
-      const color = getCardColor(cd.cardId);
-      const collapsed = isCollapsed(cd);
+  // Build 12 month cards
+  const monthGridHtml = MONTH_NAMES.map((monthName, m) => {
+    const isCurrentMonth = year === todayYear && m === todayMonth;
+    const isPast = year < todayYear || (year === todayYear && m < todayMonth);
 
-      const statusTag = cd.allDone
-        ? `<span style="font-size:11px;font-weight:500;color:#16a34a;background:#dcfce7;padding:2px 7px;border-radius:10px;">✓ All done</span>`
-        : cd.urgentCount > 0
-          ? `<span style="font-size:11px;font-weight:500;color:#dc2626;background:#fee2e2;padding:2px 7px;border-radius:10px;">${cd.urgentCount} action${cd.urgentCount > 1 ? 's' : ''} needed</span>`
-          : `<span style="font-size:11px;font-weight:500;color:#d97706;background:#fef9c3;padding:2px 7px;border-radius:10px;">${cd.partialCount} in progress</span>`;
+    let sectionsHtml = '';
+    activeCards.forEach(({ cardId, card }) => {
+      const trackable = card.credits.filter(cr => {
+        const freq = cr.frequency || 'annual';
+        if (freq === 'none') return false;
+        if ((state.disabledCredits[cardId] || []).indexOf(cr.name) >= 0) return false;
+        // Anniversary-basis annual credits have no fixed calendar deadline month
+        if (freq === 'annual' && cr.resetBasis === 'anniversary') return false;
+        return deadlineMonthsForFreq(freq).indexOf(m) >= 0;
+      });
+      if (trackable.length === 0) return;
 
-      const arrowStyle = `display:inline-block;transition:transform .15s;transform:${collapsed ? 'rotate(0deg)' : 'rotate(90deg)'};font-size:10px;color:#78716c;`;
-      const headerBg = cd.allDone ? '#fafaf9' : cd.urgentCount > 0 ? '#fff8f8' : '#fffdf0';
-      const borderColor = cd.allDone ? '#e7e5e4' : cd.urgentCount > 0 ? '#fecaca' : '#fde68a';
+      const color = getCardColor(cardId);
+      const rows = trackable.map(cr => {
+        const freq = cr.frequency || 'annual';
+        let periodIndex, periodLabel, deadlineStr;
+        if (freq === 'monthly') {
+          periodIndex = m;
+          periodLabel = 'monthly';
+          deadlineStr = 'Expires ' + monthName.slice(0, 3) + ' ' + new Date(year, m + 1, 0).getDate();
+        } else if (freq === 'quarterly') {
+          periodIndex = Math.floor(m / 3);
+          periodLabel = 'quarterly';
+          deadlineStr = 'Q' + (periodIndex + 1) + ' ends ' + ['Mar 31','Jun 30','Sep 30','Dec 31'][periodIndex];
+        } else if (freq === 'semi-annual') {
+          periodIndex = m < 6 ? 0 : 1;
+          periodLabel = 'semi-annual';
+          deadlineStr = m < 6 ? 'Expires Jun 30' : 'Expires Dec 31';
+        } else {
+          periodIndex = 0;
+          periodLabel = 'annual';
+          deadlineStr = 'Expires Dec 31';
+        }
+        const status = getCreditPeriodStatus(cardId, cr, year, periodIndex);
+        const displayStatus = status.isComplete ? 'done' : (status.usedAmount > 0 ? 'partial' : 'urgent');
+        return _calBuildCreditRow(cardId, { cr, freq, periodLabel, deadlineStr, status, displayStatus }, year, m);
+      }).join('');
 
-      let bodyHtml = '';
-      if (!collapsed) {
-        const sorted = [...cd.credits].sort((a, b) => {
-          const o = { urgent: 0, partial: 1, done: 2 };
-          return o[a.displayStatus] - o[b.displayStatus];
-        });
-        bodyHtml = `<div style="padding:10px 12px;display:flex;flex-direction:column;gap:8px;border-top:1px solid ${borderColor};">
-          ${sorted.map(c => _calBuildCreditRow(cd.cardId, c, year, month)).join('')}
-        </div>`;
-      }
-
-      accordionHtml += `<div style="margin-bottom:8px;border:1px solid ${borderColor};border-radius:8px;overflow:hidden;">
-        <button class="cal-accord-btn" data-card-id="${escapeHtml(cd.cardId)}" style="width:100%;display:flex;align-items:center;gap:10px;padding:10px 14px;background:${headerBg};border:none;cursor:pointer;font-family:inherit;text-align:left;">
-          <span style="${arrowStyle}">&#9654;</span>
-          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0;"></span>
-          <span style="font-size:13px;font-weight:600;color:#1c1917;flex:1;">${escapeHtml(cd.card.shortName || cd.card.name)}</span>
-          ${statusTag}
-        </button>
-        ${bodyHtml}
+      sectionsHtml += `<div style="margin-bottom:10px;">
+        <div style="display:flex;align-items:center;gap:5px;margin-bottom:5px;">
+          <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${color};flex-shrink:0;"></span>
+          <span style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">${escapeHtml(card.shortName || card.name)}</span>
+        </div>
+        ${rows}
       </div>`;
     });
-  }
 
-  // Not-shown notice
-  const noneByCard = {};
-  walletCards.forEach(({ cardId, card }) => {
-    card.credits.forEach(cr => {
-      if ((cr.frequency || 'annual') === 'none') {
-        if (!noneByCard[cardId]) noneByCard[cardId] = { cardName: card.shortName || card.name, credits: [] };
-        noneByCard[cardId].credits.push(cr.name);
-      }
-    });
-  });
-  let noneNoticeHtml = '';
-  if (Object.keys(noneByCard).length > 0) {
-    const listHtml = Object.keys(noneByCard).map(cid => {
-      const nc = noneByCard[cid];
-      return `<div style="margin-bottom:4px;font-size:12px;"><strong>${escapeHtml(nc.cardName)}:</strong> ${nc.credits.map(c => escapeHtml(c)).join(', ')}</div>`;
-    }).join('');
-    noneNoticeHtml = `<div style="border:1px solid #e7e5e4;border-radius:8px;overflow:hidden;margin-bottom:16px;">
-      <button id="calNoneToggle" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:#fafaf9;border:none;cursor:pointer;font-family:inherit;font-size:12px;color:#78716c;">
-        <span>Some set-and-forget benefits not shown</span>
-        <span id="calNoneArrow" style="transition:transform .15s;display:inline-block;transform:${cs.notShownExpanded ? 'rotate(90deg)' : 'rotate(0deg)'};">&#9654;</span>
-      </button>
-      <div id="calNoneContent" style="display:${cs.notShownExpanded ? 'block' : 'none'};padding:10px 14px;">${listHtml}</div>
+    const headerBg = isCurrentMonth ? '#eff6ff' : '#f9fafb';
+    const headerColor = isCurrentMonth ? '#1d4ed8' : '#374151';
+    const borderColor = isCurrentMonth ? '#bfdbfe' : '#e5e7eb';
+    const fadedStyle = isPast && !isCurrentMonth ? 'opacity:0.6;' : '';
+
+    return `<div style="border:1px solid ${borderColor};border-radius:10px;overflow:hidden;${fadedStyle}">
+      <div style="padding:8px 12px;background:${headerBg};border-bottom:1px solid ${borderColor};display:flex;align-items:center;gap:8px;">
+        <span style="font-size:13px;font-weight:700;color:${headerColor};">${monthName}</span>
+        ${isCurrentMonth ? '<span style="font-size:10px;font-weight:600;color:#1d4ed8;background:#dbeafe;padding:1px 7px;border-radius:8px;">Now</span>' : ''}
+      </div>
+      <div style="padding:10px 10px 6px;">
+        ${sectionsHtml || '<div style="color:#c4b5a0;font-size:11px;text-align:center;padding:10px 0;">No deadlines</div>'}
+      </div>
     </div>`;
-  }
+  }).join('');
 
   container.innerHTML = `
-    <div style="max-width:860px;margin:0 auto;padding:24px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <button id="calPrevMonth" style="padding:5px 12px;border:1px solid #e7e5e4;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;font-family:inherit;">&#8592;</button>
-          <span style="font-size:15px;font-weight:600;min-width:155px;text-align:center;">${MONTH_NAMES[month]} ${year}</span>
-          <button id="calNextMonth" style="padding:5px 12px;border:1px solid #e7e5e4;border-radius:6px;background:#fff;cursor:pointer;font-size:14px;font-family:inherit;">&#8594;</button>
-        </div>
+    <div style="max-width:1100px;margin:0 auto;padding:24px;">
+      <div style="margin-bottom:20px;">
+        <span style="font-size:22px;font-weight:700;color:#1c1917;">${year}</span>
       </div>
-      ${noneNoticeHtml}
-      <div style="display:grid;grid-template-columns:minmax(0,1fr) 160px;gap:20px;align-items:start;">
-        <div>${accordionHtml}</div>
-        <div>${_calBuildCardToggleSidebar(walletCards, cs.enabledCards)}</div>
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) 170px;gap:20px;align-items:start;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+          ${monthGridHtml}
+        </div>
+        <div style="position:sticky;top:16px;">
+          ${_calBuildCardToggleSidebar(walletCards, cs.enabledCards)}
+        </div>
       </div>
     </div>`;
 
@@ -7439,31 +7395,6 @@ function renderCreditCalendar() {
   container.querySelectorAll('.cal-chip').forEach(btn => {
     btn.addEventListener('click', () => {
       cs.enabledCards[btn.dataset.cardId] = !cs.enabledCards[btn.dataset.cardId];
-      renderCreditCalendar();
-    });
-  });
-
-  document.getElementById('calPrevMonth')?.addEventListener('click', () => {
-    if (cs.month === 0) { cs.month = 11; cs.year--; } else cs.month--;
-    renderCreditCalendar();
-  });
-  document.getElementById('calNextMonth')?.addEventListener('click', () => {
-    if (cs.month === 11) { cs.month = 0; cs.year++; } else cs.month++;
-    renderCreditCalendar();
-  });
-
-  document.getElementById('calNoneToggle')?.addEventListener('click', () => {
-    cs.notShownExpanded = !cs.notShownExpanded;
-    const el = document.getElementById('calNoneContent');
-    const arrow = document.getElementById('calNoneArrow');
-    if (el) el.style.display = cs.notShownExpanded ? 'block' : 'none';
-    if (arrow) arrow.style.transform = cs.notShownExpanded ? 'rotate(90deg)' : 'rotate(0deg)';
-  });
-
-  container.querySelectorAll('.cal-accord-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const cd = cardData.find(c => c.cardId === btn.dataset.cardId);
-      if (cd) cs.cardAccordion[cd.cardId] = !isCollapsed(cd);
       renderCreditCalendar();
     });
   });

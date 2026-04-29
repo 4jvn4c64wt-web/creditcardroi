@@ -69,20 +69,38 @@ window.CardTracker.biltPlugin = {
     // BILT 2.0 MODE (Feb 7, 2026+)
     if (category === 'rent') {
       const rentAmt = cfg.manualRentAmount || 2000;
+      const txnMonth = txnDateObj.getMonth();
+      const txnYear = txnDateObj.getFullYear();
 
       if (cfg.rewardOption === 'housing-only') {
-        // Calculate NET spending ratio from transactions in the same month
-        const txnMonth = txnDateObj.getMonth();
-        const txnYear = txnDateObj.getFullYear();
-        const monthTxns = ctx.state.transactions.filter(t => {
-          const mappedCardId = ctx.state.cardMappings[t.last4];
-          if (!mappedCardId || !mappedCardId.startsWith('bilt-')) return false;
-          const d = new Date(t.date);
-          return d.getMonth() === txnMonth && d.getFullYear() === txnYear;
-        });
-        const purchases = monthTxns.filter(t => t.amount < 0).reduce((sum, t) => sum + Math.abs(t.amount), 0);
-        const refunds = monthTxns.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
-        const monthSpend = Math.max(0, purchases - refunds);
+        // Spend on this card between rent payments (same calendar month),
+        // excluding rent itself. Falls back to raw txns if processed not yet available.
+        let monthSpend = 0;
+        const processed = (ctx.state.results && ctx.state.results.processed) || null;
+        if (processed) {
+          const sameMonth = processed.filter(t => {
+            if (t.cardId !== cardId) return false;
+            if (t.category === 'rent') return false;
+            if (t.isPayment || t.isAnnualFee) return false;
+            const p = ctx.parseDateString(t.date);
+            if (!p) return false;
+            return p.year === txnYear && (p.month - 1) === txnMonth;
+          });
+          const purchases = sameMonth.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
+          const refunds = sameMonth.filter(t => t.amount > 0 && !t.isCredit).reduce((s, t) => s + t.amount, 0);
+          monthSpend = Math.max(0, purchases - refunds);
+        } else {
+          const monthTxns = ctx.state.transactions.filter(t => {
+            const mappedCardId = ctx.state.cardMappings[t.last4];
+            if (mappedCardId !== cardId) return false;
+            const p = ctx.parseDateString(t.date);
+            if (!p) return false;
+            return p.year === txnYear && (p.month - 1) === txnMonth;
+          });
+          const purchases = monthTxns.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
+          const refunds = monthTxns.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+          monthSpend = Math.max(0, purchases - refunds - rentAmt);
+        }
 
         const ratio = rentAmt > 0 ? monthSpend / rentAmt : 0;
         let rate = 0, tierName = '<25%';
@@ -92,22 +110,18 @@ window.CardTracker.biltPlugin = {
         else if (ratio >= 0.25) { rate = 0.5; tierName = '25-49%'; }
 
         if (rate === 0) {
-          return { rate: 0, reason: `Rent: 250pt floor (${tierName}, $${monthSpend.toFixed(0)}/$${rentAmt} net spend)` };
+          return { rate: 0, reason: `Rent: 250pt floor (${tierName}, $${monthSpend.toFixed(0)}/$${rentAmt} non-rent spend)` };
         }
-        return { rate, reason: `Rent: ${rate}x Housing-only (${tierName}: $${monthSpend.toFixed(0)}/$${rentAmt})` };
+        return { rate, reason: `Rent: ${rate}x Housing-only (${tierName}: $${monthSpend.toFixed(0)}/$${rentAmt} non-rent spend)` };
       } else {
-        // Flexible Bilt Cash option
-        const monthlyRedemption = cfg.monthlyBiltCashRedemption || 0;
-        const maxPts = (monthlyRedemption / 3) * 100;
-        const rate = rentAmt > 0 ? Math.min(1, maxPts / rentAmt) : 0;
-        if (rate <= 0) {
-          const isConfigured = ctx.isBiltCardConfigured(cardId);
-          if (!isConfigured) {
-            return { rate: 1, reason: '1x rent (estimated - configure card for actual rate)' };
-          }
-          return { rate: 0, reason: 'Rent: No Bilt Cash redemption configured' };
+        // Bilt Cash mode: assume the user redeems enough Bilt Cash to fully
+        // fund 1x rent points, unless the user has marked this month as
+        // not redeemed in the Bilt Card Config.
+        const unredeemed = (cfg.biltCashUnredeemedMonths && cfg.biltCashUnredeemedMonths[txnYear]) || [];
+        if (unredeemed.indexOf(txnMonth) !== -1) {
+          return { rate: 0, reason: 'Rent: Bilt Cash not redeemed this month (config)' };
         }
-        return { rate, reason: `Rent: ${(rate * 100).toFixed(0)}% via $${monthlyRedemption.toFixed(0)} Bilt Cash/mo` };
+        return { rate: 1, reason: '1x rent (Bilt Cash redeemed for full value)' };
       }
     }
 
@@ -360,6 +374,31 @@ window.CardTracker.biltPlugin = {
       var pastExpanded = state.biltPastRedemptionsExpanded && state.biltPastRedemptionsExpanded[cardId];
       var arrowChar = pastExpanded ? '&#9662;' : '&#9656;'; // ▼ vs ▶
 
+      // Unredeemed months grid (which months the user did NOT redeem
+      // Bilt Cash for rent points → those months earn 0 rent points).
+      var MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      var unredeemedYearMap = (cfg.biltCashUnredeemedMonths && typeof cfg.biltCashUnredeemedMonths === 'object') ? cfg.biltCashUnredeemedMonths : {};
+      var unredeemedYear = selectedBiltYear === 'all' ? currentYear : parseInt(selectedBiltYear);
+      var unredeemedList = unredeemedYearMap[unredeemedYear] || [];
+      var unredeemedMonthsHtml = MONTHS_SHORT.map(function(m, idx) {
+        var marked = unredeemedList.indexOf(idx) !== -1;
+        return '<label class="bilt-unredeemed-month" data-card="' + cardId + '" data-year="' + unredeemedYear + '" data-month="' + idx + '" ' +
+          'style="display:flex;align-items:center;justify-content:center;width:42px;padding:6px 0;border:1px solid ' + (marked ? '#fca5a5' : '#e7e5e4') + ';border-radius:4px;cursor:pointer;font-size:11px;background:' + (marked ? '#fee2e2' : '#fff') + ';color:' + (marked ? '#991b1b' : '#44403c') + ';" ' +
+          'title="Click to ' + (marked ? 'mark ' + m + ' as redeemed' : 'mark ' + m + ' as NOT redeemed for rent points') + '">' +
+          '<input type="checkbox" class="bilt-unredeemed-month-input" data-card="' + cardId + '" data-year="' + unredeemedYear + '" data-month="' + idx + '" ' + (marked ? 'checked' : '') + ' style="display:none;">' +
+          m +
+          '</label>';
+      }).join('');
+      html +=
+        '<div style="margin-bottom:16px;padding:12px;background:#fafaf9;border:1px solid #e7e5e4;border-radius:8px;">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
+            '<span style="font-size:12px;font-weight:600;">&#128197; Months Bilt Cash Not Redeemed for Rent (' + unredeemedYear + ')</span>' +
+            '<span style="font-size:11px;color:#78716c;">' + unredeemedList.length + ' selected</span>' +
+          '</div>' +
+          '<p style="font-size:10px;color:#78716c;margin:0 0 8px 0;">Click a month if you did not redeem Bilt Cash for rent points that month. Rent points for selected months will be reduced to 0.</p>' +
+          '<div style="display:flex;flex-wrap:wrap;gap:4px;">' + unredeemedMonthsHtml + '</div>' +
+        '</div>';
+
       // Bilt Cash Redeemed ledger (replaces "Bilt Cash Earned" box)
       html +=
         '<div style="margin-bottom:16px;padding:12px;background:#fafaf9;border:1px solid #e7e5e4;border-radius:8px;">' +
@@ -571,6 +610,30 @@ window.CardTracker.biltPlugin = {
         var cfg = state.biltConfig[cid];
         if (!cfg || !Array.isArray(cfg.biltCashRedemptions)) return;
         cfg.biltCashRedemptions = cfg.biltCashRedemptions.filter(function(r) { return r.id !== rid; });
+        ctx.safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
+        ctx.renderCardConfig();
+      });
+    });
+
+    // Unredeemed months grid (Bilt Cash mode only): toggle a month as
+    // "not redeemed" → rent points for that month become 0 on next reprocess.
+    document.querySelectorAll('.bilt-unredeemed-month').forEach(function(label) {
+      label.addEventListener('click', function(e) {
+        e.preventDefault();
+        var cid = label.dataset.card;
+        var year = parseInt(label.dataset.year);
+        var month = parseInt(label.dataset.month);
+        if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
+        var cfg = state.biltConfig[cid];
+        if (!cfg.biltCashUnredeemedMonths || typeof cfg.biltCashUnredeemedMonths !== 'object') {
+          cfg.biltCashUnredeemedMonths = {};
+        }
+        var list = Array.isArray(cfg.biltCashUnredeemedMonths[year]) ? cfg.biltCashUnredeemedMonths[year].slice() : [];
+        var idx = list.indexOf(month);
+        if (idx === -1) list.push(month);
+        else list.splice(idx, 1);
+        list.sort(function(a, b) { return a - b; });
+        cfg.biltCashUnredeemedMonths[year] = list;
         ctx.safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
         ctx.renderCardConfig();
       });

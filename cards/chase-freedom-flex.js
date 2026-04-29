@@ -118,6 +118,35 @@ window.CardTracker.cards['chase-freedom-flex'] = {
     return { rate: card.baseRate, reason: card.baseRate + 'x base rate' };
   },
 
+  getDisplayRate: function(category, txnDate, ctx) {
+    var txnYear, txnQuarter;
+    if (txnDate) {
+      if (txnDate.includes('-')) {
+        var parts = txnDate.split('-').map(Number);
+        txnYear = parts[0];
+        txnQuarter = 'Q' + Math.ceil(parts[1] / 3);
+      } else if (txnDate.includes('/')) {
+        var parts2 = txnDate.split('/');
+        var month = parseInt(parts2[0]);
+        txnYear = parseInt(parts2[2]);
+        if (txnYear < 100) txnYear += 2000;
+        txnQuarter = 'Q' + Math.ceil(month / 3);
+      }
+    }
+    if (!txnYear) {
+      var now = new Date();
+      txnYear = now.getFullYear();
+      txnQuarter = 'Q' + Math.ceil((now.getMonth() + 1) / 3);
+    }
+    var quarterKey = txnYear + '-' + txnQuarter;
+    var cffEntries = (ctx.cffQuarterlyData || {})[quarterKey] || [];
+    var entry = cffEntries.find(function(e) { return e.key === category; });
+    if (entry) return { rate: entry.rate, bonus: true };
+    var card = this;
+    if (card.multipliers[category]) return { rate: card.multipliers[category], bonus: true };
+    return { rate: card.baseRate, bonus: false };
+  },
+
   getCategories: function(txnDate, ctx) {
     // Dynamically derive all possible quarterly categories from cffQuarterlyData
     var baseCats = ['chase-travel', 'dining', 'drugstore'];

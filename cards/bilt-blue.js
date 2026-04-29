@@ -36,6 +36,10 @@ window.CardTracker.cards = window.CardTracker.cards || {};
       this._pluginCardId = 'bilt-blue';
       return biltPlugin.getScenarioMultiplier.call(this, category, ctx);
     },
+    getDisplayRate: function(category, txnDate, ctx) {
+      this._pluginCardId = 'bilt-blue';
+      return biltPlugin.getDisplayRate.call(this, category, txnDate, ctx);
+    },
     renderConfigSection: function(cardId, ctx) {
       this._pluginCardId = cardId;
       return biltPlugin.renderConfigSection.call(this, cardId, ctx);

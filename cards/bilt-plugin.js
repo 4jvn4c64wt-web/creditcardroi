@@ -159,6 +159,43 @@ window.CardTracker.biltPlugin = {
   },
 
   // =========================================================================
+  // getDisplayRate hook — display rate for recategorization modal
+  // =========================================================================
+  getDisplayRate: function(category, txnDate, ctx) {
+    var cardId = this._pluginCardId;
+    var card = ctx.CARDS[cardId];
+    if (!card) return null;
+
+    var BILT_2_START = window.CardTracker.biltPlugin.BILT_2_START;
+    var txnDateObj = txnDate ? new Date(txnDate) : new Date();
+    var isLegacy = txnDateObj.getTime() < BILT_2_START.getTime();
+
+    if (isLegacy) {
+      // All three Bilt cards had identical legacy rates: 3x dining, 2x travel, 1x else
+      if (category === 'rent') return { rate: 1, bonus: false };
+      var legacyMult = card.legacy && card.legacy.multipliers && card.legacy.multipliers[category];
+      return { rate: legacyMult || (card.legacy && card.legacy.baseRate) || 1, bonus: !!legacyMult };
+    }
+
+    // Bilt 2.0: rent has a variable rate displayed as "up to X"
+    if (category === 'rent') {
+      var maxRate = window.CardTracker.biltPlugin.RENT_TIERS[0].rate;
+      var cfg = ctx.state.biltConfig[cardId] || {};
+      if (cfg.rewardOption === 'housing-only') {
+        return { rate: 'up to ' + maxRate, bonus: true, isVariable: true };
+      } else {
+        return { rate: 'up to 1', bonus: true, isVariable: true };
+      }
+    }
+
+    // Non-rent Bilt 2.0: read per-card multipliers from the card definition.
+    // Blue has no bonuses (1x base), Obsidian has 3x dining + 2x travel,
+    // Palladium has 2x flat base with no category bonuses.
+    var mult = card.multipliers && card.multipliers[category];
+    return { rate: mult || card.baseRate || 1, bonus: !!mult };
+  },
+
+  // =========================================================================
   // getCategories hook — legacy categories before Bilt 2.0
   // =========================================================================
   getCategories: function(txnDate, ctx) {

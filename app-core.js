@@ -8697,6 +8697,19 @@ async function initCore() {
     tab.addEventListener('click', () => renderView(tab.dataset.view));
   });
 
+  // Logo title clicks → Summary
+  document.querySelectorAll('.shell-title').forEach(el => {
+    el.addEventListener('click', () => {
+      document.getElementById('mappingSection')?.classList.add('hidden');
+      document.getElementById('cardConfigSection')?.classList.add('hidden');
+      if (state.results) {
+        document.getElementById('uploadSection')?.classList.add('hidden');
+        document.getElementById('resultsSection')?.classList.remove('hidden');
+        renderView('summary');
+      }
+    });
+  });
+
   // Shell expand/collapse button for details strip
   const shellExpandBtn = document.getElementById('shellExpandBtn');
   if (shellExpandBtn) {

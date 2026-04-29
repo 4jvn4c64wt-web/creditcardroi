@@ -1033,9 +1033,8 @@ function calculateBiltRentPoints(cardId, rentAmount, everydaySpend, billingMonth
   if (!card || !card.isBilt) return { points: 0, rate: 0, reason: 'Not a Bilt card' };
   
   // Check if this is legacy period
-  const bilt2StartDate = new Date(2026, 1, 7);
   const cycleDate = new Date(billingYear, billingMonth - 1, 15); // Mid-month as proxy
-  if (cycleDate < bilt2StartDate) {
+  if (cycleDate.getTime() < window.CardTracker.biltPlugin.BILT_2_START.getTime()) {
     // Legacy: flat rate based on card
     const legacyRate = card.legacy?.multipliers?.rent || 1;
     return { points: Math.round(rentAmount * legacyRate), rate: legacyRate, reason: `${legacyRate}x rent (legacy Bilt)` };
@@ -1048,17 +1047,16 @@ function calculateBiltRentPoints(cardId, rentAmount, everydaySpend, billingMonth
     let rate = 0;
     let tier = '< 25%';
     
-    if (ratio >= 1.0) { rate = 1.25; tier = '100%+'; }
-    else if (ratio >= 0.75) { rate = 1.0; tier = '75-99%'; }
-    else if (ratio >= 0.50) { rate = 0.75; tier = '50-74%'; }
-    else if (ratio >= 0.25) { rate = 0.5; tier = '25-49%'; }
-    else { rate = 0; tier = '< 25%'; }
+    const tiers = window.CardTracker.biltPlugin.RENT_TIERS;
+    for (const t of tiers) {
+      if (ratio >= t.minRatio) { rate = t.rate; tier = t.label; break; }
+    }
     
-    // Minimum floor of 250 points if below threshold but rent was paid
-    const points = rate > 0 ? Math.round(rentAmount * rate) : (rentAmount > 0 ? 250 : 0);
-    const reason = rate > 0 
+    // Minimum floor if below threshold but rent was paid
+    const points = rate > 0 ? Math.round(rentAmount * rate) : (rentAmount > 0 ? window.CardTracker.biltPlugin.RENT_POINTS_FLOOR : 0);
+    const reason = rate > 0
       ? `${rate}x rent (${tier} spend ratio: $${everydaySpend.toFixed(0)}/$${rentAmount.toFixed(0)})`
-      : `250 pts floor (${tier} spend ratio)`;
+      : `${window.CardTracker.biltPlugin.RENT_POINTS_FLOOR} pts floor (${tier} spend ratio)`;
     
     return { points, rate, reason };
   } else {
@@ -6140,17 +6138,16 @@ function renderView(view) {
       if (cardDef?.isBilt) {
         const biltCfg = state.biltConfig[c.cardId] || {};
         if (biltCfg.countBiltCashAsCredit !== false && biltCfg.rewardOption !== 'housing-only') {
-          const bilt20Date = new Date(2026, 1, 7);
           // Calculate Bilt Cash earned from processed transactions (which have cardId)
           const biltTxns = filteredProcessed.filter(t => {
             if (t.cardId !== c.cardId) return false;
             const d = new Date(t.date);
-            if (d < bilt20Date) return false; // Only Bilt 2.0 earns Bilt Cash
+            if (d.getTime() < window.CardTracker.biltPlugin.BILT_2_START.getTime()) return false; // Only Bilt 2.0 earns Bilt Cash
             return t.category !== 'rent';
           });
           const purchases = biltTxns.filter(t => t.amount < 0).reduce((sum, t) => sum + Math.abs(t.amount), 0);
           const refunds = biltTxns.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
-          biltCashCredit = Math.max(0, purchases - refunds) * 0.04;
+          biltCashCredit = Math.max(0, purchases - refunds) * window.CardTracker.biltPlugin.BILT_CASH_RATE;
           totalCredits += biltCashCredit;
         }
       }
@@ -8342,7 +8339,6 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
     }
     // Bilt cards: check for legacy mode (before Feb 7, 2026)
     if (card?.isBilt) {
-      const bilt2StartDate = new Date(2026, 1, 7); // Feb 7, 2026
       let txnDateObj;
       if (txn?.date) {
         if (txn.date.includes('-')) {
@@ -8361,7 +8357,7 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
       } else {
         txnDateObj = new Date();
       }
-      const isLegacy = txnDateObj < bilt2StartDate;
+      const isLegacy = txnDateObj.getTime() < window.CardTracker.biltPlugin.BILT_2_START.getTime();
 
       if (isLegacy) {
         // Legacy Bilt: 3x dining, 2x travel, 1x everything else (including rent)
@@ -8373,7 +8369,7 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
         if (cat === 'rent') {
           const cfg = state.biltConfig[cardId] || {};
           if (cfg.rewardOption === 'housing-only') {
-            return { rate: 'up to 1.25', bonus: true, isVariable: true };
+            return { rate: 'up to ' + window.CardTracker.biltPlugin.RENT_TIERS[0].rate, bonus: true, isVariable: true };
           } else {
             return { rate: 'up to 1', bonus: true, isVariable: true };
           }

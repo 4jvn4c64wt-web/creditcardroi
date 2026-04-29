@@ -14,6 +14,13 @@ window.CardTracker.cffQuarterlyData = {
 
   // ─── 2026 ───────────────────────────────────────────────
 
+  '2026-Q2': [
+    { key: 'amazon', label: 'Amazon', rate: 5 },
+    { key: 'whole-foods', label: 'Whole Foods Market', rate: 5 },
+    { key: 'chase-travel', label: 'Chase Travel', rate: 5 },
+    { key: 'charity', label: 'Feeding America', rate: 5, merchantKeywords: ['feeding america'] }
+  ],
+
   '2026-Q1': [
     { key: 'charity', label: 'American Heart Association', rate: 5, merchantKeywords: ['american heart'] },
     { key: 'dining', label: 'Dining', rate: 7 },

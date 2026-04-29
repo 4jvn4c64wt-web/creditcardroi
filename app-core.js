@@ -7321,20 +7321,7 @@ function renderCreditCalendar() {
 
   const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-  // Card filter chips — colored by card
-  const chipsHtml = walletCards.map(({ cardId, card }) => {
-    const on = !!cs.enabledCards[cardId];
-    const color = getCardColor(cardId);
-    const bg = on ? color : '#fff';
-    const text = on ? '#fff' : color;
-    const border = on ? color : color + '66';
-    return `<button class="cal-chip" data-card-id="${escapeHtml(cardId)}" style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;border:1px solid ${border};background:${bg};color:${text};font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:all .15s;">
-      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${on ? '#fff' : color};"></span>
-      ${escapeHtml(card.shortName || card.name)}
-    </button>`;
-  }).join('');
-
-  // Zoom segmented control
+  // Zoom segmented control (chips removed — toggles live with each card in the side panel)
   const zoomLabels = { monthly: 'Month', twomonth: '2-Month', annual: 'Annual' };
   const zoomBtns = ['monthly', 'twomonth', 'annual'].map(z => {
     const active = cs.zoom === z;
@@ -7383,37 +7370,40 @@ function renderCreditCalendar() {
 
   const activeCards = walletCards.filter(w => !!cs.enabledCards[w.cardId]);
 
+  const toggleSidebar = _calBuildCardToggleSidebar(walletCards, cs.enabledCards);
+
   let contentHtml = '';
-  let containerMaxWidth = '1100px';
+  let containerMaxWidth = '1280px';
   if (walletCards.length === 0) {
     contentHtml = `<div style="text-align:center;padding:48px 24px;color:#78716c;font-size:14px;background:#fafaf9;border-radius:8px;border:1px solid #e7e5e4;">No cards with trackable credits. Add a card with credits to start tracking.</div>`;
   } else if (cs.zoom === 'monthly') {
-    containerMaxWidth = '1280px';
-    contentHtml = `<div style="display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:20px;align-items:start;">
+    // Side panel handles both card toggles and credit details
+    contentHtml = `<div style="display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:20px;align-items:start;">
       <div>${_calBuildMonthGrid(activeCards, year, cs.month, todayYear, todayMonth)}</div>
-      <div>${_calBuildMonthSidePanel(activeCards, year, cs.month, todayYear, todayMonth)}</div>
+      <div>${_calBuildMonthSidePanel(walletCards, cs.enabledCards, year, cs.month, todayYear, todayMonth)}</div>
     </div>`;
   } else if (cs.zoom === 'twomonth') {
-    containerMaxWidth = '1280px';
     const m2 = cs.month === 11 ? 0 : cs.month + 1;
     const y2 = cs.month === 11 ? year + 1 : year;
-    contentHtml = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
-      <div>${_calBuildMonthGrid(activeCards, year, cs.month, todayYear, todayMonth)}</div>
-      <div>${_calBuildMonthGrid(activeCards, y2, m2, todayYear, todayMonth)}</div>
-    </div>
-    <div style="margin-top:20px;display:grid;grid-template-columns:1fr 1fr;gap:20px;">
-      <div>${_calBuildMonthSidePanel(activeCards, year, cs.month, todayYear, todayMonth)}</div>
-      <div>${_calBuildMonthSidePanel(activeCards, y2, m2, todayYear, todayMonth)}</div>
+    contentHtml = `<div style="display:grid;grid-template-columns:minmax(0,1fr) 160px;gap:20px;align-items:start;">
+      <div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+          <div>${_calBuildMonthGrid(activeCards, year, cs.month, todayYear, todayMonth)}</div>
+          <div>${_calBuildMonthGrid(activeCards, y2, m2, todayYear, todayMonth)}</div>
+        </div>
+      </div>
+      <div>${toggleSidebar}</div>
     </div>`;
   } else {
-    containerMaxWidth = '1280px';
-    contentHtml = _calBuildAnnualGrid(activeCards, year, todayYear, todayMonth);
+    contentHtml = `<div style="display:grid;grid-template-columns:minmax(0,1fr) 160px;gap:20px;align-items:start;">
+      <div>${_calBuildAnnualGrid(activeCards, year, todayYear, todayMonth)}</div>
+      <div>${toggleSidebar}</div>
+    </div>`;
   }
 
   container.innerHTML = `
     <div style="max-width:${containerMaxWidth};margin:0 auto;padding:24px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">${chipsHtml}</div>
+      <div style="display:flex;align-items:center;justify-content:flex-end;margin-bottom:16px;">
         <div style="display:flex;gap:6px;">${zoomBtns}</div>
       </div>
       ${noneNoticeHtml}
@@ -7505,6 +7495,70 @@ function getCardColor(cardId) {
   return palette[Math.abs(h) % palette.length];
 }
 
+// Maps a credit name to a small Unicode icon representing its category.
+function getCreditIcon(creditName) {
+  const n = (creditName || '').toLowerCase();
+  if (/dining|restaurant|grubhub|seamless|resy|opentable|doordash rest|dunkin|cheesecake|milkbar|goldbelly/.test(n)) return '\u{1F374}'; // 🍴
+  if (/grocery|doordash groc/.test(n)) return '\u{1F6D2}'; // 🛒
+  if (/walmart/.test(n)) return '\u{1F6D2}'; // 🛒
+  if (/lyft|ride/.test(n)) return '\u{1F697}'; // 🚗
+  if (/uber cash|uber one/.test(n)) return '\u{1F697}'; // 🚗
+  if (/airline|flight|bilt travel|capital one travel|travel/.test(n)) return '✈'; // ✈
+  if (/hotel|edit hotels/.test(n)) return '\u{1F3E8}'; // 🏨
+  if (/equinox|peloton|fitness|gym/.test(n)) return '\u{1F4AA}'; // 💪
+  if (/lululemon/.test(n)) return '\u{1F6CD}'; // 🛍
+  if (/saks/.test(n)) return '\u{1F6CD}'; // 🛍
+  if (/entertainment|streaming|digital/.test(n)) return '\u{1F4FA}'; // 📺
+  if (/clear\+|tsa|global entry|precheck|trusted traveler|known traveler/.test(n)) return '\u{1F6E1}'; // 🛡
+  if (/stubhub|ticket|concert/.test(n)) return '\u{1F3DF}'; // 🏟
+  return '\u{1F4B3}'; // 💳
+}
+
+// Returns a short label like "$25 dining" for use in day cells.
+function getCreditShortLabel(creditName, dollarAmt) {
+  const n = (creditName || '').toLowerCase();
+  let type = 'credit';
+  if (/dining|restaurant|grubhub|seamless|resy|opentable|dunkin|cheesecake|milkbar/.test(n)) type = 'dining';
+  else if (/doordash groc|grocery/.test(n)) type = 'grocery';
+  else if (/doordash rest/.test(n)) type = 'DoorDash';
+  else if (/lyft/.test(n)) type = 'Lyft';
+  else if (/uber cash/.test(n)) type = 'Uber';
+  else if (/uber one/.test(n)) type = 'Uber One';
+  else if (/airline/.test(n)) type = 'airline';
+  else if (/bilt travel|capital one travel/.test(n)) type = 'travel';
+  else if (/travel/.test(n)) type = 'travel';
+  else if (/hotel|edit hotels/.test(n)) type = 'hotel';
+  else if (/equinox/.test(n)) type = 'Equinox';
+  else if (/peloton/.test(n)) type = 'Peloton';
+  else if (/lululemon/.test(n)) type = 'Lulu';
+  else if (/saks/.test(n)) type = 'Saks';
+  else if (/entertainment|digital/.test(n)) type = 'ent.';
+  else if (/streaming/.test(n)) type = 'stream';
+  else if (/stubhub/.test(n)) type = 'StubHub';
+  else if (/clear/.test(n)) type = 'CLEAR+';
+  else if (/global entry|tsa|precheck/.test(n)) type = 'TSA';
+  else if (/walmart/.test(n)) type = 'Walmart+';
+  return '$' + Math.round(dollarAmt) + ' ' + type;
+}
+
+// Compact card toggle sidebar (for 2-month and annual views).
+function _calBuildCardToggleSidebar(walletCards, enabledCards) {
+  if (walletCards.length === 0) return '';
+  let html = '<div style="background:#fff;border:1px solid #e7e5e4;border-radius:8px;padding:12px;">';
+  html += '<div style="font-size:11px;font-weight:600;color:#78716c;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:10px;">Cards</div>';
+  walletCards.forEach(({ cardId, card }) => {
+    const on = !!enabledCards[cardId];
+    const color = getCardColor(cardId);
+    html += `<button class="cal-chip" data-card-id="${escapeHtml(cardId)}" style="display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;margin-bottom:4px;border:1px solid ${on ? color + '44' : '#f0eeec'};border-radius:6px;background:${on ? color + '0f' : '#fafaf9'};cursor:pointer;font-family:inherit;text-align:left;">
+      <span style="flex-shrink:0;width:14px;height:14px;border-radius:3px;border:2px solid ${color};background:${on ? color : 'transparent'};display:inline-flex;align-items:center;justify-content:center;font-size:9px;color:#fff;font-weight:700;">${on ? '✓' : ''}</span>
+      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0;"></span>
+      <span style="font-size:11px;font-weight:500;color:${on ? '#1c1917' : '#a8a29e'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(card.shortName || card.name)}</span>
+    </button>`;
+  });
+  html += '</div>';
+  return html;
+}
+
 // Parses a transaction date string into {y, m, d} (m is 0-indexed).
 function _calParseDate(str) {
   if (!str) return null;
@@ -7566,7 +7620,14 @@ function _calBuildMonthGrid(activeCards, year, month, todayYear, todayMonth) {
         if (!cr) return;
         const dt = _calParseDate(t.date);
         if (!dt || dt.y !== year || dt.m !== month) return;
-        events[dt.d].txns.push({ cardId, color, creditName: cr.name, merchant: t.merchant || t.original || '', amount: Math.abs(t.amount) });
+        const amt = Math.abs(t.amount);
+        events[dt.d].txns.push({
+          cardId, color, creditName: cr.name,
+          merchant: t.merchant || t.original || '',
+          amount: amt,
+          icon: getCreditIcon(cr.name),
+          shortLabel: getCreditShortLabel(cr.name, amt)
+        });
       });
     }
 
@@ -7580,7 +7641,12 @@ function _calBuildMonthGrid(activeCards, year, month, todayYear, todayMonth) {
       else if (freq === 'quarterly') periodIndex = Math.floor(month / 3);
       else if (freq === 'semi-annual') periodIndex = month < 6 ? 0 : 1;
       const status = getCreditPeriodStatus(cardId, cr, year, periodIndex);
-      events[day].deadlines.push({ cardId, color, creditName: cr.name, freq, status });
+      const periodAmt = status.periodAmount;
+      events[day].deadlines.push({
+        cardId, color, creditName: cr.name, freq, status,
+        icon: getCreditIcon(cr.name),
+        shortLabel: getCreditShortLabel(cr.name, periodAmt)
+      });
     });
   });
 
@@ -7603,28 +7669,30 @@ function _calBuildMonthGrid(activeCards, year, month, todayYear, todayMonth) {
     const isToday = isCurrentMonthView && d === todayDate;
     const evs = events[d];
 
+    // Redemption rows (auto-detected transactions) — always green
     let txnHtml = '';
-    const visibleTxns = evs.txns.slice(0, 3);
-    visibleTxns.forEach(e => {
-      const label = e.merchant ? (e.merchant.length > 14 ? e.merchant.substring(0, 13) + '…' : e.merchant) : ('$' + e.amount.toFixed(0));
-      txnHtml += `<div title="${escapeHtml(e.creditName + ' · ' + e.merchant + ' · $' + e.amount.toFixed(2))}" style="display:block;padding:1px 4px;margin-top:2px;background:${e.color}1f;border-left:3px solid ${e.color};border-radius:2px;font-size:9px;color:${e.color};font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(label)} $${e.amount.toFixed(0)}</div>`;
+    evs.txns.slice(0, 3).forEach(e => {
+      const tip = escapeHtml(e.creditName + ' · ' + e.merchant + ' · $' + e.amount.toFixed(2));
+      txnHtml += `<div title="${tip}" style="display:flex;align-items:center;gap:3px;padding:1px 4px;margin-top:2px;background:#dcfce7;border-left:3px solid #16a34a;border-radius:2px;overflow:hidden;">
+        <span style="font-size:10px;line-height:1;">${e.icon}</span>
+        <span style="font-size:9px;color:#15803d;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(e.shortLabel)}</span>
+      </div>`;
     });
-    if (evs.txns.length > 3) {
-      txnHtml += `<div style="font-size:9px;color:#a8a29e;margin-top:2px;">+${evs.txns.length - 3} more</div>`;
-    }
+    if (evs.txns.length > 3) txnHtml += `<div style="font-size:9px;color:#a8a29e;margin-top:1px;">+${evs.txns.length - 3} more</div>`;
 
+    // Deadline rows — card color, icon + short label
     let deadlineHtml = '';
-    if (evs.deadlines.length > 0) {
-      deadlineHtml = '<div style="display:flex;gap:2px;flex-wrap:wrap;margin-top:3px;">';
-      evs.deadlines.slice(0, 6).forEach(e => {
-        const isDone = e.status.isComplete;
-        const isPartial = !isDone && e.status.usedAmount > 0;
-        const bgColor = isDone ? '#10b981' : (isPartial ? '#f59e0b' : e.color);
-        const symbol = isDone ? '✓' : (isPartial ? '◐' : '!');
-        deadlineHtml += `<span title="${escapeHtml(e.creditName + ' deadline · $' + e.status.usedAmount.toFixed(0) + ' / $' + e.status.periodAmount.toFixed(0))}" style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;font-size:9px;background:${bgColor};color:#fff;border-radius:50%;font-weight:700;line-height:1;">${symbol}</span>`;
-      });
-      deadlineHtml += '</div>';
-    }
+    evs.deadlines.slice(0, 4).forEach(e => {
+      const isDone = e.status.isComplete;
+      const isPartial = !isDone && e.status.usedAmount > 0;
+      const rowColor = isDone ? '#16a34a' : (isPartial ? '#d97706' : e.color);
+      const rowBg = isDone ? '#dcfce7' : (isPartial ? '#fef9c3' : e.color + '15');
+      const tip = escapeHtml(e.creditName + ' deadline · $' + e.status.usedAmount.toFixed(0) + ' / $' + e.status.periodAmount.toFixed(0));
+      deadlineHtml += `<div title="${tip}" style="display:flex;align-items:center;gap:3px;padding:1px 4px;margin-top:2px;background:${rowBg};border-left:3px solid ${rowColor};border-radius:2px;overflow:hidden;">
+        <span style="font-size:10px;line-height:1;">${e.icon}</span>
+        <span style="font-size:9px;color:${rowColor};font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(e.shortLabel)}</span>
+      </div>`;
+    });
 
     const cellBg = isToday ? '#fef3c7' : '#fff';
     const dayColor = isToday ? '#92400e' : '#44403c';
@@ -7646,19 +7714,37 @@ function _calBuildMonthGrid(activeCards, year, month, todayYear, todayMonth) {
   return html;
 }
 
-// Renders a compact side panel showing credits relevant to the visible month,
-// grouped by card with colored swatches, status, and "Log Credit Used" buttons.
-function _calBuildMonthSidePanel(activeCards, year, month, todayYear, todayMonth) {
+// Renders the side panel: card toggle checkboxes + credit status rows per card.
+// Takes ALL wallet cards so inactive ones can show a toggle-on prompt.
+function _calBuildMonthSidePanel(walletCards, enabledCards, year, month, todayYear, todayMonth) {
   const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const Q_RANGES = [['Jan','Feb','Mar'],['Apr','May','Jun'],['Jul','Aug','Sep'],['Oct','Nov','Dec']];
 
   let html = '';
 
-  activeCards.forEach(({ cardId, card }) => {
-    const trackable = card.credits.filter(cr =>
+  walletCards.forEach(({ cardId, card }) => {
+    const on = !!enabledCards[cardId];
+    const color = getCardColor(cardId);
+    const trackable = on ? card.credits.filter(cr =>
       (cr.frequency || 'annual') !== 'none' && (state.disabledCredits[cardId] || []).indexOf(cr.name) < 0
-    );
-    if (trackable.length === 0) return;
+    ) : [];
+
+    // Card header always shows toggle checkbox
+    const checkboxHtml = `<button class="cal-chip" data-card-id="${escapeHtml(cardId)}" style="display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;border:none;border-bottom:1px solid ${color}33;background:transparent;cursor:pointer;font-family:inherit;text-align:left;">
+      <span style="flex-shrink:0;width:14px;height:14px;border-radius:3px;border:2px solid ${color};background:${on ? color : 'transparent'};display:inline-flex;align-items:center;justify-content:center;font-size:9px;color:#fff;font-weight:700;">${on ? '✓' : ''}</span>
+      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0;"></span>
+      <span style="font-size:13px;font-weight:600;color:${on ? '#1c1917' : '#a8a29e'};">${escapeHtml(card.shortName || card.name)}</span>
+    </button>`;
+
+    if (!on) {
+      html += `<div style="margin-bottom:12px;border:1px solid #f0eeec;border-radius:8px;overflow:hidden;opacity:0.6;">${checkboxHtml}</div>`;
+      return;
+    }
+
+    if (trackable.length === 0) {
+      html += `<div style="margin-bottom:12px;border:1px solid #e7e5e4;border-radius:8px;overflow:hidden;">${checkboxHtml}</div>`;
+      return;
+    }
 
     let cardRows = '';
 
@@ -7751,13 +7837,9 @@ function _calBuildMonthSidePanel(activeCards, year, month, todayYear, todayMonth
     });
 
     if (cardRows) {
-      const color = getCardColor(cardId);
-      html += `<div style="margin-bottom:18px;">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid ${color};">
-          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${color};"></span>
-          <span style="font-size:13px;font-weight:600;color:#1c1917;">${escapeHtml(card.shortName || card.name)}</span>
-        </div>
-        ${cardRows}
+      html += `<div style="margin-bottom:12px;border:1px solid #e7e5e4;border-radius:8px;overflow:hidden;">
+        ${checkboxHtml}
+        <div style="padding:8px 10px;">${cardRows}</div>
       </div>`;
     }
   });

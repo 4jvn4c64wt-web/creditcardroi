@@ -2123,6 +2123,23 @@ function showLoading(show, status = '') {
   if (status) document.getElementById('loadingStatus').textContent = status;
 }
 
+let _toastTimer = null;
+function showSavedToast() {
+  const toast = document.getElementById('savedToast');
+  if (!toast) return;
+  if (_toastTimer) {
+    clearTimeout(_toastTimer);
+    _toastTimer = null;
+  }
+  toast.style.transition = 'none';
+  toast.style.opacity = '1';
+  _toastTimer = setTimeout(() => {
+    toast.style.transition = 'opacity 300ms ease';
+    toast.style.opacity = '0';
+    _toastTimer = null;
+  }, 1500);
+}
+
 function showMapping(allLast4s) {
   document.getElementById('uploadSection').classList.add('hidden');
   document.getElementById('mappingSection').classList.remove('hidden');
@@ -7234,6 +7251,7 @@ function showCreditModal(txnId, cardId) {
       state.creditOverrides[txnId] = selected;
       safeLocalStorageSet('ccTracker_creditOverrides', state.creditOverrides);
       modal.classList.add('hidden');
+      showSavedToast();
       // Reprocess to update totals
       await runProcessing();
       // Stay on transactions page
@@ -7483,8 +7501,9 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
 
     // Store filter state globally so renderView can use it
     state.pendingFilterRestore = filterState;
-    
+
     modal.classList.add('hidden');
+    showSavedToast();
     await runProcessing();
     renderView('transactions');
   });
@@ -8662,10 +8681,11 @@ async function initCore() {
         alert('Error reprocessing: ' + e.message);
       }
     }
+    showSavedToast();
     // Re-render config but stay on the same card
     showCardConfigEditor(cardId);
   });
-  
+
   document.getElementById('backToSummary').addEventListener('click', () => {
     document.getElementById('cardConfigSection').classList.add('hidden');
     document.getElementById('resultsSection').classList.remove('hidden');

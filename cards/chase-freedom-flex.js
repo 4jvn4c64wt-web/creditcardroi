@@ -342,6 +342,10 @@ window.CardTracker.cards['chase-freedom-flex'] = {
   },
 
   pluginState: {
+    stateFields: [
+      { key: 'cffCategories', storageKey: 'ccTracker_cffCategories', defaultValue: {} },
+      { key: 'cffPaypalDecemberOnly', storageKey: 'ccTracker_cffPaypalDecemberOnly', defaultValue: {} }
+    ],
     keys: [{ stateKey: 'cffCategories', localStorageKey: 'ccTracker_cffCategories', default: {} }],
     exportState: function(ctx) { return { cffCategories: ctx.state.cffCategories }; },
     importState: function(data, ctx) {

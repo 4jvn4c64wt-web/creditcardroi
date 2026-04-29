@@ -473,6 +473,19 @@ let state = {
   featureEducation: safeLocalStorageGet('ccTracker_featureEducation', {}) // tracks which feature tutorials have been shown
 };
 
+// Initialize plugin-managed state fields declared in card pluginState.stateFields
+// Idempotent: the undefined check means fields set by the state object above are not overwritten.
+// Note: all three Bilt cards share one pluginState — biltConfig is encountered 3 times, safely skipped after first.
+for (const [_cardId, _card] of Object.entries(CARDS)) {
+  if (_card.pluginState && _card.pluginState.stateFields) {
+    for (const field of _card.pluginState.stateFields) {
+      if (state[field.key] === undefined) {
+        state[field.key] = safeLocalStorageGet(field.storageKey, field.defaultValue);
+      }
+    }
+  }
+}
+
 // =============================================================================
 // DECISION PASS & TIER LOGIC
 // =============================================================================

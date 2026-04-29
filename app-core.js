@@ -7181,6 +7181,1025 @@ function renderView(view) {
   if (view === 'cardscenarios') {
     renderCardScenarios();
   }
+
+  if (view === 'creditcalendar') {
+    if (_calendarState && state.selectedYear && _calendarState.year !== state.selectedYear) {
+      _calendarState = null;
+    }
+    renderCreditCalendar();
+  }
+}
+
+// Transient calendar UI state — reset to null when switching to the tab fresh
+var _calendarState = null;
+
+// Returns status of a credit for a single period.
+// periodIndex meaning: monthly=0-11, quarterly=0-3, semi-annual=0-1, annual=0
+function getCreditPeriodStatus(cardId, credit, year, periodIndex) {
+  const freq = credit.frequency || 'annual';
+  const isDisabled = (state.disabledCredits[cardId] || []).indexOf(credit.name) >= 0;
+  if (isDisabled) return { periodAmount: 0, usedAmount: 0, isComplete: false, transactions: [], disabled: true };
+
+  let periodAmount = 0;
+  let monthsInPeriod = [];
+
+  if (freq === 'monthly') {
+    if (credit.monthlyAmounts) {
+      const mo = credit.monthlyAmounts[periodIndex] !== undefined
+        ? credit.monthlyAmounts[periodIndex]
+        : credit.monthlyAmounts['default'];
+      periodAmount = (mo != null) ? mo : credit.amount / 12;
+    } else {
+      periodAmount = credit.amount / 12;
+    }
+    monthsInPeriod = [periodIndex];
+  } else if (freq === 'quarterly') {
+    periodAmount = credit.amount / 4;
+    monthsInPeriod = [periodIndex * 3, periodIndex * 3 + 1, periodIndex * 3 + 2];
+  } else if (freq === 'semi-annual') {
+    periodAmount = credit.amount / 2;
+    monthsInPeriod = periodIndex === 0 ? [0,1,2,3,4,5] : [6,7,8,9,10,11];
+  } else {
+    periodAmount = credit.amount;
+    monthsInPeriod = [0,1,2,3,4,5,6,7,8,9,10,11];
+  }
+
+  let usedAmount = 0;
+  const transactions = [];
+
+  if (!credit.manual && state.results && state.results.processed) {
+    for (const t of state.results.processed) {
+      if (t.creditMatch !== credit.name) continue;
+      const dateStr = t.date;
+      let tYear, tMonth;
+      if (dateStr.indexOf('-') >= 0) {
+        const parts = dateStr.split('-');
+        tYear = parseInt(parts[0]);
+        tMonth = parseInt(parts[1]) - 1;
+      } else if (dateStr.indexOf('/') >= 0) {
+        const parts = dateStr.split('/');
+        tMonth = parseInt(parts[0]) - 1;
+        const yp = parts[2];
+        tYear = parseInt(yp.length === 2 ? '20' + yp : yp);
+      } else continue;
+      if (tYear === year && monthsInPeriod.indexOf(tMonth) >= 0) {
+        usedAmount += Math.abs(t.amount);
+        transactions.push(t);
+      }
+    }
+  }
+
+  if (credit.manual) {
+    const yearCredits = state.monthlyCredits && state.monthlyCredits[cardId] && state.monthlyCredits[cardId][credit.name];
+    const claimedMonths = (typeof yearCredits === 'object' && !Array.isArray(yearCredits))
+      ? (yearCredits[year] || [])
+      : (Array.isArray(yearCredits) ? yearCredits : []);
+    const claimedInPeriod = claimedMonths.filter(m => monthsInPeriod.indexOf(m) >= 0);
+    if (claimedInPeriod.length > 0) usedAmount = periodAmount;
+  }
+
+  const isComplete = periodAmount > 0 && usedAmount >= periodAmount * 0.99;
+  return { periodAmount, usedAmount, isComplete, transactions, disabled: false };
+}
+
+function renderCreditCalendar() {
+  const container = document.getElementById('viewContainer');
+  if (!container) return;
+
+  const now = new Date();
+  const todayYear = now.getFullYear();
+  const todayMonth = now.getMonth();
+
+  if (!_calendarState) {
+    _calendarState = {
+      year: state.selectedYear || todayYear,
+      enabledCards: null,
+      monthExpanded: {},
+      cardGroupCollapsed: {},
+      unusedOnly: false
+    };
+  }
+  const cs = _calendarState;
+  if (!cs.monthExpanded) cs.monthExpanded = {};
+  if (!cs.cardGroupCollapsed) cs.cardGroupCollapsed = {};
+  if (cs.unusedOnly === undefined) cs.unusedOnly = false;
+
+  // Collect available years from uploaded transactions
+  const txYearSet = new Set();
+  if (state.results && state.results.processed) {
+    state.results.processed.forEach(t => {
+      if (!t.date) return;
+      let y;
+      if (t.date.indexOf('-') >= 0) y = parseInt(t.date.split('-')[0]);
+      else if (t.date.indexOf('/') >= 0) { const p = t.date.split('/'); y = parseInt(p[2].length === 2 ? '20' + p[2] : p[2]); }
+      if (y > 2000 && y < 2100) txYearSet.add(y);
+    });
+  }
+  const availableYears = Array.from(txYearSet).sort((a, b) => b - a);
+  if (availableYears.length === 0) availableYears.push(todayYear);
+  if (availableYears.indexOf(cs.year) < 0) cs.year = availableYears[0];
+
+  const year = cs.year;
+  const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  // Collect wallet cards
+  const seenIds = new Set();
+  Object.values(state.cardMappings || {}).forEach(v => {
+    if (v && v !== 'skip' && v !== 'other-no-rewards' && CARDS[v]) seenIds.add(v);
+  });
+  if (state.results && state.results.processed) {
+    state.results.processed.forEach(t => {
+      if (t.cardId && t.cardId !== 'skip' && t.cardId !== 'other-no-rewards' && CARDS[t.cardId]) seenIds.add(t.cardId);
+    });
+  }
+  const walletCards = [];
+  seenIds.forEach(cardId => {
+    const card = CARDS[cardId];
+    if (!card || !card.credits || card.credits.length === 0) return;
+    if (!card.credits.some(cr => (cr.frequency || 'annual') !== 'none')) return;
+    walletCards.push({ cardId, card });
+  });
+  if (cs.enabledCards === null) {
+    cs.enabledCards = {};
+    walletCards.forEach(w => { cs.enabledCards[w.cardId] = true; });
+  }
+  const activeCards = walletCards.filter(w => !!cs.enabledCards[w.cardId]);
+
+  // Empty state: no cards with trackable credits
+  if (walletCards.length === 0) {
+    container.innerHTML = `
+      <div style="max-width:480px;margin:72px auto;text-align:center;padding:24px;">
+        <div style="font-size:44px;margin-bottom:16px;">💳</div>
+        <h2 style="font-size:18px;font-weight:700;color:#1c1917;margin:0 0 10px;">No cards with trackable credits</h2>
+        <p style="font-size:13px;color:#78716c;line-height:1.6;margin:0 0 24px;">Add a card that has periodic credits — like dining, travel, or Uber Cash — to start tracking deadlines here.</p>
+        <button id="calAddCardBtn" style="padding:9px 22px;font-size:13px;font-weight:600;background:#1c1917;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit;">Add Card Now</button>
+      </div>`;
+    document.getElementById('calAddCardBtn')?.addEventListener('click', () => {
+      document.getElementById('resultsSection').classList.add('hidden');
+      document.getElementById('uploadSection').classList.remove('hidden');
+      window.scrollTo(0, 0);
+    });
+    return;
+  }
+
+  function deadlineMonthsForFreq(freq) {
+    if (freq === 'monthly') return [0,1,2,3,4,5,6,7,8,9,10,11];
+    if (freq === 'quarterly') return [2,5,8,11];
+    if (freq === 'semi-annual') return [5,11];
+    return [11];
+  }
+
+  function isMonthExpanded(m) {
+    const v = cs.monthExpanded[m];
+    return v !== undefined ? v : (year === todayYear && m === todayMonth);
+  }
+
+  function isCardGroupCollapsed(m, cardId) {
+    const v = cs.cardGroupCollapsed[m + ':' + cardId];
+    return v !== undefined ? v : false;
+  }
+
+  function getMonthCardGroups(m) {
+    return activeCards.map(({ cardId, card }) => {
+      const trackable = card.credits.filter(cr => {
+        const freq = cr.frequency || 'annual';
+        if (freq === 'none') return false;
+        if ((state.disabledCredits[cardId] || []).indexOf(cr.name) >= 0) return false;
+        if (freq === 'annual' && cr.resetBasis === 'anniversary') return false;
+        return deadlineMonthsForFreq(freq).indexOf(m) >= 0;
+      });
+      if (trackable.length === 0) return null;
+      const credits = trackable.map(cr => {
+        const freq = cr.frequency || 'annual';
+        let periodIndex, periodLabel;
+        if (freq === 'monthly') { periodIndex = m; periodLabel = 'monthly'; }
+        else if (freq === 'quarterly') { periodIndex = Math.floor(m / 3); periodLabel = 'quarterly'; }
+        else if (freq === 'semi-annual') { periodIndex = m < 6 ? 0 : 1; periodLabel = 'semi-annual'; }
+        else { periodIndex = 0; periodLabel = 'annual'; }
+        const status = getCreditPeriodStatus(cardId, cr, year, periodIndex);
+        const displayStatus = status.isComplete ? 'done' : (status.usedAmount > 0 ? 'partial' : 'urgent');
+        return { cr, freq, periodLabel, status, displayStatus };
+      });
+      return { cardId, card, credits };
+    }).filter(Boolean);
+  }
+
+  function buildMonthSummary(cardGroups, m) {
+    let total = 0, done = 0, totalAmt = 0, usedAmt = 0;
+    cardGroups.forEach(({ credits }) => credits.forEach(c => {
+      total++;
+      if (c.displayStatus === 'done') done++;
+      totalAmt += c.status.periodAmount;
+      usedAmt += Math.min(c.status.usedAmount, c.status.periodAmount);
+    }));
+    if (total === 0) return '';
+    if (done === total) return `✓ All ${total} credits used`;
+    const unused = totalAmt - usedAmt;
+    const isPastMonth = year < todayYear || (year === todayYear && m < todayMonth);
+    return `${done} of ${total} used · $${Math.round(unused)} ${isPastMonth ? 'expired' : 'remaining'}`;
+  }
+
+  // Build 12 month cards
+  const monthGridHtml = MONTH_NAMES.map((monthName, m) => {
+    const isCurrentMonth = year === todayYear && m === todayMonth;
+    const isPast = year < todayYear || (year === todayYear && m < todayMonth);
+
+    const cardGroups = getMonthCardGroups(m);
+    const allDone = cardGroups.length > 0 && cardGroups.every(g => g.credits.every(c => c.displayStatus === 'done'));
+    const displayGroups = cs.unusedOnly
+      ? cardGroups.map(g => ({ ...g, credits: g.credits.filter(c => c.displayStatus !== 'done') })).filter(g => g.credits.length > 0)
+      : cardGroups;
+
+    const expanded = isMonthExpanded(m) && !(cs.unusedOnly && allDone);
+    const summary = buildMonthSummary(cardGroups, m);
+
+    const headerBg = isCurrentMonth ? '#eff6ff' : isPast ? '#f3f4f6' : '#f9fafb';
+    const headerColor = isCurrentMonth ? '#1d4ed8' : '#1c1917';
+    const borderColor = isCurrentMonth ? '#bfdbfe' : '#e5e7eb';
+    const fadedStyle = isPast && !isCurrentMonth ? 'opacity:0.65;' : '';
+    const arrowRot = expanded ? 'rotate(90deg)' : 'rotate(0deg)';
+    // border-radius on button adjusts based on whether a body follows
+    const btnRadius = expanded ? '10px 10px 0 0' : '10px';
+
+    let bodyHtml = '';
+    if (expanded) {
+      if (displayGroups.length === 0) {
+        const msg = cs.unusedOnly ? 'All credits used this month' : 'No deadlines this month';
+        bodyHtml = `<div style="padding:12px 14px;color:#a8a29e;font-size:12px;text-align:center;">${msg}</div>`;
+      } else {
+        let groupsHtml = '';
+        displayGroups.forEach(({ cardId, card, credits }) => {
+          const color = getCardColor(cardId);
+          const grpCollapsed = isCardGroupCollapsed(m, cardId);
+          const grpArrow = grpCollapsed ? 'rotate(0deg)' : 'rotate(90deg)';
+          const doneCount = credits.filter(c => c.displayStatus === 'done').length;
+          const grpBadge = doneCount === credits.length
+            ? `<span style="font-size:10px;color:#16a34a;font-weight:500;">✓ All done</span>`
+            : doneCount > 0
+              ? `<span style="font-size:10px;color:#9ca3af;">${doneCount}/${credits.length} done</span>`
+              : '';
+          const sortedCredits = [...credits].sort((a, b) => ({ urgent:0, partial:1, done:2 }[a.displayStatus] - { urgent:0, partial:1, done:2 }[b.displayStatus]));
+          const rowsHtml = grpCollapsed ? '' : sortedCredits.map(c => _calBuildCreditRow(cardId, c, year, m)).join('');
+          const grpBtnRadius = grpCollapsed ? '7px' : '7px 7px 0 0';
+
+          groupsHtml += `<div style="border:1px solid #e5e7eb;border-radius:7px;margin-bottom:6px;">
+            <button class="cal-cardgrp-btn" data-month="${m}" data-card-id="${escapeHtml(cardId)}"
+              style="width:100%;display:flex;align-items:center;gap:7px;padding:8px 10px;background:${color}14;border:none;cursor:pointer;font-family:inherit;text-align:left;border-radius:${grpBtnRadius};">
+              <span style="display:inline-block;transition:transform .15s;transform:${grpArrow};font-size:9px;color:#78716c;">&#9654;</span>
+              <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${color};flex-shrink:0;"></span>
+              <span style="font-size:12px;font-weight:600;color:#1c1917;flex:1;">${escapeHtml(card.shortName || card.name)}</span>
+              ${grpBadge}
+            </button>
+            ${grpCollapsed ? '' : `<div style="padding:6px 8px;display:flex;flex-direction:column;gap:4px;">${rowsHtml}</div>`}
+          </div>`;
+        });
+        bodyHtml = `<div style="padding:8px 10px 4px;">${groupsHtml}</div>`;
+      }
+    }
+
+    return `<div style="border:1px solid ${borderColor};border-radius:10px;${fadedStyle}">
+      <button class="cal-month-btn" data-month="${m}"
+        style="width:100%;display:flex;align-items:center;gap:8px;padding:9px 12px;background:${headerBg};border:none;cursor:pointer;font-family:inherit;text-align:left;border-radius:${btnRadius};">
+        <span style="display:inline-block;transition:transform .15s;transform:${arrowRot};font-size:9px;color:#6b7280;flex-shrink:0;">&#9654;</span>
+        <span style="font-size:13px;font-weight:700;color:${headerColor};flex-shrink:0;">${monthName}</span>
+        ${isCurrentMonth ? '<span style="font-size:10px;font-weight:600;color:#1d4ed8;background:#dbeafe;padding:1px 7px;border-radius:8px;flex-shrink:0;">Now</span>' : ''}
+        ${!expanded && summary ? `<span style="font-size:11px;color:#6b7280;flex:1;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-left:4px;">${escapeHtml(summary)}</span>` : '<span style="flex:1;"></span>'}
+      </button>
+      ${bodyHtml}
+    </div>`;
+  }).join('');
+
+  // Build sidebar
+  let yearSelectorHtml = '';
+  if (availableYears.length > 1) {
+    const btns = availableYears.map(y => {
+      const active = y === year;
+      return `<button class="cal-year-btn" data-year="${y}" style="padding:3px 10px;font-size:12px;border:1px solid ${active ? '#1c1917' : '#e7e5e4'};border-radius:5px;background:${active ? '#1c1917' : '#fff'};color:${active ? '#fff' : '#374151'};cursor:pointer;font-family:inherit;">${y}</button>`;
+    }).join('');
+    yearSelectorHtml = `<div style="margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:600;color:#78716c;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:7px;">Year</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;">${btns}</div>
+    </div>`;
+  }
+
+  const unusedChkBg = cs.unusedOnly ? '#1c1917' : 'transparent';
+  const unusedChkBorder = cs.unusedOnly ? '#1c1917' : '#d1d5db';
+  const unusedRowBorder = cs.unusedOnly ? '#1c191733' : '#f0eeec';
+  const unusedRowBg = cs.unusedOnly ? '#1c19170c' : '#fafaf9';
+  const unusedLabelColor = cs.unusedOnly ? '#1c1917' : '#78716c';
+
+  const cardChipsHtml = walletCards.map(({ cardId, card }) => {
+    const on = !!cs.enabledCards[cardId];
+    const color = getCardColor(cardId);
+    return `<button class="cal-chip" data-card-id="${escapeHtml(cardId)}" style="display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;margin-bottom:4px;border:1px solid ${on ? color + '44' : '#f0eeec'};border-radius:6px;background:${on ? color + '0f' : '#fafaf9'};cursor:pointer;font-family:inherit;text-align:left;">
+      <span style="flex-shrink:0;width:14px;height:14px;border-radius:3px;border:2px solid ${color};background:${on ? color : 'transparent'};display:inline-flex;align-items:center;justify-content:center;font-size:9px;color:#fff;font-weight:700;">${on ? '✓' : ''}</span>
+      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0;"></span>
+      <span style="font-size:11px;font-weight:500;color:${on ? '#1c1917' : '#a8a29e'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(card.shortName || card.name)}</span>
+    </button>`;
+  }).join('');
+
+  // Set-it-and-forget-it note: credits with frequency:'none'
+  const noneRows = [];
+  walletCards.forEach(({ cardId, card }) => {
+    const nones = (card.credits || []).filter(cr => (cr.frequency || 'annual') === 'none');
+    if (nones.length > 0) noneRows.push({ card, nones });
+  });
+  let noneNoteHtml = '';
+  if (noneRows.length > 0) {
+    const items = noneRows.map(({ card, nones }) =>
+      `<div style="margin-bottom:3px;"><strong>${escapeHtml(card.shortName || card.name)}:</strong> ${nones.map(cr => escapeHtml(cr.name)).join(', ')}</div>`
+    ).join('');
+    const tipText = "These credits are activated once and stay active — like a membership or enrollment. Unlike the credits above, they don’t need to be redeemed each month.";
+    noneNoteHtml = `<div style="margin-top:10px;border-top:1px solid #f0eeec;padding-top:10px;">
+      <div style="display:flex;align-items:flex-start;gap:5px;margin-bottom:5px;">
+        <span style="font-size:10px;color:#a8a29e;font-style:italic;line-height:1.5;">Set-it-and-forget-it benefits not shown here:</span>
+        <span class="cal-auto-circle" data-tooltip="${escapeHtml(tipText)}" style="display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;min-width:13px;border-radius:50%;border:1px solid #d1d5db;background:#f9fafb;font-size:9px;color:#9ca3af;cursor:default;margin-top:1px;">ⓘ</span>
+      </div>
+      <div style="font-size:10px;color:#a8a29e;line-height:1.6;">${items}</div>
+    </div>`;
+  }
+
+  container.innerHTML = `
+    <style>
+      .cal-toggle-btn { transition: background .12s, border-color .12s; }
+      .cal-toggle-btn.cal-can-use:hover { background:#dcfce7 !important; border-color:#16a34a !important; color:#16a34a !important; }
+      .cal-toggle-btn.cal-can-undo:hover { background:#fee2e2 !important; border-color:#dc2626 !important; color:#dc2626 !important; }
+    </style>
+    <div style="max-width:1100px;margin:0 auto;padding:24px;">
+      <div style="margin-bottom:20px;">
+        <span style="font-size:22px;font-weight:700;color:#1c1917;">${year}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) 180px;gap:20px;align-items:start;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+          ${monthGridHtml}
+        </div>
+        <div style="position:sticky;top:16px;">
+          <div style="background:#fff;border:1px solid #e7e5e4;border-radius:8px;padding:12px;">
+            ${yearSelectorHtml}
+            <button id="calUnusedOnly" style="display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;margin-bottom:10px;border:1px solid ${unusedRowBorder};border-radius:6px;background:${unusedRowBg};cursor:pointer;font-family:inherit;text-align:left;">
+              <span style="flex-shrink:0;width:14px;height:14px;border-radius:3px;border:2px solid ${unusedChkBorder};background:${unusedChkBg};display:inline-flex;align-items:center;justify-content:center;font-size:9px;color:#fff;font-weight:700;">${cs.unusedOnly ? '✓' : ''}</span>
+              <span style="font-size:11px;font-weight:500;color:${unusedLabelColor};">Unused only</span>
+            </button>
+            <div style="font-size:11px;font-weight:600;color:#78716c;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px;">Cards</div>
+            ${cardChipsHtml}
+            ${noneNoteHtml}
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  // Card filter chips
+  container.querySelectorAll('.cal-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      cs.enabledCards[btn.dataset.cardId] = !cs.enabledCards[btn.dataset.cardId];
+      renderCreditCalendar();
+    });
+  });
+
+  // Year selector
+  container.querySelectorAll('.cal-year-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      cs.year = parseInt(btn.dataset.year);
+      cs.monthExpanded = {};
+      cs.cardGroupCollapsed = {};
+      renderCreditCalendar();
+    });
+  });
+
+  // Unused only toggle
+  document.getElementById('calUnusedOnly')?.addEventListener('click', () => {
+    cs.unusedOnly = !cs.unusedOnly;
+    renderCreditCalendar();
+  });
+
+  // Month expand/collapse
+  container.querySelectorAll('.cal-month-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const m = parseInt(btn.dataset.month);
+      cs.monthExpanded[m] = !isMonthExpanded(m);
+      renderCreditCalendar();
+    });
+  });
+
+  // Card group expand/collapse
+  container.querySelectorAll('.cal-cardgrp-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const m = parseInt(btn.dataset.month);
+      const key = m + ':' + btn.dataset.cardId;
+      cs.cardGroupCollapsed[key] = !isCardGroupCollapsed(m, btn.dataset.cardId);
+      renderCreditCalendar();
+    });
+  });
+
+  // Manual credit toggle (mark used / undo)
+  container.querySelectorAll('.cal-toggle-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const { cardId, creditName, month: mStr, year: yStr, isDone, freq: freqStr } = btn.dataset;
+      const monthIdx = parseInt(mStr), logYear = parseInt(yStr);
+      if (!state.monthlyCredits[cardId]) state.monthlyCredits[cardId] = {};
+      if (!state.monthlyCredits[cardId][creditName]) state.monthlyCredits[cardId][creditName] = {};
+      if (!state.monthlyCredits[cardId][creditName][logYear]) state.monthlyCredits[cardId][creditName][logYear] = [];
+      const claimed = state.monthlyCredits[cardId][creditName][logYear];
+      if (isDone === 'true') {
+        let periodMonths;
+        if (freqStr === 'monthly') periodMonths = [monthIdx];
+        else if (freqStr === 'quarterly') { const qi = Math.floor(monthIdx / 3); periodMonths = [qi*3, qi*3+1, qi*3+2]; }
+        else if (freqStr === 'semi-annual') periodMonths = monthIdx < 6 ? [0,1,2,3,4,5] : [6,7,8,9,10,11];
+        else periodMonths = [0,1,2,3,4,5,6,7,8,9,10,11];
+        state.monthlyCredits[cardId][creditName][logYear] = claimed.filter(m => periodMonths.indexOf(m) < 0);
+      } else {
+        if (claimed.indexOf(monthIdx) < 0) claimed.push(monthIdx);
+      }
+      safeLocalStorageSet('ccTracker_monthlyCredits', state.monthlyCredits);
+      renderCreditCalendar();
+    });
+  });
+
+  // Fixed tooltip for auto-detected status circles (escapes overflow:hidden)
+  let _calTip = document.getElementById('calGlobalTip');
+  if (!_calTip) {
+    _calTip = document.createElement('div');
+    _calTip.id = 'calGlobalTip';
+    _calTip.style.cssText = 'display:none;position:fixed;z-index:9999;background:#1c1917;color:#e7e5e4;border-radius:5px;padding:5px 9px;font-size:11px;pointer-events:none;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.25);';
+    document.body.appendChild(_calTip);
+  }
+  container.querySelectorAll('.cal-auto-circle').forEach(el => {
+    el.addEventListener('mouseenter', () => {
+      const rect = el.getBoundingClientRect();
+      _calTip.textContent = el.dataset.tooltip || 'Auto-detected from transactions';
+      _calTip.style.display = 'block';
+      const tipW = _calTip.offsetWidth;
+      const left = Math.max(8, Math.min(rect.left + rect.width / 2 - tipW / 2, window.innerWidth - tipW - 8));
+      _calTip.style.left = left + 'px';
+      _calTip.style.top = Math.max(4, rect.top - 34) + 'px';
+    });
+    el.addEventListener('mouseleave', () => { _calTip.style.display = 'none'; });
+  });
+}
+
+
+// Renders a single credit row. creditData: { cr, freq, periodLabel, status, displayStatus }
+function _calBuildCreditRow(cardId, creditData, year, month) {
+  const { cr, freq, periodLabel, status, displayStatus } = creditData;
+  const { periodAmount, usedAmount, isComplete, transactions } = status;
+  const color = getCardColor(cardId);
+  const icon = getCreditIcon(cr.name);
+
+  // Toggle element: clickable button for manual credits, static indicator for auto
+  let toggleEl;
+  if (cr.manual) {
+    const btnClass = isComplete ? 'cal-toggle-btn cal-can-undo' : 'cal-toggle-btn cal-can-use';
+    const btnStyle = isComplete
+      ? `width:20px;height:20px;border-radius:50%;background:#16a34a;border:2px solid #16a34a;color:#fff;font-size:11px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;padding:0;font-family:inherit;`
+      : `width:20px;height:20px;border-radius:50%;background:#fff;border:2px dashed #d1d5db;color:transparent;font-size:11px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;padding:0;font-family:inherit;`;
+    toggleEl = `<button class="${btnClass}"
+      data-card-id="${escapeHtml(cardId)}"
+      data-credit-name="${escapeHtml(cr.name)}"
+      data-month="${month}"
+      data-year="${year}"
+      data-is-done="${isComplete}"
+      data-freq="${escapeHtml(freq)}"
+      title="${isComplete ? 'Click to unmark as used' : 'Click to mark as used'}"
+      style="${btnStyle}">${isComplete ? '✓' : '✓'}</button>`;
+  } else {
+    let sStyle;
+    if (isComplete) {
+      sStyle = `width:20px;height:20px;border-radius:50%;background:#16a34a;color:#fff;font-size:11px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;cursor:default;`;
+    } else if (displayStatus === 'partial') {
+      sStyle = `width:20px;height:20px;border-radius:50%;background:#fef9c3;border:2px solid #d97706;color:#d97706;font-size:11px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;cursor:default;`;
+    } else {
+      sStyle = `width:20px;height:20px;border-radius:50%;background:#fff;border:2px solid #e5e7eb;color:#d1d5db;font-size:11px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;cursor:default;`;
+    }
+    const content = isComplete ? '✓' : displayStatus === 'partial' ? '◐' : '○';
+    const txCount = transactions ? transactions.length : 0;
+    const tipText = txCount > 0
+      ? `Auto-detected · ${txCount} transaction${txCount !== 1 ? 's' : ''} matched`
+      : 'Auto-detected from transactions';
+    toggleEl = `<span class="cal-auto-circle" data-tooltip="${escapeHtml(tipText)}" style="${sStyle}">${content}</span>`;
+  }
+
+  // Amount line
+  let amountStr;
+  if (isComplete) {
+    amountStr = `<span style="font-size:11px;color:#16a34a;">$${Math.round(periodAmount)} used</span>`;
+  } else if (displayStatus === 'partial') {
+    amountStr = `<span style="font-size:11px;color:#d97706;">$${Math.round(usedAmount)} of $${Math.round(periodAmount)}</span>`;
+  } else {
+    amountStr = `<span style="font-size:11px;color:#6b7280;">$${Math.round(periodAmount)}</span>`;
+  }
+
+  // Progress bar when partial
+  let progressBar = '';
+  if (displayStatus === 'partial' && periodAmount > 0) {
+    const pct = Math.min(100, Math.round((usedAmount / periodAmount) * 100));
+    progressBar = `<div style="height:2px;background:#e5e7eb;border-radius:1px;margin-top:3px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:#d97706;"></div></div>`;
+  }
+
+  const freqLabel = periodLabel ? `<span style="font-size:10px;color:#9ca3af;">(${periodLabel})</span>` : '';
+  const rowBg = isComplete ? '#f0fdf4' : displayStatus === 'partial' ? '#fffdf0' : '#fff';
+  const rowBorder = isComplete ? '#bbf7d0' : displayStatus === 'partial' ? '#fde68a' : '#f0f0f0';
+
+  return `<div style="display:flex;align-items:flex-start;gap:7px;padding:6px 8px;border-radius:6px;background:${rowBg};border:1px solid ${rowBorder};">
+    ${toggleEl}
+    <span style="font-size:15px;color:${color};flex-shrink:0;margin-top:1px;">${icon}</span>
+    <div style="flex:1;min-width:0;">
+      <div style="display:flex;align-items:baseline;gap:5px;flex-wrap:wrap;">
+        <span style="font-size:12px;font-weight:500;color:#1c1917;">${escapeHtml(cr.name)}</span>
+        ${freqLabel}
+      </div>
+      <div style="margin-top:2px;">${amountStr}</div>
+      ${progressBar}
+    </div>
+  </div>`;
+}
+
+// Card-specific colors. Falls back to a hashed palette for unknown cards.
+const CARD_COLORS = {
+  'chase-sapphire-reserve': '#1e3a8a',
+  'chase-sapphire-preferred': '#3b82f6',
+  'chase-freedom-flex': '#8b5cf6',
+  'chase-freedom-unlimited': '#a855f7',
+  'amex-platinum': '#475569',
+  'amex-gold': '#ca8a04',
+  'capital-one-venture-x': '#dc2626',
+  'capital-one-venture-rewards': '#ea580c',
+  'bilt-palladium': '#6d28d9',
+  'bilt-obsidian': '#171717',
+  'bilt-blue': '#0891b2',
+  'us-bank-cash-plus': '#16a34a',
+  'amazon-prime': '#f59e0b',
+};
+function getCardColor(cardId) {
+  if (CARD_COLORS[cardId]) return CARD_COLORS[cardId];
+  let h = 0;
+  for (let i = 0; i < cardId.length; i++) { h = ((h << 5) - h) + cardId.charCodeAt(i); h |= 0; }
+  const palette = ['#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#84cc16','#ec4899'];
+  return palette[Math.abs(h) % palette.length];
+}
+
+// Maps a credit name to a small Unicode icon representing its category.
+function getCreditIcon(creditName) {
+  const n = (creditName || '').toLowerCase();
+  if (/dining|restaurant|grubhub|seamless|resy|opentable|doordash rest|dunkin|cheesecake|milkbar|goldbelly/.test(n)) return '\u{1F374}'; // 🍴
+  if (/grocery|doordash groc/.test(n)) return '\u{1F6D2}'; // 🛒
+  if (/walmart/.test(n)) return '\u{1F6D2}'; // 🛒
+  if (/lyft|ride/.test(n)) return '\u{1F697}'; // 🚗
+  if (/uber cash|uber one/.test(n)) return '\u{1F697}'; // 🚗
+  if (/airline|flight|bilt travel|capital one travel|travel/.test(n)) return '✈'; // ✈
+  if (/hotel|edit hotels/.test(n)) return '\u{1F3E8}'; // 🏨
+  if (/equinox|peloton|fitness|gym/.test(n)) return '\u{1F4AA}'; // 💪
+  if (/lululemon/.test(n)) return '\u{1F6CD}'; // 🛍
+  if (/saks/.test(n)) return '\u{1F6CD}'; // 🛍
+  if (/entertainment|streaming|digital/.test(n)) return '\u{1F4FA}'; // 📺
+  if (/clear\+|tsa|global entry|precheck|trusted traveler|known traveler/.test(n)) return '\u{1F6E1}'; // 🛡
+  if (/stubhub|ticket|concert/.test(n)) return '\u{1F3DF}'; // 🏟
+  return '\u{1F4B3}'; // 💳
+}
+
+// Returns a short label like "$25 dining" for use in day cells.
+function getCreditShortLabel(creditName, dollarAmt) {
+  const n = (creditName || '').toLowerCase();
+  let type = 'credit';
+  if (/dining|restaurant|grubhub|seamless|resy|opentable|dunkin|cheesecake|milkbar/.test(n)) type = 'dining';
+  else if (/doordash groc|grocery/.test(n)) type = 'grocery';
+  else if (/doordash rest/.test(n)) type = 'DoorDash';
+  else if (/lyft/.test(n)) type = 'Lyft';
+  else if (/uber cash/.test(n)) type = 'Uber';
+  else if (/uber one/.test(n)) type = 'Uber One';
+  else if (/airline/.test(n)) type = 'airline';
+  else if (/bilt travel|capital one travel/.test(n)) type = 'travel';
+  else if (/travel/.test(n)) type = 'travel';
+  else if (/hotel|edit hotels/.test(n)) type = 'hotel';
+  else if (/equinox/.test(n)) type = 'Equinox';
+  else if (/peloton/.test(n)) type = 'Peloton';
+  else if (/lululemon/.test(n)) type = 'Lulu';
+  else if (/saks/.test(n)) type = 'Saks';
+  else if (/entertainment|digital/.test(n)) type = 'ent.';
+  else if (/streaming/.test(n)) type = 'stream';
+  else if (/stubhub/.test(n)) type = 'StubHub';
+  else if (/clear/.test(n)) type = 'CLEAR+';
+  else if (/global entry|tsa|precheck/.test(n)) type = 'TSA';
+  else if (/walmart/.test(n)) type = 'Walmart+';
+  return '$' + Math.round(dollarAmt) + ' ' + type;
+}
+
+// Compact card toggle sidebar (for 2-month and annual views).
+function _calBuildCardToggleSidebar(walletCards, enabledCards) {
+  if (walletCards.length === 0) return '';
+  let html = '<div style="background:#fff;border:1px solid #e7e5e4;border-radius:8px;padding:12px;">';
+  html += '<div style="font-size:11px;font-weight:600;color:#78716c;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:10px;">Cards</div>';
+  walletCards.forEach(({ cardId, card }) => {
+    const on = !!enabledCards[cardId];
+    const color = getCardColor(cardId);
+    html += `<button class="cal-chip" data-card-id="${escapeHtml(cardId)}" style="display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;margin-bottom:4px;border:1px solid ${on ? color + '44' : '#f0eeec'};border-radius:6px;background:${on ? color + '0f' : '#fafaf9'};cursor:pointer;font-family:inherit;text-align:left;">
+      <span style="flex-shrink:0;width:14px;height:14px;border-radius:3px;border:2px solid ${color};background:${on ? color : 'transparent'};display:inline-flex;align-items:center;justify-content:center;font-size:9px;color:#fff;font-weight:700;">${on ? '✓' : ''}</span>
+      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0;"></span>
+      <span style="font-size:11px;font-weight:500;color:${on ? '#1c1917' : '#a8a29e'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(card.shortName || card.name)}</span>
+    </button>`;
+  });
+  html += '</div>';
+  return html;
+}
+
+// Parses a transaction date string into {y, m, d} (m is 0-indexed).
+function _calParseDate(str) {
+  if (!str) return null;
+  if (str.indexOf('-') >= 0) {
+    const p = str.split('-');
+    return { y: parseInt(p[0]), m: parseInt(p[1]) - 1, d: parseInt(p[2]) };
+  }
+  if (str.indexOf('/') >= 0) {
+    const p = str.split('/');
+    const yp = p[2];
+    return { m: parseInt(p[0]) - 1, d: parseInt(p[1]), y: parseInt(yp.length === 2 ? '20' + yp : yp) };
+  }
+  return null;
+}
+
+// Returns end-of-period day for a credit in a given month, or null if no deadline lands here.
+function _calDeadlineDay(cr, year, month) {
+  const freq = cr.frequency || 'annual';
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  if (freq === 'monthly') return lastDay;
+  if (freq === 'quarterly') {
+    const qEndMonth = [2, 5, 8, 11][Math.floor(month / 3)];
+    return month === qEndMonth ? lastDay : null;
+  }
+  if (freq === 'semi-annual') return (month === 5 || month === 11) ? lastDay : null;
+  if (freq === 'annual') {
+    if (cr.resetBasis === 'anniversary') return null; // anniversary date unknown — handled in side panel
+    return month === 11 ? 31 : null;
+  }
+  return null;
+}
+
+// Renders a single calendar grid for a month, color-coded by card.
+// Each day cell shows transactions (small colored bars) and period deadline badges.
+function _calBuildMonthGrid(activeCards, year, month, todayYear, todayMonth) {
+  const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const isCurrentMonthView = (year === todayYear && month === todayMonth);
+  const todayDate = new Date().getDate();
+
+  // Collect events by day-of-month
+  const events = {};
+  for (let d = 1; d <= daysInMonth; d++) events[d] = { txns: [], deadlines: [] };
+
+  activeCards.forEach(({ cardId, card }) => {
+    const color = getCardColor(cardId);
+    const trackable = card.credits.filter(cr =>
+      (cr.frequency || 'annual') !== 'none' && (state.disabledCredits[cardId] || []).indexOf(cr.name) < 0
+    );
+
+    // Auto-detected transactions
+    if (state.results && state.results.processed) {
+      state.results.processed.forEach(t => {
+        if (t.cardId !== cardId || !t.creditMatch) return;
+        const cr = trackable.find(c => c.name === t.creditMatch);
+        if (!cr) return;
+        const dt = _calParseDate(t.date);
+        if (!dt || dt.y !== year || dt.m !== month) return;
+        const amt = Math.abs(t.amount);
+        events[dt.d].txns.push({
+          cardId, color, creditName: cr.name,
+          merchant: t.merchant || t.original || '',
+          amount: amt,
+          icon: getCreditIcon(cr.name),
+          shortLabel: getCreditShortLabel(cr.name, amt)
+        });
+      });
+    }
+
+    // Period deadline markers
+    trackable.forEach(cr => {
+      const day = _calDeadlineDay(cr, year, month);
+      if (!day) return;
+      const freq = cr.frequency || 'annual';
+      let periodIndex = 0;
+      if (freq === 'monthly') periodIndex = month;
+      else if (freq === 'quarterly') periodIndex = Math.floor(month / 3);
+      else if (freq === 'semi-annual') periodIndex = month < 6 ? 0 : 1;
+      const status = getCreditPeriodStatus(cardId, cr, year, periodIndex);
+      const periodAmt = status.periodAmount;
+      events[day].deadlines.push({
+        cardId, color, creditName: cr.name, freq, status,
+        icon: getCreditIcon(cr.name),
+        shortLabel: getCreditShortLabel(cr.name, periodAmt)
+      });
+    });
+  });
+
+  // Header
+  let html = `<div style="background:#fff;border:1px solid #e7e5e4;border-radius:8px;overflow:hidden;">
+    <div style="padding:10px 14px;background:#fafaf9;border-bottom:1px solid #e7e5e4;font-size:14px;font-weight:600;color:#1c1917;">${MONTH_NAMES[month]} ${year}</div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);background:#f5f5f4;">`;
+  WEEKDAYS.forEach(w => {
+    html += `<div style="padding:6px 4px;text-align:center;font-size:10px;font-weight:600;color:#78716c;letter-spacing:0.04em;text-transform:uppercase;">${w}</div>`;
+  });
+  html += `</div><div style="display:grid;grid-template-columns:repeat(7,1fr);">`;
+
+  // Leading blanks (previous month)
+  for (let i = 0; i < firstDay; i++) {
+    html += `<div style="min-height:88px;background:#fafaf9;border-right:1px solid #f0eeec;border-bottom:1px solid #f0eeec;"></div>`;
+  }
+
+  // Day cells
+  for (let d = 1; d <= daysInMonth; d++) {
+    const isToday = isCurrentMonthView && d === todayDate;
+    const evs = events[d];
+
+    // Redemption rows (auto-detected transactions) — always green
+    let txnHtml = '';
+    evs.txns.slice(0, 3).forEach(e => {
+      const tip = escapeHtml(e.creditName + ' · ' + e.merchant + ' · $' + e.amount.toFixed(2));
+      txnHtml += `<div title="${tip}" style="display:flex;align-items:center;gap:3px;padding:1px 4px;margin-top:2px;background:#dcfce7;border-left:3px solid #16a34a;border-radius:2px;overflow:hidden;">
+        <span style="font-size:10px;line-height:1;">${e.icon}</span>
+        <span style="font-size:9px;color:#15803d;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(e.shortLabel)}</span>
+      </div>`;
+    });
+    if (evs.txns.length > 3) txnHtml += `<div style="font-size:9px;color:#a8a29e;margin-top:1px;">+${evs.txns.length - 3} more</div>`;
+
+    // Deadline rows — card color, icon + short label
+    let deadlineHtml = '';
+    evs.deadlines.slice(0, 4).forEach(e => {
+      const isDone = e.status.isComplete;
+      const isPartial = !isDone && e.status.usedAmount > 0;
+      const rowColor = isDone ? '#16a34a' : (isPartial ? '#d97706' : e.color);
+      const rowBg = isDone ? '#dcfce7' : (isPartial ? '#fef9c3' : e.color + '15');
+      const tip = escapeHtml(e.creditName + ' deadline · $' + e.status.usedAmount.toFixed(0) + ' / $' + e.status.periodAmount.toFixed(0));
+      deadlineHtml += `<div title="${tip}" style="display:flex;align-items:center;gap:3px;padding:1px 4px;margin-top:2px;background:${rowBg};border-left:3px solid ${rowColor};border-radius:2px;overflow:hidden;">
+        <span style="font-size:10px;line-height:1;">${e.icon}</span>
+        <span style="font-size:9px;color:${rowColor};font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(e.shortLabel)}</span>
+      </div>`;
+    });
+
+    const cellBg = isToday ? '#fef3c7' : '#fff';
+    const dayColor = isToday ? '#92400e' : '#44403c';
+    const dayWeight = isToday ? '700' : '500';
+    html += `<div style="position:relative;min-height:88px;padding:4px 6px;background:${cellBg};border-right:1px solid #f0eeec;border-bottom:1px solid #f0eeec;${isToday ? 'box-shadow:inset 0 0 0 2px #f59e0b;' : ''}overflow:hidden;">
+      <div style="font-size:11px;font-weight:${dayWeight};color:${dayColor};">${d}</div>
+      ${txnHtml}
+      ${deadlineHtml}
+    </div>`;
+  }
+
+  // Trailing blanks
+  const totalCells = firstDay + daysInMonth;
+  const trailing = (7 - (totalCells % 7)) % 7;
+  for (let i = 0; i < trailing; i++) {
+    html += `<div style="min-height:88px;background:#fafaf9;border-right:1px solid #f0eeec;border-bottom:1px solid #f0eeec;"></div>`;
+  }
+  html += `</div></div>`;
+  return html;
+}
+
+// Renders the side panel: card toggle checkboxes + credit status rows per card.
+// Takes ALL wallet cards so inactive ones can show a toggle-on prompt.
+function _calBuildMonthSidePanel(walletCards, enabledCards, year, month, todayYear, todayMonth) {
+  const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const Q_RANGES = [['Jan','Feb','Mar'],['Apr','May','Jun'],['Jul','Aug','Sep'],['Oct','Nov','Dec']];
+
+  let html = '';
+
+  walletCards.forEach(({ cardId, card }) => {
+    const on = !!enabledCards[cardId];
+    const color = getCardColor(cardId);
+    const trackable = on ? card.credits.filter(cr =>
+      (cr.frequency || 'annual') !== 'none' && (state.disabledCredits[cardId] || []).indexOf(cr.name) < 0
+    ) : [];
+
+    // Card header always shows toggle checkbox
+    const checkboxHtml = `<button class="cal-chip" data-card-id="${escapeHtml(cardId)}" style="display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;border:none;border-bottom:1px solid ${color}33;background:transparent;cursor:pointer;font-family:inherit;text-align:left;">
+      <span style="flex-shrink:0;width:14px;height:14px;border-radius:3px;border:2px solid ${color};background:${on ? color : 'transparent'};display:inline-flex;align-items:center;justify-content:center;font-size:9px;color:#fff;font-weight:700;">${on ? '✓' : ''}</span>
+      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0;"></span>
+      <span style="font-size:13px;font-weight:600;color:${on ? '#1c1917' : '#a8a29e'};">${escapeHtml(card.shortName || card.name)}</span>
+    </button>`;
+
+    if (!on) {
+      html += `<div style="margin-bottom:12px;border:1px solid #f0eeec;border-radius:8px;overflow:hidden;opacity:0.6;">${checkboxHtml}</div>`;
+      return;
+    }
+
+    if (trackable.length === 0) {
+      html += `<div style="margin-bottom:12px;border:1px solid #e7e5e4;border-radius:8px;overflow:hidden;">${checkboxHtml}</div>`;
+      return;
+    }
+
+    let cardRows = '';
+
+    trackable.forEach(cr => {
+      const freq = cr.frequency || 'annual';
+      let periodIndex = 0;
+      let periodLabel = '';
+
+      if (freq === 'monthly') {
+        periodIndex = month;
+        periodLabel = MONTH_NAMES[month];
+      } else if (freq === 'quarterly') {
+        periodIndex = Math.floor(month / 3);
+        periodLabel = 'Q' + (periodIndex + 1) + ' (' + Q_RANGES[periodIndex].join('–') + ')';
+      } else if (freq === 'semi-annual') {
+        periodIndex = month < 6 ? 0 : 1;
+        periodLabel = periodIndex === 0 ? 'Jan–Jun' : 'Jul–Dec';
+      } else {
+        periodIndex = 0;
+        periodLabel = String(year) + (cr.resetBasis === 'anniversary' ? ' (anniversary year)' : '');
+      }
+
+      const status = getCreditPeriodStatus(cardId, cr, year, periodIndex);
+      const { periodAmount, usedAmount, isComplete, transactions } = status;
+
+      const pct = periodAmount > 0 ? Math.min(1, usedAmount / periodAmount) : 0;
+      const fmt = n => '$' + (n % 1 === 0 ? n.toFixed(0) : n.toFixed(2));
+      const freqSuffix = { monthly: '/mo', quarterly: '/qtr', 'semi-annual': '/half', annual: '/yr' }[freq] || '/yr';
+
+      const deadlineMap = {
+        monthly: 'Expires end of ' + MONTH_NAMES[month],
+        quarterly: 'Expires ' + ['Mar 31','Jun 30','Sep 30','Dec 31'][periodIndex],
+        'semi-annual': periodIndex === 0 ? 'Expires Jun 30' : 'Expires Dec 31',
+        annual: cr.resetBasis === 'anniversary' ? 'Resets on card anniversary' : 'Expires Dec 31, ' + year
+      };
+      const deadlineNote = deadlineMap[freq] || '';
+
+      const rowBg = isComplete ? '#f0fdf4' : '#fff';
+      const borderColor = isComplete ? '#bbf7d0' : '#e7e5e4';
+      const statusIcon = isComplete
+        ? '<span style="color:#059669;font-size:18px;line-height:1;">&#10003;</span>'
+        : (usedAmount > 0
+          ? '<span style="color:#d97706;font-size:14px;line-height:1;">&#9679;</span>'
+          : '<span style="color:#d4d4d4;font-size:18px;line-height:1;">&#9675;</span>');
+
+      const progressHtml = !isComplete && usedAmount > 0
+        ? `<div style="margin-top:6px;height:4px;background:#e7e5e4;border-radius:2px;overflow:hidden;"><div style="height:100%;width:${(pct*100).toFixed(0)}%;background:#059669;border-radius:2px;"></div></div>`
+        : '';
+
+      let txnHtml = '';
+      if (!cr.manual) {
+        if (transactions.length > 0) {
+          txnHtml = transactions.map(t => {
+            let displayDate = t.date;
+            if (t.date.indexOf('-') >= 0) {
+              const dp = t.date.split('-');
+              displayDate = parseInt(dp[1]) + '/' + parseInt(dp[2]);
+            }
+            return `<div style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:#eff6ff;border-radius:4px;font-size:11px;color:#1d4ed8;margin-top:4px;">
+              <span style="background:#3b82f6;color:#fff;font-size:10px;padding:1px 5px;border-radius:10px;font-weight:600;flex-shrink:0;">Auto</span>
+              <span>${escapeHtml(t.merchant || t.original || '')} $${Math.abs(t.amount).toFixed(2)} on ${escapeHtml(displayDate)}</span>
+            </div>`;
+          }).join('');
+        } else {
+          const hasData = state.results && state.results.processed && state.results.processed.length > 0;
+          txnHtml = `<div style="font-size:11px;color:#a8a29e;margin-top:4px;">${hasData ? 'No matching transactions this period.' : 'No transactions loaded.'}</div>`;
+        }
+      }
+
+      const logBtnHtml = cr.manual
+        ? (isComplete
+          ? `<div style="margin-top:6px;font-size:12px;color:#059669;font-weight:500;">&#10003; Logged</div>`
+          : `<button class="cal-log-btn" data-card-id="${escapeHtml(cardId)}" data-credit-name="${escapeHtml(cr.name)}" data-month="${month}" data-year="${year}" style="margin-top:8px;padding:5px 14px;background:#059669;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;">Log Credit Used</button>`)
+        : '';
+
+      cardRows += `
+        <div style="padding:12px;background:${rowBg};border:1px solid ${borderColor};border-radius:8px;margin-bottom:8px;">
+          <div style="display:flex;align-items:flex-start;gap:10px;">
+            <div style="margin-top:1px;flex-shrink:0;">${statusIcon}</div>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                <div style="font-size:13px;font-weight:500;">${escapeHtml(cr.name)}</div>
+                <div style="font-size:12px;color:#78716c;white-space:nowrap;">${fmt(usedAmount)} / ${fmt(periodAmount)}${freqSuffix}</div>
+              </div>
+              <div style="font-size:11px;color:#a8a29e;margin-top:2px;">${escapeHtml(periodLabel)} &middot; ${escapeHtml(deadlineNote)}</div>
+              ${progressHtml}${txnHtml}${logBtnHtml}
+            </div>
+          </div>
+        </div>`;
+    });
+
+    if (cardRows) {
+      html += `<div style="margin-bottom:12px;border:1px solid #e7e5e4;border-radius:8px;overflow:hidden;">
+        ${checkboxHtml}
+        <div style="padding:8px 10px;">${cardRows}</div>
+      </div>`;
+    }
+  });
+
+  return html || `<div style="text-align:center;padding:32px;color:#a8a29e;font-size:13px;">No trackable credits for the selected cards.</div>`;
+}
+
+// Renders 12 mini-calendars in a 3x4 grid — each shows colored event dots per day.
+// Click a mini-calendar header to zoom into that month.
+function _calBuildAnnualGrid(activeCards, year, todayYear, todayMonth) {
+  const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const WEEKDAYS = ['S','M','T','W','T','F','S'];
+
+  if (activeCards.length === 0) {
+    return `<div style="text-align:center;padding:32px;color:#a8a29e;">No cards selected.</div>`;
+  }
+
+  // For each month, gather events per day across active cards
+  function collectMonthEvents(month) {
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const events = {};
+    for (let d = 1; d <= daysInMonth; d++) events[d] = [];
+
+    activeCards.forEach(({ cardId, card }) => {
+      const color = getCardColor(cardId);
+      const trackable = card.credits.filter(cr =>
+        (cr.frequency || 'annual') !== 'none' && (state.disabledCredits[cardId] || []).indexOf(cr.name) < 0
+      );
+
+      if (state.results && state.results.processed) {
+        state.results.processed.forEach(t => {
+          if (t.cardId !== cardId || !t.creditMatch) return;
+          const cr = trackable.find(c => c.name === t.creditMatch);
+          if (!cr) return;
+          const dt = _calParseDate(t.date);
+          if (!dt || dt.y !== year || dt.m !== month) return;
+          events[dt.d].push({ color, type: 'txn' });
+        });
+      }
+
+      trackable.forEach(cr => {
+        const day = _calDeadlineDay(cr, year, month);
+        if (!day) return;
+        const freq = cr.frequency || 'annual';
+        let periodIndex = 0;
+        if (freq === 'monthly') periodIndex = month;
+        else if (freq === 'quarterly') periodIndex = Math.floor(month / 3);
+        else if (freq === 'semi-annual') periodIndex = month < 6 ? 0 : 1;
+        const status = getCreditPeriodStatus(cardId, cr, year, periodIndex);
+        events[day].push({ color, type: 'deadline', status });
+      });
+    });
+
+    return { events, daysInMonth };
+  }
+
+  let html = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;">`;
+
+  for (let month = 0; month < 12; month++) {
+    const { events, daysInMonth } = collectMonthEvents(month);
+    const firstDay = new Date(year, month, 1).getDay();
+    const isCurrentMonth = (year === todayYear && month === todayMonth);
+    const todayDate = new Date().getDate();
+
+    // Build mini-grid
+    let cellsHtml = '';
+    for (let i = 0; i < firstDay; i++) {
+      cellsHtml += `<div style="height:26px;"></div>`;
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+      const evs = events[d];
+      const isToday = isCurrentMonth && d === todayDate;
+      let dotsHtml = '';
+      if (evs.length > 0) {
+        const dotColors = evs.slice(0, 3).map(e => {
+          if (e.type === 'deadline') {
+            return e.status.isComplete ? '#10b981' : (e.status.usedAmount > 0 ? '#f59e0b' : e.color);
+          }
+          return e.color;
+        });
+        dotsHtml = '<div style="display:flex;gap:1px;justify-content:center;margin-top:1px;">' +
+          dotColors.map(c => `<span style="width:4px;height:4px;border-radius:50%;background:${c};"></span>`).join('') +
+          '</div>';
+      }
+      const cellStyle = isToday
+        ? 'border:1.5px solid #f59e0b;background:#fef3c7;color:#92400e;font-weight:700;'
+        : (evs.length > 0 ? 'background:#fafaf9;color:#44403c;' : 'color:#78716c;');
+      cellsHtml += `<div style="height:26px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:9px;border-radius:3px;${cellStyle}"><div>${d}</div>${dotsHtml}</div>`;
+    }
+
+    const isPast = (year < todayYear) || (year === todayYear && month < todayMonth);
+    const headerOpacity = (year > todayYear || (year === todayYear && month > todayMonth)) ? '0.5' : '1';
+
+    html += `<div class="cal-mini-month" data-month="${month}" style="background:#fff;border:1px solid #e7e5e4;border-radius:8px;padding:10px;cursor:pointer;opacity:${headerOpacity};transition:transform .15s, box-shadow .15s;" onmouseover="this.style.boxShadow='0 2px 6px rgba(0,0,0,0.08)';this.style.transform='translateY(-1px)';" onmouseout="this.style.boxShadow='';this.style.transform='';">
+      <div style="font-size:12px;font-weight:600;color:#1c1917;margin-bottom:6px;text-align:center;">${MONTH_NAMES[month]}</div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;font-size:9px;color:#a8a29e;margin-bottom:2px;">
+        ${WEEKDAYS.map(w => `<div style="text-align:center;">${w}</div>`).join('')}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;">
+        ${cellsHtml}
+      </div>
+    </div>`;
+  }
+
+  html += '</div>';
+
+  // Legend
+  let legendHtml = '<div style="margin-top:16px;padding:10px 14px;background:#fafaf9;border:1px solid #e7e5e4;border-radius:8px;display:flex;flex-wrap:wrap;gap:14px;align-items:center;font-size:12px;color:#78716c;">';
+  legendHtml += '<span style="font-weight:600;color:#44403c;">Legend:</span>';
+  legendHtml += '<span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#10b981;"></span>Period complete</span>';
+  legendHtml += '<span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#f59e0b;"></span>Partial</span>';
+  legendHtml += '<span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;border-radius:3px;background:#fef3c7;border:1.5px solid #f59e0b;"></span>Today</span>';
+  legendHtml += '<span style="opacity:0.7;">Click a month to zoom in</span>';
+  legendHtml += '</div>';
+
+  return html + legendHtml;
 }
 
 function showCreditModal(txnId, cardId) {

@@ -10,17 +10,17 @@ window.CardTracker.cards['chase-sapphire-reserve'] = {
   multipliers: { 'chase-travel': 8, 'flights-direct': 4, 'hotels-direct': 4, 'dining': 3, 'lyft': 5 },
   baseRate: 1,
   credits: [
-    { name: 'Travel Credit', amount: 300, keywords: ['TRAVEL CREDIT'], manual: false },
-    { name: 'Global Entry/TSA PreCheck', amount: 120, keywords: ['GLOBAL ENTRY', 'TSA PRECHECK', 'KNOWN TRAVELER', 'TRUSTED TRAVELER'], manual: false },
-    { name: 'Dining/OpenTable Credit', amount: 300, keywords: ['DINING CREDIT', 'OPENTABLE'], manual: false },
-    { name: 'The Edit Hotels', amount: 500, keywords: ['THE EDIT'], manual: false },
-    { name: 'DoorDash Restaurant Credit', amount: 60, keywords: [], manual: true }, // $5/month in-app
-    { name: 'DoorDash Grocery Credit', amount: 240, keywords: [], manual: true }, // 2x $10/month in-app
-    { name: 'DashPass Membership', amount: 120, keywords: [], manual: true }, // $9.99/month value
-    { name: 'StubHub', amount: 300, keywords: ['STUBHUB', 'VIAGOGO'], manual: false },
-    { name: 'Lyft Credit', amount: 120, keywords: [], manual: true },
-    { name: 'Peloton', amount: 120, keywords: ['PELOTON'], manual: false },
-    { name: 'Apple Music/TV+', amount: 288, keywords: [], manual: true },
+    { name: 'Travel Credit', amount: 300, keywords: ['TRAVEL CREDIT'], manual: false, frequency: 'annual', resetBasis: 'anniversary' },
+    { name: 'Global Entry/TSA PreCheck', amount: 120, keywords: ['GLOBAL ENTRY', 'TSA PRECHECK', 'KNOWN TRAVELER', 'TRUSTED TRAVELER'], manual: false, frequency: 'none' },
+    { name: 'Dining/OpenTable Credit', amount: 300, keywords: ['DINING CREDIT', 'OPENTABLE'], manual: false, frequency: 'semi-annual' },
+    { name: 'The Edit Hotels', amount: 500, keywords: ['THE EDIT'], manual: false, frequency: 'annual' },
+    { name: 'DoorDash Restaurant Credit', amount: 60, keywords: [], manual: true, frequency: 'monthly' }, // $5/month in-app
+    { name: 'DoorDash Grocery Credit', amount: 240, keywords: [], manual: true, frequency: 'monthly' }, // 2x $10/month in-app
+    { name: 'DashPass Membership', amount: 120, keywords: [], manual: true, frequency: 'none' }, // $9.99/month value
+    { name: 'StubHub', amount: 300, keywords: ['STUBHUB', 'VIAGOGO'], manual: false, frequency: 'semi-annual' },
+    { name: 'Lyft Credit', amount: 120, keywords: [], manual: true, frequency: 'monthly' },
+    { name: 'Peloton', amount: 120, keywords: ['PELOTON'], manual: false, frequency: 'none' },
+    { name: 'Apple Music/TV+', amount: 288, keywords: [], manual: true, frequency: 'none' },
   ],
   categories: ['chase-travel', 'flights-direct', 'hotels-direct', 'dining', 'lyft', 'other'],
   // Lyft partnership: 10x from Jan 12, 2020 to March 31, 2025, then 5x after

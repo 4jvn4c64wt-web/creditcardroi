@@ -14,7 +14,7 @@ window.CardTracker.cards = window.CardTracker.cards || {};
     multipliers: {},
     baseRate: 2,
     credits: [
-      { name: 'Bilt Travel Credit', amount: 400, keywords: ['BILT TRAVEL'], manual: false }
+      { name: 'Bilt Travel Credit', amount: 400, keywords: ['BILT TRAVEL'], manual: false, frequency: 'annual' }
     ],
     categories: ['rent', 'other'],
     isBilt: true,

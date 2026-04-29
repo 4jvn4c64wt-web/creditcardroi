@@ -21,6 +21,24 @@ function _biltDebounce(fn, delay) {
 window.CardTracker.biltPlugin = {
 
   // =========================================================================
+  // BILT PROGRAM CONSTANTS — update here when Bilt changes program terms
+  // =========================================================================
+
+  BILT_2_START: new Date(2026, 1, 7),   // Feb 7, 2026 — Bilt 2.0 program launch date
+
+  BILT_CASH_RATE: 0.04,                  // 4% Bilt Cash earned on non-rent spend
+
+  RENT_POINTS_FLOOR: 250,                // Minimum rent points awarded when below spend threshold
+
+  RENT_TIERS: [
+    { minRatio: 1.00, rate: 1.25, label: '100%+' },
+    { minRatio: 0.75, rate: 1.00, label: '75-99%' },
+    { minRatio: 0.50, rate: 0.75, label: '50-74%' },
+    { minRatio: 0.25, rate: 0.50, label: '25-49%' },
+    // Below 0.25: rate = 0, floor applies
+  ],
+
+  // =========================================================================
   // getMultiplier hook — handles legacy vs 2.0, rent calculation
   // =========================================================================
   getMultiplier: function(category, txnDate, merchantDesc, ctx) {

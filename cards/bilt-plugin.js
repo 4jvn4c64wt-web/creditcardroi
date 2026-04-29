@@ -49,9 +49,6 @@ window.CardTracker.biltPlugin = {
 
     const cfg = ctx.state.biltConfig[cardId] || {};
 
-    // Bilt 2.0 universally starts Feb 7, 2026
-    const bilt2StartDate = new Date(2026, 1, 7);
-
     // Parse transaction date to avoid timezone issues
     let txnDateObj;
     if (txnDate) {
@@ -71,7 +68,7 @@ window.CardTracker.biltPlugin = {
     } else {
       txnDateObj = new Date();
     }
-    const isLegacy = txnDateObj < bilt2StartDate;
+    const isLegacy = txnDateObj.getTime() < window.CardTracker.biltPlugin.BILT_2_START.getTime();
 
     // LEGACY MODE (before Feb 7, 2026)
     // All Bilt cards had identical rates: 3x dining, 2x travel, 1x everything else
@@ -121,14 +118,14 @@ window.CardTracker.biltPlugin = {
         }
 
         const ratio = rentAmt > 0 ? monthSpend / rentAmt : 0;
+        var tiers = window.CardTracker.biltPlugin.RENT_TIERS;
         let rate = 0, tierName = '<25%';
-        if (ratio >= 1.0) { rate = 1.25; tierName = '100%+'; }
-        else if (ratio >= 0.75) { rate = 1; tierName = '75-99%'; }
-        else if (ratio >= 0.50) { rate = 0.75; tierName = '50-74%'; }
-        else if (ratio >= 0.25) { rate = 0.5; tierName = '25-49%'; }
+        for (var ti = 0; ti < tiers.length; ti++) {
+          if (ratio >= tiers[ti].minRatio) { rate = tiers[ti].rate; tierName = tiers[ti].label; break; }
+        }
 
         if (rate === 0) {
-          return { rate: 0, reason: `Rent: 250pt floor (${tierName}, $${monthSpend.toFixed(0)}/$${rentAmt} non-rent spend)` };
+          return { rate: 0, reason: `Rent: ${window.CardTracker.biltPlugin.RENT_POINTS_FLOOR}pt floor (${tierName}, $${monthSpend.toFixed(0)}/$${rentAmt} non-rent spend)` };
         }
         return { rate, reason: `Rent: ${rate}x Housing-only (${tierName}: $${monthSpend.toFixed(0)}/$${rentAmt} non-rent spend)` };
       } else {
@@ -169,9 +166,8 @@ window.CardTracker.biltPlugin = {
     const card = ctx.CARDS[cardId];
     if (!card) return null;
 
-    const bilt2StartDate = new Date(2026, 1, 7);
     const txnDateObj = txnDate ? new Date(txnDate) : new Date();
-    if (txnDateObj < bilt2StartDate) {
+    if (txnDateObj.getTime() < window.CardTracker.biltPlugin.BILT_2_START.getTime()) {
       return card.legacy?.categories || ['dining', 'travel', 'rent', 'other'];
     }
     return card.categories || ['other'];
@@ -249,22 +245,21 @@ window.CardTracker.biltPlugin = {
     var availableBiltYears = biltYears.length > 0 ? biltYears : [currentYear];
     var selectedBiltYear = state.selectedBiltYear || 'all';
 
-    // Calculate Bilt Cash earned (4% of non-rent Bilt card spend, post-Feb 7 2026)
-    var bilt20Date = new Date(2026, 1, 7);
+    // Calculate Bilt Cash earned (BILT_CASH_RATE of non-rent Bilt card spend, post-Bilt 2.0)
     var biltNonRentSpend = 0;
     var biltRefunds = 0;
     for (var j = 0; j < processedTxns.length; j++) {
       var pt = processedTxns[j];
       if (!pt.cardId || pt.cardId.indexOf('bilt-') !== 0) continue;
       var d = new Date(pt.date);
-      if (d < bilt20Date) continue;
+      if (d.getTime() < window.CardTracker.biltPlugin.BILT_2_START.getTime()) continue;
       if (selectedBiltYear !== 'all' && ctx.getYearFromDateString(pt.date) !== parseInt(selectedBiltYear)) continue;
       if (pt.category === 'rent') continue;
       if (pt.amount < 0) biltNonRentSpend += Math.abs(pt.amount);
       else biltRefunds += pt.amount;
     }
     var netBiltSpend = Math.max(0, biltNonRentSpend - biltRefunds);
-    var biltCashEarned = netBiltSpend * 0.04;
+    var biltCashEarned = netBiltSpend * window.CardTracker.biltPlugin.BILT_CASH_RATE;
 
     // Calculate rent amount for helper text. The Monthly Rent Payment input at the
     // top of the section is the canonical rent amount (cfg.manualRentAmount).
@@ -378,12 +373,12 @@ window.CardTracker.biltPlugin = {
           '<p style="font-size:11px;color:#78716c;margin-bottom:8px;"><strong>Housing-only mode:</strong> Your rent points multiplier is calculated automatically based on your everyday spend ratio.</p>' +
           '<div style="font-size:10px;color:#78716c;">' +
             '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:2px;">' +
-              '<span>25-49% spend &rarr; 0.5x</span>' +
-              '<span>50-74% spend &rarr; 0.75x</span>' +
-              '<span>75-99% spend &rarr; 1x</span>' +
-              '<span>100%+ spend &rarr; 1.25x</span>' +
+              (function() {
+                var tiers = window.CardTracker.biltPlugin.RENT_TIERS;
+                return tiers.map(function(t) { return '<span>' + t.label + ' spend &rarr; ' + t.rate + 'x</span>'; }).join('');
+              })() +
             '</div>' +
-            '<p style="margin-top:6px;">Below 25% = 250 points floor</p>' +
+            '<p style="margin-top:6px;">Below 25% = ' + window.CardTracker.biltPlugin.RENT_POINTS_FLOOR + ' points floor</p>' +
           '</div>' +
         '</div>';
     } else {
@@ -424,7 +419,7 @@ window.CardTracker.biltPlugin = {
             '<span style="font-size:12px;font-weight:600;">&#128176; Bilt Cash Redeemed (' + (selectedBiltYear === 'all' ? 'All Time' : selectedBiltYear) + ')</span>' +
             '<span style="font-size:18px;font-weight:700;color:#166534;">$' + redemptionsTotal.toFixed(2) + '</span>' +
           '</div>' +
-          '<p style="font-size:10px;color:#78716c;margin-bottom:8px;">Bilt Cash earned in this window: $' + biltCashEarned.toFixed(2) + ' (4% of $' + netBiltSpend.toFixed(2) + ' non-rent Bilt spend, post-Feb 7, 2026).</p>' +
+          '<p style="font-size:10px;color:#78716c;margin-bottom:8px;">Bilt Cash earned in this window: $' + biltCashEarned.toFixed(2) + ' (' + (window.CardTracker.biltPlugin.BILT_CASH_RATE * 100) + '% of $' + netBiltSpend.toFixed(2) + ' non-rent Bilt spend, post-Feb 7, 2026).</p>' +
           '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;margin-bottom:10px;">' +
             '<input type="checkbox" class="bilt-cash-as-credit" data-card="' + cardId + '"' + (cfg.countBiltCashAsCredit !== false ? ' checked' : '') + '>' +
             '<span>Count Bilt Cash as statement credit</span>' +
@@ -871,8 +866,8 @@ window.CardTracker.biltPlugin = {
       var biltCard = ctx.CARDS[routingCardId];
       var biltName = (biltCard && (biltCard.shortName || biltCard.name)) || routingCardId;
 
-      // Step A: Rent uplift per dollar = (0.04 / 3) × 100 × PV = 1.333 × PV
-      var rentUpliftPerDollar = (0.04 / 3) * 100 * biltPV;
+      // Step A: Rent uplift per dollar = (BILT_CASH_RATE / 3) × 100 × PV = 1.333 × PV
+      var rentUpliftPerDollar = (window.CardTracker.biltPlugin.BILT_CASH_RATE / 3) * 100 * biltPV;
 
       // Step B: Calculate the annual Bilt spend cap
       var annualBiltSpendCap;
@@ -881,7 +876,7 @@ window.CardTracker.biltPlugin = {
       } else if (biltCashPlan === 'custom') {
         var monthlyBiltCashNeeded = customMonthlyRedemption || 0;
         annualBiltSpendCap = Math.min(
-          (monthlyBiltCashNeeded / 0.04) * 12,
+          (monthlyBiltCashNeeded / window.CardTracker.biltPlugin.BILT_CASH_RATE) * 12,
           monthlyRent * 0.75 * 12
         );
       } else { // 'maximize'
@@ -1027,7 +1022,7 @@ window.CardTracker.biltPlugin = {
           currentBiltSpend += subs[sub].spend || 0;
         }
       }
-      var currentBiltCash = currentBiltSpend * 0.04;
+      var currentBiltCash = currentBiltSpend * window.CardTracker.biltPlugin.BILT_CASH_RATE;
       var currentBiltCardId = null;
       for (var j = 0; j < currentWallet.length; j++) {
         if (CARDS[currentWallet[j]] && CARDS[currentWallet[j]].isBilt) { currentBiltCardId = currentWallet[j]; break; }
@@ -1128,8 +1123,8 @@ window.CardTracker.biltPlugin = {
 
       // --- Compute Bilt Cash and Rent Points ---
       var annualBiltSpendCap = monthlyRent * 0.75 * 12;
-      var finalBiltCashEarned = finalBiltSpend * 0.04;
-      var currentBiltCashEarned = currentBiltSpend * 0.04;
+      var finalBiltCashEarned = finalBiltSpend * window.CardTracker.biltPlugin.BILT_CASH_RATE;
+      var currentBiltCashEarned = currentBiltSpend * window.CardTracker.biltPlugin.BILT_CASH_RATE;
       var maxBiltCashForRent = monthlyRent > 0 ? monthlyRent * 0.03 * 12 : 0;
 
       // Determine how much Bilt Cash is redeemed

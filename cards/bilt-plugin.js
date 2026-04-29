@@ -28,14 +28,14 @@ window.CardTracker.biltPlugin = {
 
   BILT_CASH_RATE: 0.04,                  // 4% Bilt Cash earned on non-rent spend
 
-  RENT_POINTS_FLOOR: 250,                // Minimum rent points awarded when below spend threshold
+  RENT_POINTS_FLOOR: 250,                // Minimum rent points in housing-only mode when spend ratio is below 25% threshold (not used in Bilt Cash mode)
 
   RENT_TIERS: [
     { minRatio: 1.00, rate: 1.25, label: '100%+' },
     { minRatio: 0.75, rate: 1.00, label: '75-99%' },
     { minRatio: 0.50, rate: 0.75, label: '50-74%' },
     { minRatio: 0.25, rate: 0.50, label: '25-49%' },
-    // Below 0.25: rate = 0, floor applies
+    // Below 0.25: rate = 0, RENT_POINTS_FLOOR applies (housing-only mode only)
   ],
 
   // =========================================================================
@@ -378,7 +378,7 @@ window.CardTracker.biltPlugin = {
                 return tiers.map(function(t) { return '<span>' + t.label + ' spend &rarr; ' + t.rate + 'x</span>'; }).join('');
               })() +
             '</div>' +
-            '<p style="margin-top:6px;">Below 25% = ' + window.CardTracker.biltPlugin.RENT_POINTS_FLOOR + ' points floor</p>' +
+            '<p style="margin-top:6px;">Below 25% spend ratio = ' + window.CardTracker.biltPlugin.RENT_POINTS_FLOOR + ' point floor (housing-only mode)</p>' +
           '</div>' +
         '</div>';
     } else {

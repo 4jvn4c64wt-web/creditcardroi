@@ -246,6 +246,31 @@ window.CardTracker.csvParser.detectColumnDataType = function(sampleValues) {
   return 'unknown';
 };
 
+// Split a raw CSV string into logical rows, respecting quoted fields that may
+// contain embedded newlines (e.g. Monarch's Amazon Retail Sync notes field).
+window.CardTracker.csvParser.splitCSVLines = function(csvText) {
+  console.log('[csv-parser v2] splitCSVLines called, length=' + csvText.length);
+  const rows = [];
+  let current = '';
+  let inQuotes = false;
+  // Normalise \r\n and bare \r to \n so we only deal with one kind
+  const text = csvText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+      current += ch;
+    } else if (ch === '\n' && !inQuotes) {
+      if (current.trim()) rows.push(current);
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  if (current.trim()) rows.push(current);
+  return rows;
+};
+
 // Parse a single CSV line handling quotes
 window.CardTracker.csvParser.parseCSVLine = function(line) {
   const fields = [];
@@ -269,7 +294,8 @@ window.CardTracker.csvParser.showColumnMapping = function(csvText) {
   const detectAccountColumnType = window.CardTracker.csvParser.detectAccountColumnType;
   const getCSVShapeKey = window.CardTracker.csvParser.getCSVShapeKey;
 
-  const lines = csvText.split('\n').filter(l => l.trim());
+  const splitCSVLines = window.CardTracker.csvParser.splitCSVLines;
+  const lines = splitCSVLines(csvText);
   if (lines.length < 1) {
     alert('CSV file appears to be empty or invalid.');
     return;
@@ -555,6 +581,14 @@ window.CardTracker.csvParser.applyColumnMappingAndParse = function() {
     if (!line) continue;
 
     const fields = parseCSVLine(line);
+
+    // Skip malformed rows — e.g. Amazon Retail Sync URL-only continuation lines.
+    // A valid transaction must have a recognisable date in the date column.
+    const _rawDate = (fields[columnIndices.date] || '').trim();
+    const _looksLikeDate = /^\d{4}-\d{2}-\d{2}$/.test(_rawDate) ||
+                           /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(_rawDate) ||
+                           /^\d{1,2}-\d{1,2}-\d{2,4}$/.test(_rawDate);
+    if (!_looksLikeDate) continue;
 
     const amount = parseFloat((fields[columnIndices.amount] || '0').replace(/[$,]/g, '')) || 0;
     const date = fields[columnIndices.date] || '';

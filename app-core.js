@@ -1700,6 +1700,32 @@ async function processTransactions(transactions) {
         reason: 'Unknown merchant - please review'
       };
     }
+
+    // Bilt 2.0 confidence override: post-Feb 7 2026, every Bilt transaction is either
+    // rent (caught upstream with high confidence) or other (2x flat rate, no ambiguity).
+    // Anything that landed on 'other' at 0 confidence is definitively correct — bump to
+    // 100 so it never appears in the low-confidence review queue.
+    if (effectiveCardId) {
+      const _biltCard = CARDS[effectiveCardId];
+      if (_biltCard && _biltCard.isBilt) {
+        const _cls = classifications[txn.id];
+        if (_cls && _cls.subcategory === 'other' && _cls.confidence === 0) {
+          let _txnDateObj;
+          if (txn.date && txn.date.includes('-')) {
+            const [_y, _m, _d] = txn.date.split('-').map(Number);
+            _txnDateObj = new Date(_y, _m - 1, _d);
+          } else if (txn.date && txn.date.includes('/')) {
+            const _p = txn.date.split('/');
+            let _yr = parseInt(_p[2]); if (_yr < 100) _yr += 2000;
+            _txnDateObj = new Date(_yr, parseInt(_p[0]) - 1, parseInt(_p[1]));
+          }
+          if (_txnDateObj && _txnDateObj >= new Date(2026, 1, 7)) {
+            _cls.confidence = 100;
+            _cls.reason = 'Bilt 2.0: 2x on all everyday spend';
+          }
+        }
+      }
+    }
   }
 
   // ==========================================================================

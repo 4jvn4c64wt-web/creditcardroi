@@ -249,7 +249,6 @@ window.CardTracker.csvParser.detectColumnDataType = function(sampleValues) {
 // Split a raw CSV string into logical rows, respecting quoted fields that may
 // contain embedded newlines (e.g. Monarch's Amazon Retail Sync notes field).
 window.CardTracker.csvParser.splitCSVLines = function(csvText) {
-  console.log('[csv-parser v2] splitCSVLines called, length=' + csvText.length);
   const rows = [];
   let current = '';
   let inQuotes = false;

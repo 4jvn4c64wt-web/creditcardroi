@@ -1475,8 +1475,15 @@ function getCategoryBadgeStyle(txn, returnTooltip = false) {
   const currentRate = txn.multiplier;
   const txnDate = txn.date;
 
-  // Find the best possible rate for this category across all mapped cards
-  const mappedCardIds = [...new Set(Object.values(state.cardMappings))].filter(id => id && id !== 'skip');
+  // Find the best possible rate for this category across all mapped cards.
+  // Special case: only Bilt cards earn on rent — every other card would
+  // either (a) not be accepted by landlords, or (b) fall through to its base
+  // rate via the 'rent → other' hierarchy, which is misleading. Restrict
+  // the rent comparison pool to Bilt cards so the color reflects reality.
+  let mappedCardIds = [...new Set(Object.values(state.cardMappings))].filter(id => id && id !== 'skip');
+  if (category === 'rent') {
+    mappedCardIds = mappedCardIds.filter(id => CARDS[id] && CARDS[id].isBilt);
+  }
   let bestRate = currentRate;
   let bestCard = cardId;
 
@@ -1826,6 +1833,22 @@ async function processTransactions(transactions) {
       // Filter out transactions classified as 'skip' (transfers, payments, income)
       const cls = classifications[txn.id];
       if (cls && cls.subcategory === 'skip') return false;
+
+      // Filter out Bilt bank-pull payment lines. When rent is charged to a
+      // Bilt card, the negative charge earns points; Bilt then pulls from
+      // checking to cover it, which appears on the card as a positive
+      // "Credit Card Payment" row. Monarch labels the merchant inconsistently
+      // ("Bilt Housing", "Bilt Rewards", "Bilt", "Autopay Payment", "Payment
+      // Bilt Housing"), so we don't match on merchant — we match on:
+      // Bilt card + positive amount + Monarch category "Credit Card Payment".
+      // Real Bilt Rewards activity (travel redemptions, rent charges) has a
+      // non-payment category, so it isn't affected.
+      const mappedCard = CARDS[state.cardMappings[txn.last4]];
+      if (mappedCard && mappedCard.isBilt && txn.amount > 0) {
+        const monarchCat = (txn.monarchCategory || '').toLowerCase();
+        if (monarchCat.includes('credit card payment')) return false;
+      }
+
       return true;
     })
     .map(txn => {

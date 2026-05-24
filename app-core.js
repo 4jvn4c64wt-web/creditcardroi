@@ -6077,32 +6077,23 @@ function renderView(view) {
         totalCredits += streamingTotal;
       }
 
-      // Add Bilt Cash as credit if enabled (for Bilt cards with Flexible option)
-      let biltCashCredit = 0;
-      if (cardDef?.isBilt) {
-        const biltCfg = state.biltConfig[c.cardId] || {};
-        if (biltCfg.countBiltCashAsCredit !== false && biltCfg.rewardOption !== 'housing-only') {
-          // Calculate Bilt Cash earned from processed transactions (which have cardId)
-          const biltTxns = filteredProcessed.filter(t => {
-            if (t.cardId !== c.cardId) return false;
-            const d = new Date(t.date);
-            if (d.getTime() < window.CardTracker.biltPlugin.BILT_2_START.getTime()) return false; // Only Bilt 2.0 earns Bilt Cash
-            return t.category !== 'rent';
-          });
-          const purchases = biltTxns.filter(t => t.amount < 0).reduce((sum, t) => sum + Math.abs(t.amount), 0);
-          const refunds = biltTxns.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
-          biltCashCredit = Math.max(0, purchases - refunds) * window.CardTracker.biltPlugin.BILT_CASH_RATE;
-          totalCredits += biltCashCredit;
-        }
-      }
-      
       // Add anniversary bonus points value (e.g., Venture X 10,000 bonus miles)
       // Only included when an annual fee was detected in the transaction data for this period
       const annualBonusValue = getAnnualBonusValue(c.cardId, displayYear);
       totalCredits += annualBonusValue;
 
-      const netValue = c.pointsValue + totalCredits - c.annualFee;
-      return { ...c, totalCredits, netValue, biltCashCredit, annualBonusValue };
+      // Bilt Cash Redeemed: sum of manually-entered redemptions from the Bilt Card Config ledger
+      let biltCashRedeemed = 0;
+      if (cardDef?.isBilt) {
+        const biltCfg = state.biltConfig[c.cardId] || {};
+        const redemptions = Array.isArray(biltCfg.biltCashRedemptions) ? biltCfg.biltCashRedemptions : [];
+        biltCashRedeemed = redemptions
+          .filter(r => !displayYear || parseInt((r.date || '').substring(0, 4)) === displayYear)
+          .reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+      }
+
+      const netValue = c.pointsValue + totalCredits + biltCashRedeemed - c.annualFee;
+      return { ...c, totalCredits, netValue, biltCashRedeemed, annualBonusValue };
     });
     
     // Apply sort based on sortState
@@ -6462,6 +6453,10 @@ function renderView(view) {
                       </div>
                       ${hasCreditsData && creditsDetailHtml ? '<div class="fc-credits-detail">' + creditsDetailHtml + '</div>' : ''}
                     </div>
+                    ${(c.biltCashRedeemed || 0) > 0 && !cardDisplayData[c.cardId]?.isCardYearActive ? `<div class="fc-back-row">
+                      <span class="fc-back-row-label">Bilt Cash Redeemed</span>
+                      <span class="fc-back-row-value positive">${formatCurrencyPrecise(c.biltCashRedeemed)}</span>
+                    </div>` : ''}
                     <div class="fc-back-row">
                       <span class="fc-back-row-label">Annual Fee</span>
                       <span class="fc-back-row-value negative">${c.annualFee > 0 ? '-$' + c.annualFee : '$0'}</span>

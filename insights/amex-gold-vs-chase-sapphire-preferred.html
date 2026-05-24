@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="I ran a year of my actual transactions through both cards. The result is the opposite of how Gold is usually sold.">
+  <link rel="canonical" href="https://creditcardvaluetracker.com/insights/amex-gold-vs-chase-sapphire-preferred.html">
+  <title>Amex Gold vs. Chase Sapphire Preferred: I Ran the Actual Numbers — Credit Card Value Tracker</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💳</text></svg>">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Amex Gold vs. Chase Sapphire Preferred: I Ran the Actual Numbers">
+  <meta property="og:description" content="I ran a year of my actual transactions through both cards. The result is the opposite of how Gold is usually sold.">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://creditcardvaluetracker.com/insights/amex-gold-vs-chase-sapphire-preferred.html">
+  <meta property="og:site_name" content="Credit Card Value Tracker">
+  <meta property="og:image" content="https://creditcardvaluetracker.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Amex Gold vs. Chase Sapphire Preferred: I Ran the Actual Numbers">
+  <meta name="twitter:description" content="I ran a year of my actual transactions through both cards. The result is the opposite of how Gold is usually sold.">
+  <meta name="twitter:image" content="https://creditcardvaluetracker.com/og-image.png">
+
+  <!-- JSON-LD Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "Amex Gold vs. Chase Sapphire Preferred: I Ran the Actual Numbers",
+    "description": "I ran a year of my actual transactions through both cards. The result is the opposite of how Gold is usually sold.",
+    "datePublished": "2026-05",
+    "url": "https://creditcardvaluetracker.com/insights/amex-gold-vs-chase-sapphire-preferred.html",
+    "publisher": {
+      "@type": "Organization",
+      "name": "Credit Card Value Tracker",
+      "url": "https://creditcardvaluetracker.com/"
+    },
+    "isPartOf": {
+      "@type": "WebSite",
+      "name": "Credit Card Value Tracker",
+      "url": "https://creditcardvaluetracker.com/"
+    }
+  }
+  </script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'IBM Plex Sans', -apple-system, sans-serif; background: #fafaf9; color: #1c1917; line-height: 1.7; }
+
+    /* Nav */
+    .site-nav { padding: 16px 0; border-bottom: 1px solid #e7e5e4; }
+    .site-nav .container { display: flex; align-items: center; justify-content: space-between; max-width: 860px; }
+    .nav-left { display: flex; align-items: center; gap: 24px; }
+    .site-nav-brand { font-size: 15px; font-weight: 600; color: #1c1917; text-decoration: none; }
+    .nav-link-text { font-size: 14px; font-weight: 500; color: #57534e; text-decoration: none; }
+    .nav-link-text:hover { color: #1c1917; }
+    .btn { display: inline-flex; align-items: center; padding: 8px 18px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; border: none; font-family: inherit; text-decoration: none; }
+    .btn-primary { background: #1c1917; color: #fff; }
+    .btn-primary:hover { background: #292524; }
+
+    .container { max-width: 680px; margin: 0 auto; padding: 0 24px; }
+
+    /* Breadcrumb */
+    .breadcrumb { padding: 20px 0 0; font-size: 13px; color: #a8a29e; }
+    .breadcrumb a { color: #78716c; text-decoration: none; }
+    .breadcrumb a:hover { color: #1c1917; }
+
+    /* Article header */
+    .article-header { padding: 32px 0 32px; }
+    .article-tag { font-size: 13px; font-weight: 600; color: #059669; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 16px; }
+    .article-title { font-size: 36px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.2; margin-bottom: 16px; }
+    .article-subtitle { font-size: 18px; color: #57534e; line-height: 1.6; }
+    .article-meta { margin-top: 24px; padding-top: 20px; border-top: 1px solid #e7e5e4; font-size: 13px; color: #78716c; }
+
+    /* Article body */
+    .article-body { padding-bottom: 64px; }
+    .article-body h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; margin: 40px 0 16px; }
+    .article-body p { margin-bottom: 20px; font-size: 16px; color: #292524; }
+    .article-body strong { font-weight: 600; color: #1c1917; }
+    .article-body a { color: #2563eb; }
+    .article-body a:hover { text-decoration: none; }
+    .article-body .cta-btn { color: #fff !important; }
+    .article-body .cta-btn:hover { color: #fff !important; }
+    .article-body ol { margin: 0 0 20px 24px; }
+    .article-body ol li { font-size: 16px; color: #292524; margin-bottom: 10px; line-height: 1.7; }
+
+    /* Callout boxes */
+    .callout { border-radius: 10px; padding: 24px; margin: 28px 0; }
+    .callout-neutral { background: #f5f5f4; border: 1px solid #e7e5e4; }
+    .callout-green { background: #ecfdf5; border: 1px solid #a7f3d0; }
+    .callout-amber { background: #fffbeb; border: 1px solid #fde68a; }
+    .callout-red { background: #fef2f2; border: 1px solid #fecaca; }
+    .callout-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px; }
+    .callout-label-green { color: #059669; }
+    .callout-label-amber { color: #b45309; }
+    .callout-label-neutral { color: #57534e; }
+    .callout-label-red { color: #dc2626; }
+    .callout p { margin-bottom: 0; font-size: 15px; color: #292524; }
+    .callout p + p { margin-top: 10px; }
+
+    /* Math table */
+    .math-table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 15px; }
+    .math-table td { padding: 10px 0; }
+    .math-table td:last-child { text-align: right; font-family: 'IBM Plex Mono', monospace; font-weight: 500; }
+    .math-table tr.total { border-top: 2px solid #1c1917; font-weight: 600; }
+    .math-table tr.total td { padding-top: 14px; }
+    .math-positive { color: #059669; }
+    .math-negative { color: #dc2626; }
+
+    /* Spend table */
+    .spend-table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px; }
+    .spend-table th { text-align: left; padding: 10px 8px; border-bottom: 2px solid #e7e5e4; font-weight: 600; color: #57534e; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .spend-table th:not(:first-child) { text-align: right; }
+    .spend-table td { padding: 8px; border-bottom: 1px solid #f5f5f4; }
+    .spend-table td:not(:first-child) { text-align: right; font-family: 'IBM Plex Mono', monospace; font-size: 13px; }
+    .spend-table tr:last-child td { border-bottom: none; font-weight: 600; border-top: 2px solid #e7e5e4; padding-top: 12px; }
+    .spend-table tr.section-label td { font-size: 11px; font-weight: 600; color: #57534e; text-transform: uppercase; letter-spacing: 0.04em; padding-top: 16px; border-bottom: none; font-family: 'IBM Plex Sans', sans-serif; }
+
+    /* Winner badge */
+    .winner { display: inline-block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 8px; border-radius: 4px; margin-left: 8px; vertical-align: middle; }
+    .winner-csp { background: #dbeafe; color: #1d4ed8; }
+    .winner-gold { background: #fef3c7; color: #92400e; }
+
+    /* CTA section */
+    .cta-section { background: #fff; border: 1px solid #e7e5e4; border-radius: 12px; padding: 32px; margin: 40px 0; text-align: center; }
+    .cta-section h3 { font-size: 20px; font-weight: 600; margin-bottom: 8px; }
+    .cta-section p { font-size: 15px; color: #57534e; margin-bottom: 20px; }
+    .cta-btn { display: inline-block; padding: 12px 28px; background: #1c1917; color: #fff; border-radius: 8px; font-size: 15px; font-weight: 600; text-decoration: none; }
+    .cta-btn:hover { background: #292524; }
+    .cta-note { font-size: 12px; color: #a8a29e; margin-top: 12px; }
+
+    /* Footer */
+    footer { border-top: 1px solid #e7e5e4; padding: 32px 0; text-align: center; }
+    .footer-note { font-size: 14px; color: #78716c; line-height: 1.7; max-width: 520px; margin: 0 auto; }
+
+    /* ── Calculator ── */
+    .calc-wrap { margin: 28px 0 40px; }
+    .calc-panel { background: #fff; border: 1px solid #e7e5e4; border-radius: 10px; padding: 20px 24px; margin-bottom: 12px; }
+
+    .calc-inputs { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; padding-bottom: 16px; border-bottom: 1px solid #f5f5f4; margin-bottom: 16px; }
+    .calc-input-group { display: flex; align-items: center; gap: 6px; }
+    .calc-label { font-size: 13px; color: #78716c; white-space: nowrap; }
+    .calc-input-field { display: flex; align-items: center; border: 1px solid #d6d3d1; border-radius: 6px; overflow: hidden; background: #fafaf9; }
+    .calc-prefix, .calc-suffix { font-size: 12px; color: #78716c; padding: 0 6px; background: #f5f5f4; border-right: 1px solid #e7e5e4; height: 100%; display: flex; align-items: center; line-height: 1; }
+    .calc-suffix { border-right: none; border-left: 1px solid #e7e5e4; }
+    .calc-input-field input { border: none; background: transparent; padding: 5px 8px; font-size: 13px; font-family: 'IBM Plex Mono', monospace; outline: none; color: #1c1917; width: 80px; }
+    .calc-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .calc-dot-csp  { background: #2563eb; }
+    .calc-dot-gold { background: #d97706; }
+
+    .calc-sliders { display: flex; flex-direction: column; gap: 16px; }
+    .calc-slider-block {}
+    .calc-slider-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+    .calc-slider-title { font-size: 13px; font-weight: 600; color: #1c1917; }
+    .calc-slider-vals { font-size: 12px; color: #78716c; }
+    .calc-slider-vals strong { color: #1c1917; font-weight: 600; font-family: 'IBM Plex Mono', monospace; }
+    .calc-track-wrap { position: relative; height: 20px; display: flex; align-items: center; }
+    .calc-track-bg { position: absolute; left: 0; right: 0; height: 3px; border-radius: 2px; background: #e7e5e4; z-index: 1; }
+    .calc-track-wrap input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 3px; background: transparent; outline: none; cursor: pointer; position: relative; z-index: 2; }
+    .calc-track-wrap input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 2px solid #1c1917; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
+    .calc-track-wrap input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 2px solid #1c1917; cursor: pointer; }
+    .calc-slider-ends { display: flex; justify-content: space-between; font-size: 11px; color: #a8a29e; margin-top: 2px; }
+
+    .calc-results { display: flex; gap: 12px; margin-top: 16px; padding-top: 16px; border-top: 1px solid #f5f5f4; }
+    .calc-result { flex: 1; background: #fafaf9; border: 1px solid transparent; border-radius: 8px; padding: 12px 14px; transition: border-color 0.15s, background 0.15s; }
+    .calc-result.winner { border-color: #1c1917; background: #fff; }
+    .calc-result-label { font-size: 12px; font-weight: 600; color: #57534e; display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+    .calc-wins-badge { background: #1c1917; color: #fff; font-size: 9px; font-weight: 700; letter-spacing: 0.05em; padding: 2px 5px; border-radius: 3px; margin-left: auto; }
+    .calc-result-val { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.1; font-family: 'IBM Plex Mono', monospace; }
+    .csp-val  { color: #2563eb; }
+    .gold-val { color: #d97706; }
+    .calc-result-detail { font-size: 11px; color: #a8a29e; margin-top: 2px; font-family: 'IBM Plex Mono', monospace; }
+
+    .calc-chart-wrap { background: #fff; border: 1px solid #e7e5e4; border-radius: 10px; padding: 16px 20px 12px; }
+    .calc-chart-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #78716c; margin-bottom: 10px; }
+
+    /* Chart-integrated dining slider */
+    .chart-slider-wrap { margin-top: 4px; padding-left: var(--chart-left-pad, 52px); padding-right: 8px; }
+    .chart-slider-track-wrap { position: relative; height: 20px; display: flex; align-items: center; }
+    .chart-slider-track-wrap .calc-track-bg { position: absolute; left: 0; right: 0; height: 3px; border-radius: 2px; background: #e7e5e4; z-index: 1; }
+    .chart-slider-track-wrap input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 3px; background: transparent; outline: none; cursor: pointer; position: relative; z-index: 2; }
+    .chart-slider-track-wrap input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 2px solid #1c1917; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
+    .chart-slider-track-wrap input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 2px solid #1c1917; cursor: pointer; }
+    .chart-slider-labels { display: flex; justify-content: space-between; font-size: 11px; color: #a8a29e; margin-top: 2px; }
+    .chart-spend-readout { font-size: 12px; color: #78716c; text-align: center; margin-top: 6px; font-family: 'IBM Plex Sans', sans-serif; }
+    .chart-spend-readout strong { color: #1c1917; font-family: 'IBM Plex Mono', monospace; }
+
+    @media (max-width: 640px) {
+      .article-title { font-size: 28px; }
+      .article-subtitle { font-size: 16px; }
+      .container { padding: 0 16px; }
+      .spend-table { font-size: 12px; }
+      .spend-table th, .spend-table td { padding: 6px 4px; }
+      .calc-inputs { gap: 10px; }
+      .calc-results { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav class="site-nav">
+    <div class="container" style="max-width:860px;">
+      <div class="nav-left">
+        <a href="../index.html" class="site-nav-brand">Credit Card Value Tracker</a>
+        <a href="../insights.html" class="nav-link-text">Insights</a>
+      </div>
+      <a href="../app-pro.html" class="btn btn-primary">Go to Tracker</a>
+    </div>
+  </nav>
+
+  <article>
+    <!-- Breadcrumb -->
+    <div class="container">
+      <div class="breadcrumb">
+        <a href="../insights.html">Insights</a> &nbsp;/&nbsp; Card Decision
+      </div>
+    </div>
+
+    <header class="article-header">
+      <div class="container">
+        <div class="article-tag">Card Decision</div>
+        <h1 class="article-title">Amex Gold vs. Chase Sapphire Preferred: I Ran the Actual Numbers</h1>
+        <p class="article-subtitle">Gold is marketed as the dining card. The math says it's actually the grocery card. Here's what a year of real transactions shows.</p>
+        <div class="article-meta">
+          May 2026 · 8 min read
+        </div>
+      </div>
+    </header>
+
+    <div class="article-body">
+      <div class="container">
+
+        <p>I ran a year of my actual transactions through both cards. The result: if you cook at home and buy most of your groceries in person, get Amex Gold. If you eat out, travel, or get groceries delivered frequently, Chase Sapphire Preferred may be the better option.</p>
+
+        <p>That's the opposite of how Gold is usually sold. The card is often marketed as a dining-and-travel essential, but the math shows it's actually the better card for people who shop at the grocery store. Dining alone — even a lot of dining — doesn't move the needle enough to overcome Gold's higher annual fee. Grocery does.</p>
+
+        <h2>The Case for Both Cards</h2>
+
+        <p>If you spend any time in credit card forums, you've likely heard that Amex Gold is the dining card for travel rewards. At 4x per dollar on dining, it beats Chase Sapphire Preferred — and the more expensive Sapphire Reserve — by 1x per dollar. If you value each point at more than 1 cent, Gold also surpasses cards offering 5% cash back on dining.</p>
+
+        <p>But here's the catch: Gold's 1x dining advantage provides just 1.5 extra cents per dollar spent if you value points at the standard $0.015. Across $10,000 in annual dining spend, the point gap between the cards is only worth about $150 — still $80 short of the $230 difference in the cards' annual fees.</p>
+
+        <p>Grocery spend is where Gold actually shines. Gold earns 4x on in-store grocery, while CSP earns just 1x. That three-point-per-dollar advantage creates a 4.5 cent value gap between Gold and CSP for each dollar spent on in-store grocery. All else equal, Gold will earn about $450 more in point value than CSP with $10,000 in annual in-store grocery spend. In-store grocery is what makes Gold powerful, not dining.</p>
+
+        <p>If you purchase most of your groceries online, the advantage flips to CSP, which offers 3x points per dollar for online grocery purchases compared to Gold's base rate of 1x. By switching grocery purchases to an online platform, the same $10,000 of grocery spend results in a $300 point advantage for CSP over Gold.</p>
+
+        <p>Gold's other major advantage is the credits it offers: $7/month at Dunkin, $10/month in Uber Cash, $50 semiannually at Resy restaurants, and $10/month at specific restaurants. If you already plan to spend at these merchants, these credits could make a substantial difference. If you use all of Gold's credits, Gold's effective annual fee is negative — you earn more in credits than you pay in annual fee. If you use 75% of the credits, Gold's effective annual fee shrinks to $145.</p>
+
+        <div class="callout callout-amber">
+          <div class="callout-label callout-label-amber">A note on credits</div>
+          <p>Do not fall into the trap of telling yourself you'll use credits unless you are already buying those things. Gold's credits are split across vendors and time windows, making them easy to miss — or worse, they push you toward unnecessary spending to avoid "wasting" them. Talking yourself into a Resy reservation to use the credit is just spending $50 to get $50 back. The credits are real value when they overlap with what you already do, and a tax on your attention when they don't. Gauge that honestly before letting credits decide the question.</p>
+        </div>
+
+        <p>Point values are also highly subjective. For the purpose of this article, I've assumed a conservative 1.5 cents per point for both ecosystems. However, you may prefer one card's transfer partners over the other's. Especially if most of your travel is concentrated in one airline's ecosystem, the transfer partner match can matter more than the per-dollar multiplier gap. Someone who flies Delta exclusively and values SkyMiles at $0.02 is working with a very different Gold than someone who values points at $0.015 for generic travel. The inverse is also true: if you're a Hyatt loyalist, CSP's transfer partner is arguably worth more than anything Gold earns on dining.</p>
+
+        <h2>Which Is Right for You?</h2>
+
+        <p>Two questions are going to make the difference:</p>
+
+        <ol>
+          <li><strong>Do you buy most of your groceries in a physical store, or do you use Instacart, Amazon Fresh, or other online grocery vendors?</strong></li>
+          <li><strong>Will you actually use Gold's monthly credits?</strong></li>
+        </ol>
+
+        <p>If you answered "physical store" and "yes" to credits, Gold is your card. If you answered "online" to grocery or "maybe" to credits, CSP wins.</p>
+
+        <p>The rest of this post shows the math behind that conclusion.</p>
+
+        <h2>The Full Transaction Breakdown</h2>
+
+        <p>Below represents my spending profile from last year. I excluded all non-category spending and Lyft to keep the comparison even, since Lyft earns an additional 3x bonus on CSP on top of the 2x general travel.</p>
+
+        <table class="spend-table">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Spend</th>
+              <th>CSP Points</th>
+              <th>Gold Points</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Dining</td>
+              <td>$10,000</td>
+              <td>30,000 (3x)</td>
+              <td>40,000 (4x)</td>
+            </tr>
+            <tr>
+              <td>Grocery (in-store)</td>
+              <td>$4,000</td>
+              <td>4,000 (1x)</td>
+              <td>16,000 (4x)</td>
+            </tr>
+            <tr>
+              <td>Hotels (direct)</td>
+              <td>$6,000</td>
+              <td>12,000 (2x)</td>
+              <td>6,000 (1x)</td>
+            </tr>
+            <tr>
+              <td>Flights (direct)</td>
+              <td>$1,000</td>
+              <td>2,000 (2x)</td>
+              <td>3,000 (3x)</td>
+            </tr>
+            <tr>
+              <td>Travel Portal (flights)</td>
+              <td>$500</td>
+              <td>2,500 (5x)</td>
+              <td>1,500 (3x)</td>
+            </tr>
+            <tr>
+              <td>Travel Portal (hotels)</td>
+              <td>$1,000</td>
+              <td>5,000 (5x)</td>
+              <td>5,000 (5x)</td>
+            </tr>
+            <tr>
+              <td>Transit</td>
+              <td>$1,000</td>
+              <td>2,000 (2x)</td>
+              <td>1,000 (1x)</td>
+            </tr>
+            <tr>
+              <td>Streaming</td>
+              <td>$500</td>
+              <td>1,500 (3x)</td>
+              <td>500 (1x)</td>
+            </tr>
+            <tr>
+              <td><strong>Total</strong></td>
+              <td><strong>$24,000</strong></td>
+              <td><strong>59,000</strong></td>
+              <td><strong>73,000</strong></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>On total points, Gold comes out about 14,000 ahead — worth roughly $210. But after fees, CSP wins by $20. On a per-dollar basis, nearly all of Gold's advantage comes from grocery, not dining. Strip out grocery and Gold's advantage narrows to just 2,000 points or $30 in value <em>before</em> annual fees.</p>
+
+        <h2>Three Scenarios</h2>
+
+        <p>The following three scenarios hold total spend constant but shift dining and grocery spend around to show how both cards function at each extreme. All three use $0.015 per point as the baseline value — a reasonable midpoint for travel redemptions on either program. Annual fees of $95 (CSP) and $325 (Gold) are subtracted at the end. Credits are excluded; treat any credit utilization as additional upside on top.</p>
+
+        <h2>Scenario 1: High Dining, No Grocery <span class="winner winner-csp">CSP wins</span></h2>
+
+        <p>This is the spending profile that Gold's marketing implies should be the card's sweet spot.</p>
+
+        <table class="spend-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Spend</th>
+              <th>CSP</th>
+              <th>Gold</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Dining</td>
+              <td>$14,000</td>
+              <td>42,000 (3x)</td>
+              <td>56,000 (4x)</td>
+            </tr>
+            <tr>
+              <td>Grocery (in-store)</td>
+              <td>$0</td>
+              <td>0</td>
+              <td>0</td>
+            </tr>
+            <tr>
+              <td>Other</td>
+              <td>$10,000</td>
+              <td>25,000 (2.5x avg)</td>
+              <td>17,000 (1.7x avg)</td>
+            </tr>
+            <tr class="section-label">
+              <td colspan="4"></td>
+            </tr>
+            <tr>
+              <td>Value (before fees)</td>
+              <td>$24,000</td>
+              <td>$1,005</td>
+              <td>$1,095</td>
+            </tr>
+            <tr>
+              <td>Annual fees</td>
+              <td></td>
+              <td>$95</td>
+              <td>$325</td>
+            </tr>
+            <tr>
+              <td><strong>Net value</strong></td>
+              <td></td>
+              <td><strong>$910</strong></td>
+              <td><strong>$770</strong></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>On points alone, Gold earns about $90 more in value. But once you add in annual fees, the difference tips heavily in favor of CSP, which comes out about $140 ahead.</p>
+
+        <h2>Scenario 2: High In-Store Grocery, No Dining <span class="winner winner-gold">Gold wins</span></h2>
+
+        <table class="spend-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Spend</th>
+              <th>CSP</th>
+              <th>Gold</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Dining</td>
+              <td>$0</td>
+              <td>0</td>
+              <td>0</td>
+            </tr>
+            <tr>
+              <td>Grocery (in-store)</td>
+              <td>$14,000</td>
+              <td>14,000 (1x)</td>
+              <td>56,000 (4x)</td>
+            </tr>
+            <tr>
+              <td>Other</td>
+              <td>$10,000</td>
+              <td>25,000 (2.5x avg)</td>
+              <td>17,000 (1.7x avg)</td>
+            </tr>
+            <tr class="section-label">
+              <td colspan="4"></td>
+            </tr>
+            <tr>
+              <td>Value (before fees)</td>
+              <td>$24,000</td>
+              <td>$585</td>
+              <td>$1,095</td>
+            </tr>
+            <tr>
+              <td>Annual fees</td>
+              <td></td>
+              <td>$95</td>
+              <td>$325</td>
+            </tr>
+            <tr>
+              <td><strong>Net value</strong></td>
+              <td></td>
+              <td><strong>$490</strong></td>
+              <td><strong>$770</strong></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>When you shift spending to in-store grocery, Gold comes out ahead on both points and total value to the tune of $280.</p>
+
+        <h2>Scenario 3: High Online Grocery, No Dining <span class="winner winner-csp">CSP wins</span></h2>
+
+        <table class="spend-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Spend</th>
+              <th>CSP</th>
+              <th>Gold</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Dining</td>
+              <td>$0</td>
+              <td>0</td>
+              <td>0</td>
+            </tr>
+            <tr>
+              <td>Grocery (online)</td>
+              <td>$14,000</td>
+              <td>42,000 (3x)</td>
+              <td>14,000 (1x)</td>
+            </tr>
+            <tr>
+              <td>Other</td>
+              <td>$10,000</td>
+              <td>25,000 (2.5x avg)</td>
+              <td>17,000 (1.7x avg)</td>
+            </tr>
+            <tr class="section-label">
+              <td colspan="4"></td>
+            </tr>
+            <tr>
+              <td>Value (before fees)</td>
+              <td>$24,000</td>
+              <td>$1,005</td>
+              <td>$465</td>
+            </tr>
+            <tr>
+              <td>Annual fees</td>
+              <td></td>
+              <td>$95</td>
+              <td>$325</td>
+            </tr>
+            <tr>
+              <td><strong>Net value</strong></td>
+              <td></td>
+              <td><strong>$910</strong></td>
+              <td><strong>$140</strong></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>When you switch to online grocery, CSP earns more in value and in points. Not even Gold's credits could make up the $770 difference in value.</p>
+
+        <h2>Want to See Where You Fall?</h2>
+
+        <p>Set your total annual spend on dining and groceries, then drag the slider below the graph to match your actual spending mix. If you buy groceries online, adjust the in-store/online slider. The dot on each line shows net value for each card after fees.</p>
+
+        <!-- ── Interactive Calculator ── -->
+        <div class="calc-wrap">
+
+          <div class="calc-panel">
+            <!-- Inputs row -->
+            <div class="calc-inputs">
+              <div class="calc-input-group">
+                <label class="calc-label">Total spend</label>
+                <div class="calc-input-field">
+                  <span class="calc-prefix">$</span>
+                  <input type="number" id="totalSpend" value="14000" min="0" max="100000" step="500">
+                </div>
+              </div>
+              <div class="calc-input-group">
+                <span class="calc-dot calc-dot-csp"></span>
+                <label class="calc-label">CSP ¢/pt</label>
+                <div class="calc-input-field">
+                  <input type="number" id="pvCSP" value="1.5" min="0.5" max="5" step="0.05" style="width:68px;">
+                  <span class="calc-suffix">¢</span>
+                </div>
+              </div>
+              <div class="calc-input-group">
+                <span class="calc-dot calc-dot-gold"></span>
+                <label class="calc-label">Gold ¢/pt</label>
+                <div class="calc-input-field">
+                  <input type="number" id="pvGold" value="1.5" min="0.5" max="5" step="0.05" style="width:68px;">
+                  <span class="calc-suffix">¢</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Grocery slider only -->
+            <div class="calc-sliders">
+              <div class="calc-slider-block">
+                <div class="calc-slider-header">
+                  <span class="calc-slider-title">Grocery: in-store vs. online</span>
+                  <span class="calc-slider-vals">In-store <strong id="instoreAmt">—</strong> · Online <strong id="onlineAmt">—</strong></span>
+                </div>
+                <div class="calc-track-wrap">
+                  <div class="calc-track-bg"></div>
+                  <input type="range" id="sliderInstore" min="0" max="100" value="100" step="1">
+                </div>
+                <div class="calc-slider-ends"><span>All online</span><span>All in-store</span></div>
+              </div>
+            </div>
+
+            <!-- Result cards -->
+            <div class="calc-results">
+              <div class="calc-result" id="cardCSP">
+                <div class="calc-result-label">
+                  <span class="calc-dot calc-dot-csp"></span>
+                  Chase Sapphire Preferred
+                  <span class="calc-wins-badge" id="badgeCSP" style="display:none">WINS</span>
+                </div>
+                <div class="calc-result-val csp-val" id="netCSP">—</div>
+                <div class="calc-result-detail" id="brkCSP">—</div>
+              </div>
+              <div class="calc-result" id="cardGold">
+                <div class="calc-result-label">
+                  <span class="calc-dot calc-dot-gold"></span>
+                  Amex Gold
+                  <span class="calc-wins-badge" id="badgeGold" style="display:none">WINS</span>
+                </div>
+                <div class="calc-result-val gold-val" id="netGold">—</div>
+                <div class="calc-result-detail" id="brkGold">—</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Chart + integrated dining slider -->
+          <div class="calc-chart-wrap">
+            <div class="calc-chart-label">Net value by spending mix · <span id="chartSubtitle" style="font-weight:400;text-transform:none;letter-spacing:0;">—</span></div>
+            <canvas id="myChart" height="150"></canvas>
+            <!-- Dining slider flush under chart, x-axis aligned -->
+            <div class="chart-slider-wrap">
+              <div class="chart-slider-track-wrap">
+                <div class="calc-track-bg"></div>
+                <input type="range" id="sliderDining" min="0" max="100" value="50" step="1">
+              </div>
+              <div class="chart-slider-labels">
+                <span>All grocery</span>
+                <span>50 / 50</span>
+                <span>All dining</span>
+              </div>
+            </div>
+            <div class="chart-spend-readout">
+              Dining <strong id="diningAmt">—</strong> &nbsp;·&nbsp; Grocery <strong id="grocAmt">—</strong>
+            </div>
+          </div>
+
+        </div>
+        <!-- ── End Calculator ── -->
+
+        <!-- CTA -->
+        <div class="cta-section">
+          <h3>Run it on your own transactions</h3>
+          <p>Upload your CSV and see exactly which card earns more given your actual spending mix.</p>
+          <a href="../app-pro.html" class="cta-btn">Try It Free</a>
+          <div class="cta-note">No signup required. Your data stays on your device.</div>
+        </div>
+
+        <p style="color:#78716c;font-size:14px;font-style:italic;">This is not financial advice.</p>
+
+      </div>
+    </div>
+  </article>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <p class="footer-note">&nbsp;</p>
+    </div>
+  </footer>
+
+<script>
+// ── Constants ──
+const FEE_CSP  = 95;
+const FEE_GOLD = 325;
+
+function calcPoints(diningSpend, instoreSpend, onlineSpend, pvCSP, pvGold) {
+  const ptsCSP  = diningSpend * 3 + instoreSpend * 1 + onlineSpend * 3;
+  const ptsGold = diningSpend * 4 + instoreSpend * 4 + onlineSpend * 1;
+  const valCSP  = ptsCSP  * pvCSP  - FEE_CSP;
+  const valGold = ptsGold * pvGold - FEE_GOLD;
+  return { ptsCSP, ptsGold, valCSP, valGold };
+}
+
+function fmt(n) {
+  const abs = Math.abs(n);
+  const s = abs >= 1000
+    ? '$' + (abs / 1000).toFixed(1) + 'k'
+    : '$' + Math.round(abs).toLocaleString();
+  return (n < 0 ? '−' : '+') + s;
+}
+
+function fmtDollar(n) {
+  return '$' + Math.round(n).toLocaleString();
+}
+
+// ── Vertical indicator plugin ──
+const verticalLinePlugin = {
+  id: 'verticalLine',
+  afterDraw(chart) {
+    if (chart._currentX === undefined) return;
+    const ctx = chart.ctx;
+    const xScale = chart.scales.x;
+    const yScale = chart.scales.y;
+    const x = xScale.getPixelForValue(chart._currentX);
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x, yScale.top);
+    ctx.lineTo(x, yScale.bottom);
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#1c1917';
+    ctx.setLineDash([4, 3]);
+    ctx.stroke();
+    ctx.restore();
+    // Dots on each line at current x
+    chart.data.datasets.forEach((ds, i) => {
+      const meta = chart.getDatasetMeta(i);
+      const idx = Math.round(chart._currentX);
+      if (idx < 0 || idx >= ds.data.length) return;
+      const y = yScale.getPixelForValue(ds.data[idx]);
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(x, y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = ds.borderColor;
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    });
+  }
+};
+
+// ── Chart setup ──
+const ctx = document.getElementById('myChart').getContext('2d');
+const chart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [
+      { label: 'CSP',  data: [], borderColor: '#2563eb', borderWidth: 2, pointRadius: 0, tension: 0.3 },
+      { label: 'Gold', data: [], borderColor: '#d97706', borderWidth: 2, pointRadius: 0, tension: 0.3 }
+    ]
+  },
+  plugins: [verticalLinePlugin],
+  options: {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: {
+        display: true,
+        position: 'top',
+        align: 'end',
+        labels: {
+          font: { family: "'IBM Plex Sans', sans-serif", size: 11 },
+          color: '#44403c',
+          boxWidth: 10,
+          padding: 12,
+          usePointStyle: true,
+          pointStyle: 'circle'
+        }
+      },
+      tooltip: {
+        backgroundColor: '#fff',
+        borderColor: '#e7e5e4',
+        borderWidth: 1,
+        titleColor: '#1c1917',
+        bodyColor: '#44403c',
+        titleFont: { family: "'IBM Plex Sans', sans-serif", size: 11, weight: '600' },
+        bodyFont:  { family: "'IBM Plex Mono', monospace", size: 11 },
+        padding: 10,
+        callbacks: {
+          title: function(items) {
+            const pct = parseInt(items[0].label);
+            if (pct === 0) return 'All grocery';
+            if (pct === 100) return 'All dining';
+            return pct + '% dining / ' + (100 - pct) + '% grocery';
+          },
+          label: function(item) {
+            return ' ' + item.dataset.label + ': ' + (item.raw >= 0 ? '+' : '−') + '$' + Math.abs(Math.round(item.raw)).toLocaleString();
+          }
+        }
+      }
+    },
+    scales: {
+      x: {
+        ticks: { display: false },
+        grid: { color: '#f5f4f3', drawTicks: false },
+        border: { display: false }
+      },
+      y: {
+        title: { display: true, text: 'Net value after fees', font: { family: "'IBM Plex Sans', sans-serif", size: 11 }, color: '#78716c', padding: { bottom: 6 } },
+        ticks: { font: { family: "'IBM Plex Mono', monospace", size: 10 }, color: '#a8a29e', maxTicksLimit: 5, callback: v => (v >= 0 ? '$' : '−$') + Math.abs(Math.round(v)).toLocaleString() },
+        grid: { color: '#f5f4f3', drawTicks: false }
+      }
+    }
+  }
+});
+
+function update() {
+  const total      = parseFloat(document.getElementById('totalSpend').value) || 0;
+  // inputs are now in cents (1.5¢), convert to decimal for math
+  const pvCSP      = (parseFloat(document.getElementById('pvCSP').value)  || 1.5) / 100;
+  const pvGold     = (parseFloat(document.getElementById('pvGold').value) || 1.5) / 100;
+  const diningPct  = parseInt(document.getElementById('sliderDining').value)   / 100;
+  const instorePct = parseInt(document.getElementById('sliderInstore').value)  / 100;
+
+  const diningSpend  = total * diningPct;
+  const grocSpend    = total * (1 - diningPct);
+  const instoreSpend = grocSpend * instorePct;
+  const onlineSpend  = grocSpend * (1 - instorePct);
+
+  document.getElementById('diningAmt').textContent   = fmtDollar(diningSpend);
+  document.getElementById('grocAmt').textContent     = fmtDollar(grocSpend);
+  document.getElementById('instoreAmt').textContent  = fmtDollar(instoreSpend);
+  document.getElementById('onlineAmt').textContent   = fmtDollar(onlineSpend);
+
+  const { ptsCSP, ptsGold, valCSP, valGold } = calcPoints(diningSpend, instoreSpend, onlineSpend, pvCSP, pvGold);
+
+  document.getElementById('netCSP').textContent   = fmt(valCSP);
+  document.getElementById('netGold').textContent  = fmt(valGold);
+  document.getElementById('brkCSP').textContent   = Math.round(ptsCSP).toLocaleString()  + ' pts − $' + FEE_CSP;
+  document.getElementById('brkGold').textContent  = Math.round(ptsGold).toLocaleString() + ' pts − $' + FEE_GOLD;
+
+  const cspWins = valCSP > valGold;
+  document.getElementById('badgeCSP').style.display   = cspWins  ? 'inline' : 'none';
+  document.getElementById('badgeGold').style.display  = !cspWins ? 'inline' : 'none';
+  document.getElementById('cardCSP').classList.toggle('winner',  cspWins);
+  document.getElementById('cardGold').classList.toggle('winner', !cspWins);
+
+  // Build chart data using dining share (0–100) as x-axis
+  const steps = 100;
+  const labels = [], dataCSP = [], dataGold = [];
+  for (let i = 0; i <= steps; i++) {
+    const d = total * (i / steps);
+    const g = total - d;
+    const r = calcPoints(d, g * instorePct, g * (1 - instorePct), pvCSP, pvGold);
+    labels.push(i);
+    dataCSP.push(r.valCSP);
+    dataGold.push(r.valGold);
+  }
+  chart.data.labels = labels;
+  chart.data.datasets[0].data = dataCSP;
+  chart.data.datasets[1].data = dataGold;
+  chart._currentX = diningPct * 100;
+  chart.update();
+
+  // Align slider with chart plot area
+  if (chart.chartArea) {
+    const leftPad = chart.chartArea.left;
+    const rightPad = chart.canvas.offsetWidth - chart.chartArea.right;
+    document.querySelector('.chart-slider-wrap').style.paddingLeft  = leftPad  + 'px';
+    document.querySelector('.chart-slider-wrap').style.paddingRight = rightPad + 'px';
+  }
+
+  document.getElementById('chartSubtitle').textContent =
+    'grocery: ' + Math.round(instorePct * 100) + '% in-store, ' + Math.round((1 - instorePct) * 100) + '% online';
+}
+
+['totalSpend','pvCSP','pvGold','sliderDining','sliderInstore'].forEach(id => {
+  document.getElementById(id).addEventListener('input', update);
+});
+update();
+</script>
+</body>
+</html>

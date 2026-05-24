@@ -2697,24 +2697,16 @@ function showResults(results, isNewUpload = false) {
   const actionableLowConf = getVisibleLowConfidenceTransactions(results.processed);
   const lowConfidenceCount = actionableLowConf.length;
 
-  // Stats footer - include low-confidence count on Pro only, with link to filter
-  const isPro = window.TIER_CONFIG === 'pro';
-  const lowConfBadge = (isPro && lowConfidenceCount > 0)
+  // Stats footer
+  const lowConfBadge = lowConfidenceCount > 0
     ? ` • <a href="#" class="needs-review-link" style="color:#b45309;text-decoration:underline;text-underline-offset:2px;cursor:pointer;">${lowConfidenceCount} need review</a>`
     : '';
-  const tierBadge = isPro
-    ? `<span style="background:#1c1917;color:#fff;font-size:10px;font-weight:600;padding:1px 6px;border-radius:9999px;letter-spacing:0.04em;">PRO</span>`
-    : `<span style="background:#f59e0b;color:#fff;font-size:10px;font-weight:600;padding:1px 6px;border-radius:9999px;letter-spacing:0.04em;">BETA</span>`;
-  const tierMessage = isPro
-    ? 'Thanks for supporting the tracker! Feedback welcome:'
-    : 'This tool is in beta — features may change and bugs may exist. Feedback welcome:';
   const txnCount = results.processed ? results.processed.length : 0;
   document.getElementById('statsFooter').innerHTML = `
     <strong>Stats:</strong> ${txnCount} transactions •
     ${results.cards.length} cards tracked${lowConfBadge}
     <div style="margin-top:10px;padding-top:10px;border-top:1px dashed #d6d3d1;">
-      ${tierBadge}
-      <span style="margin-left:6px;">${tierMessage} <span id="feedbackEmail" style="color:#2563eb;cursor:pointer;text-decoration:underline;" title="Click to send feedback"></span> · <a href="https://docs.google.com/forms/d/e/1FAIpQLSdv50_OOmmuoArTW8FkmCuZhy7WuQH8A0GE1M8mYgTseakdOw/viewform?usp=publish-editor" target="_blank" rel="noopener" style="color:#78716c;text-decoration:underline;text-underline-offset:2px;" title="Submit feedback form">Feedback</a></span>
+      <span>This tool is in beta — features may change and bugs may exist. Feedback welcome: <span id="feedbackEmail" style="color:#2563eb;cursor:pointer;text-decoration:underline;" title="Click to send feedback"></span> · <a href="https://docs.google.com/forms/d/e/1FAIpQLSdv50_OOmmuoArTW8FkmCuZhy7WuQH8A0GE1M8mYgTseakdOw/viewform?usp=publish-editor" target="_blank" rel="noopener" style="color:#78716c;text-decoration:underline;text-underline-offset:2px;" title="Submit feedback form">Feedback</a></span>
     </div>
   `;
   initFeedbackEmail();
@@ -9430,6 +9422,9 @@ async function initCore() {
     const allLast4s = [...new Set(state.transactions.map(t => t.last4).filter(Boolean))];
     const unmapped = allLast4s.filter(l4 => !state.cardMappings[l4]);
 
+    // Show a loading screen while processing so users don't see a blank page
+    showLoading(true, 'Loading your transactions — everything stays on your device.');
+
     // Always process and show Summary, even if some cards unmapped
     // User can click Card Mapping to map them
     try {
@@ -9437,6 +9432,7 @@ async function initCore() {
     } catch (e) {
       // If processing fails entirely, restore the upload section so user isn't stuck
       console.error('initCore processing error:', e);
+      showLoading(false);
       const resultsEl = document.getElementById('resultsSection');
       if (!resultsEl || resultsEl.classList.contains('hidden')) {
         document.getElementById('uploadSection').classList.remove('hidden');

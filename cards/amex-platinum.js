@@ -17,7 +17,8 @@ window.CardTracker.cards['amex-platinum'] = {
     { name: 'Uber One Credit', amount: 96, keywords: ['UBER ONE', 'PLATINUM UBER ONE'], manual: false, frequency: 'none' },
     { name: 'Uber Cash', amount: 200, keywords: [], manual: true, frequency: 'monthly', monthlyAmounts: { default: 15, 11: 35 } },
     { name: 'CLEAR+', amount: 209, keywords: ['CLEAR', 'CLEARME', 'CLEAR PLUS', 'AMEX CLEAR'], manual: false, frequency: 'none' },
-    { name: 'Saks', amount: 100, keywords: ['SAKS'], manual: false, frequency: 'semi-annual' },
+    // Saks credit discontinued: removed for new cardholders Mar 26 2026; existing cardholders lose it after Jun 30 2026.
+    { name: 'Saks', amount: 100, keywords: ['SAKS'], manual: false, frequency: 'semi-annual', endDate: '2026-06-30' },
     { name: 'Equinox', amount: 300, keywords: ['EQUINOX'], manual: false, frequency: 'monthly' },
     { name: 'Walmart+', amount: 155.40, keywords: ['WALMART+', 'WALMART PLUS'], manual: false, streamingBenefit: true, frequency: 'none' },
     { name: 'Global Entry/TSA PreCheck', amount: 120, keywords: ['GLOBAL ENTRY', 'TSA PRECHECK', 'KNOWN TRAVELER', 'TRUSTED TRAVELER'], manual: false, frequency: 'none' },

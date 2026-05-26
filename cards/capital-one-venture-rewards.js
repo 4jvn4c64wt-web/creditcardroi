@@ -11,7 +11,7 @@ window.CardTracker.cards['capital-one-venture-rewards'] = {
   multipliers: { 'capital-one-travel': 5, 'capital-one-entertainment': 5 },
   baseRate: 2,
   credits: [
-    { name: 'Global Entry/TSA PreCheck', amount: 120, keywords: ['GLOBAL ENTRY', 'TSA PRECHECK', 'KNOWN TRAVELER', 'TRUSTED TRAVELER'], manual: false, frequency: 'none' },
+    { name: 'Global Entry/TSA PreCheck (every 4 years)', amount: 120, keywords: ['GLOBAL ENTRY', 'TSA PRECHECK', 'KNOWN TRAVELER', 'TRUSTED TRAVELER'], manual: false, frequency: 'none' },
     // Note: Lifestyle Collection credit may not appear as a statement credit depending on how Capital One applies it.
     { name: 'Lifestyle Collection Credit', amount: 50, keywords: ['LIFESTYLE COLLECTION', 'CAPITAL ONE LIFESTYLE', 'CAPITAL ONE TRAVEL', 'EXPERIENCE CREDIT'], manual: false, frequency: 'annual' }
   ],

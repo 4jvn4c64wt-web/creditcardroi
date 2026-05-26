@@ -1,6 +1,6 @@
 # Credit Card Value Tracker — Development Guide
 
-Last updated: April 29, 2026 (plugin extraction refactor)
+Last updated: May 26, 2026 (added 5 Bank of America card modules)
 
 This document is the single source of context for anyone (human or AI) making changes to the Credit Card Value Tracker codebase. Read the relevant section before touching any code.
 
@@ -162,6 +162,11 @@ Each file registers one card into `window.CardTracker.cards[cardId]`. Files are 
 | `cards/capital-one-venture-x.js` | Capital One Venture X |
 | `cards/capital-one-venture-rewards.js` | Capital One Venture Rewards |
 | `cards/amazon-prime.js` | Amazon Prime Rewards Visa |
+| `cards/bofa-unlimited-cash.js` | Bank of America Unlimited Cash Rewards |
+| `cards/bofa-custom-cash.js` | Bank of America Customized Cash Rewards (user-selectable 3% choice category) |
+| `cards/bofa-travel-rewards.js` | Bank of America Travel Rewards |
+| `cards/bofa-premium-rewards.js` | Bank of America Premium Rewards |
+| `cards/bofa-premium-rewards-elite.js` | Bank of America Premium Rewards Elite |
 | `cards/skip.js` | Skip placeholder (for unmapped cards) |
 
 ### Supporting

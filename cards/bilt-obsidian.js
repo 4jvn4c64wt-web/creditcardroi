@@ -13,7 +13,13 @@ window.CardTracker.cards = window.CardTracker.cards || {};
     // Bilt 2.0: 3x dining OR grocery (user choice), 2x travel, 1x other
     multipliers: { 'dining': 3, 'travel': 2 },
     baseRate: 1,
-    credits: [{ name: 'Bilt Travel Credit', amount: 100, keywords: ['BILT TRAVEL'], manual: false, frequency: 'annual' }],
+    credits: [
+      // $50 per semi-annual period (Jan–Jun, Jul–Dec) toward hotel bookings on Bilt Travel Portal
+      // (min. 2-night stay). Applied at checkout — not a statement credit. Does not roll over.
+      { name: 'Bilt Hotel Credit', amount: 100, manual: true, frequency: 'semi-annual' }
+    ],
+    hasTravelCredit: true,       // flag used by bilt-plugin to show hotel credit ledger in Card Config
+    travelCreditPerPeriod: 50,   // semi-annual cap ($100/year, non-rollover)
     categories: ['rent', 'dining', 'grocery', 'travel', 'other'],
     isBilt: true,
     hasObsidianBonus: true, // Can choose 3x dining OR grocery

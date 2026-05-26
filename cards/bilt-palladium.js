@@ -14,8 +14,13 @@ window.CardTracker.cards = window.CardTracker.cards || {};
     multipliers: {},
     baseRate: 2,
     credits: [
-      { name: 'Bilt Travel Credit', amount: 400, keywords: ['BILT TRAVEL'], manual: false, frequency: 'annual' }
+      // $200 per semi-annual period (Jan–Jun, Jul–Dec). Applied at checkout on Bilt Travel Portal
+      // (not a statement credit), so manual tracking only. Log date + amount in Card Config.
+      // Hard cap: $200/period; unused credit does NOT roll over.
+      { name: 'Bilt Hotel Credit', amount: 400, manual: true, frequency: 'semi-annual' }
     ],
+    hasTravelCredit: true,        // flag used by bilt-plugin to show hotel credit ledger in Card Config
+    travelCreditPerPeriod: 200,   // semi-annual cap ($400/year, non-rollover)
     categories: ['rent', 'other'],
     isBilt: true,
     // Legacy (before Feb 7, 2026): same as all Bilt cards - 3x dining, 2x travel, 1x everything else

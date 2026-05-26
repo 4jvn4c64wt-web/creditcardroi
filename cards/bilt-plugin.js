@@ -280,7 +280,7 @@ window.CardTracker.biltPlugin = {
     biltYears.sort(function(a, b) { return b - a; });
     var currentYear = new Date().getFullYear();
     var availableBiltYears = biltYears.length > 0 ? biltYears : [currentYear];
-    var selectedBiltYear = state.selectedBiltYear || 'all';
+    var selectedBiltYear = state.selectedBiltYear || currentYear;
 
     // Calculate Bilt Cash earned (BILT_CASH_RATE of non-rent Bilt card spend, post-Bilt 2.0)
     var biltNonRentSpend = 0;
@@ -535,6 +535,48 @@ window.CardTracker.biltPlugin = {
       '</div>';
     }
 
+    // ====================== HOTEL CREDIT SECTION (Palladium & Obsidian) ======================
+    if (card.hasTravelCredit) {
+      var CAP_PER_PERIOD = card.travelCreditPerPeriod || 200;
+      var PERIOD_LABELS = ['Jan–Jun (H1)', 'Jul–Dec (H2)'];
+      // hotelCreditUsed: { "YYYY-P0": true, "YYYY-P1": true }
+      var hotelUsed = (typeof cfg.hotelCreditUsed === 'object' && cfg.hotelCreditUsed) ? cfg.hotelCreditUsed : {};
+
+      var hotelRowsHtml = '';
+      for (var hpi = 0; hpi < 2; hpi++) {
+        var periodKey = selectedBiltYear + '-P' + hpi;
+        var isUsed = !!hotelUsed[periodKey];
+        var btnLabel = isUsed ? '✓ Used' : 'Mark Used';
+        var btnBg = isUsed ? '#059669' : '#fff';
+        var btnColor = isUsed ? '#fff' : '#374151';
+        var btnBorder = isUsed ? '#059669' : '#d1d5db';
+        var rowBg = isUsed ? '#f0fdf4' : '#fff';
+        var rowBorder = isUsed ? '#bbf7d0' : '#e7e5e4';
+
+        hotelRowsHtml +=
+          '<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 10px;border:1px solid ' + rowBorder + ';border-radius:6px;margin-bottom:6px;background:' + rowBg + ';">' +
+            '<div>' +
+              '<span style="font-size:12px;font-weight:600;color:#44403c;">' + PERIOD_LABELS[hpi] + '</span>' +
+              '<span style="font-size:11px;color:#78716c;margin-left:8px;">up to $' + CAP_PER_PERIOD + '</span>' +
+            '</div>' +
+            '<button class="bilt-hotel-toggle" data-card="' + cardId + '" data-period-key="' + periodKey + '" data-year="' + selectedBiltYear + '" type="button" ' +
+              'style="padding:4px 12px;font-size:11px;font-weight:600;background:' + btnBg + ';color:' + btnColor + ';border:1px solid ' + btnBorder + ';border-radius:5px;cursor:pointer;">' +
+              btnLabel +
+            '</button>' +
+          '</div>';
+      }
+
+      html +=
+        '<div style="margin-bottom:12px;padding:12px;border:1px solid #e7e5e4;border-radius:8px;">' +
+          '<div style="font-size:12px;font-weight:600;margin-bottom:4px;">&#127968; Bilt Hotel Credit</div>' +
+          '<p style="font-size:10px;color:#78716c;margin:0 0 10px 0;">' +
+            'Up to $' + CAP_PER_PERIOD + ' per semi-annual period toward hotel bookings on the Bilt Travel Portal (min. 2-night stay). ' +
+            'Applied at checkout — not a statement credit. Does not roll over.' +
+          '</p>' +
+          hotelRowsHtml +
+        '</div>';
+    }
+
     html += '</div>';
     return html;
   },
@@ -728,6 +770,25 @@ window.CardTracker.biltPlugin = {
         if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
         state.biltConfig[cid].bonusCategory = radio.value;
         ctx.safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
+      });
+    });
+
+    // Hotel credit: toggle used/not-used per semi-annual period
+    document.querySelectorAll('.bilt-hotel-toggle').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var cid = btn.dataset.card;
+        var periodKey = btn.dataset.periodKey;
+        var logYear = parseInt(btn.dataset.year);
+        if (!state.biltConfig[cid]) state.biltConfig[cid] = {};
+        if (typeof state.biltConfig[cid].hotelCreditUsed !== 'object' || !state.biltConfig[cid].hotelCreditUsed) {
+          state.biltConfig[cid].hotelCreditUsed = {};
+        }
+        // Toggle
+        state.biltConfig[cid].hotelCreditUsed[periodKey] = !state.biltConfig[cid].hotelCreditUsed[periodKey];
+        ctx.safeLocalStorageSet('ccTracker_biltConfig', state.biltConfig);
+        // Sync to monthlyCredits so the calendar reflects this
+        window.CardTracker.biltPlugin._syncHotelCreditToCalendar(cid, logYear, state, ctx);
+        ctx.renderCardConfig();
       });
     });
   },
@@ -1448,6 +1509,37 @@ window.CardTracker.biltPlugin = {
         rentLabelEl.textContent = 'Rent points (' + Math.round(finalRentPts).toLocaleString() + ' pts @ $' + biltPV.toFixed(3) + ')';
       }
     },
+  },
+
+  // =========================================================================
+  // _syncHotelCreditToCalendar — keeps monthlyCredits in sync with
+  // hotelCreditUsed so the Credit Calendar reflects the config toggles.
+  // Uses month 0 (Jan) as representative for H1, month 6 (Jul) for H2.
+  // =========================================================================
+  _syncHotelCreditToCalendar: function(cardId, year, state, ctx) {
+    var CREDIT_NAME = 'Bilt Hotel Credit';
+    var cfg = state.biltConfig[cardId] || {};
+    var hotelUsed = (typeof cfg.hotelCreditUsed === 'object' && cfg.hotelCreditUsed) ? cfg.hotelCreditUsed : {};
+
+    if (!state.monthlyCredits) state.monthlyCredits = {};
+    if (!state.monthlyCredits[cardId]) state.monthlyCredits[cardId] = {};
+    if (!state.monthlyCredits[cardId][CREDIT_NAME]) state.monthlyCredits[cardId][CREDIT_NAME] = {};
+
+    var PERIOD_REPS = [0, 6];
+    var PERIOD_MONTHS = [[0,1,2,3,4,5], [6,7,8,9,10,11]];
+    var claimed = (state.monthlyCredits[cardId][CREDIT_NAME][year] || []).slice();
+
+    for (var pi = 0; pi < 2; pi++) {
+      var key = year + '-P' + pi;
+      var isUsed = !!hotelUsed[key];
+      var periodMonths = PERIOD_MONTHS[pi];
+      // Strip all months for this period, then re-add rep if toggled on
+      claimed = claimed.filter(function(m) { return periodMonths.indexOf(m) < 0; });
+      if (isUsed) claimed.push(PERIOD_REPS[pi]);
+    }
+
+    state.monthlyCredits[cardId][CREDIT_NAME][year] = claimed;
+    ctx.safeLocalStorageSet('ccTracker_monthlyCredits', state.monthlyCredits);
   },
 
   // =========================================================================

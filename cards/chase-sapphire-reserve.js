@@ -11,7 +11,7 @@ window.CardTracker.cards['chase-sapphire-reserve'] = {
   baseRate: 1,
   credits: [
     { name: 'Travel Credit', amount: 300, keywords: ['TRAVEL CREDIT'], manual: false, frequency: 'annual', resetBasis: 'anniversary' },
-    { name: 'Global Entry/TSA PreCheck', amount: 120, keywords: ['GLOBAL ENTRY', 'TSA PRECHECK', 'KNOWN TRAVELER', 'TRUSTED TRAVELER'], manual: false, frequency: 'none' },
+    { name: 'Global Entry/TSA PreCheck (every 4 years)', amount: 120, keywords: ['GLOBAL ENTRY', 'TSA PRECHECK', 'KNOWN TRAVELER', 'TRUSTED TRAVELER'], manual: false, frequency: 'none' },
     { name: 'Dining/OpenTable Credit', amount: 300, keywords: ['DINING CREDIT', 'OPENTABLE'], manual: false, frequency: 'semi-annual' },
     { name: 'The Edit Hotels', amount: 500, keywords: ['THE EDIT'], manual: false, frequency: 'annual' },
     { name: 'DoorDash Restaurant Credit', amount: 60, keywords: [], manual: true, frequency: 'monthly' }, // $5/month in-app

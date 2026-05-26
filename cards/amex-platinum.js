@@ -21,7 +21,7 @@ window.CardTracker.cards['amex-platinum'] = {
     { name: 'Saks', amount: 100, keywords: ['SAKS'], manual: false, frequency: 'semi-annual', endDate: '2026-06-30' },
     { name: 'Equinox', amount: 300, keywords: ['EQUINOX'], manual: false, frequency: 'monthly' },
     { name: 'Walmart+', amount: 155.40, keywords: ['WALMART+', 'WALMART PLUS'], manual: false, streamingBenefit: true, frequency: 'none' },
-    { name: 'Global Entry/TSA PreCheck', amount: 120, keywords: ['GLOBAL ENTRY', 'TSA PRECHECK', 'KNOWN TRAVELER', 'TRUSTED TRAVELER'], manual: false, frequency: 'none' },
+    { name: 'Global Entry/TSA PreCheck (every 4 years)', amount: 120, keywords: ['GLOBAL ENTRY', 'TSA PRECHECK', 'KNOWN TRAVELER', 'TRUSTED TRAVELER'], manual: false, frequency: 'none' },
   ],
   categories: ['flights-direct', 'amex-travel', 'other'],
 

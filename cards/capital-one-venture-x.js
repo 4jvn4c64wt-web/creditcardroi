@@ -17,7 +17,7 @@ window.CardTracker.cards['capital-one-venture-x'] = {
     // Keywords cast a wider net; some false positives are possible with generic "TRAVEL CREDIT".
     { name: 'Capital One Travel Credit', amount: 300, keywords: ['CAPITAL ONE TRAVEL CREDIT', 'C1 TRAVEL CREDIT', 'CAPITAL ONE TRAVEL', 'TRAVEL CREDIT'], manual: false, frequency: 'annual', resetBasis: 'anniversary' },
     // Typically once every ~4 years, but treated as annualized value for ROI purposes.
-    { name: 'Global Entry / TSA PreCheck', amount: 120, keywords: ['GLOBAL ENTRY', 'TSA PRECHECK', 'KNOWN TRAVELER', 'TRUSTED TRAVELER'], manual: false, frequency: 'none' }
+    { name: 'Global Entry / TSA PreCheck (every 4 years)', amount: 120, keywords: ['GLOBAL ENTRY', 'TSA PRECHECK', 'KNOWN TRAVELER', 'TRUSTED TRAVELER'], manual: false, frequency: 'none' }
   ],
   categories: ['capital-one-travel', 'other'],
   // 10,000 bonus miles awarded each cardholder anniversary (not a statement credit)

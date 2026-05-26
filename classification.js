@@ -45,6 +45,13 @@ window.CardTracker.classification.CATEGORY_HIERARCHY = {
   'subway': 'transit',
   'bus': 'transit',
 
+  // Online shopping children
+  'amazon': 'online-shopping', // Amazon.com retail walks up to online-shopping before shopping
+  'online-shopping': 'shopping',
+
+  // Grocery children (Whole Foods is a physical grocery store, not online shopping)
+  'whole-foods': 'grocery',
+
   // Shopping children
   'makeup': 'shopping',
   'beauty': 'shopping',

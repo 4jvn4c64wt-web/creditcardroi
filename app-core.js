@@ -866,11 +866,12 @@ function mapToCardCategory(genericCategory, cardId, txnDate = null) {
     'dining': ['dining', 'fast-food', 'other'],
     'fast-food': ['fast-food', 'dining', 'other'],
     'grocery': ['grocery', 'other'],
-    'whole-foods': ['whole-foods', 'grocery', 'amazon', 'other'],
+    'whole-foods': ['whole-foods', 'grocery', 'other'],
     'online-grocery': ['online-grocery', 'grocery', 'other'], // CSP earns 3x on online grocery
     
     // Shopping mappings - wholesale/retail do NOT earn grocery bonuses
-    'amazon': ['amazon', 'other'],
+    'amazon': ['amazon', 'online-shopping', 'shopping', 'other'],
+    'online-shopping': ['online-shopping', 'shopping', 'other'],
     'drugstore': ['drugstore', 'other'],
     'gas': ['gas', 'other'],
     'rent': ['rent', 'other'],
@@ -2312,7 +2313,7 @@ function showCardConfigEditor(preselectedCardId = null) {
       `;
     };
 
-    if (card.credits && card.credits.length > 0) {
+    if (card.credits && card.credits.length > 0 && !card.isBilt) {
       // Get available years from transactions
       const txnYears = [...new Set(state.transactions.map(t => getYearFromDateString(t.date)))].sort().reverse();
       const currentYear = new Date().getFullYear();

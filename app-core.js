@@ -5830,6 +5830,7 @@ function attachCardScenariosListeners() {
   if (calcBtn) calcBtn.addEventListener('click', () => {
     wi.resultCalculated = true;
     wi.step = 5;
+    if (typeof umami !== 'undefined') umami.track('Card Scenario Calculated');
     renderView('cardscenarios');
   });
 
@@ -6176,6 +6177,11 @@ function updateCardScenariosSummary() {
 
 function renderView(view) {
   state.activeView = view;
+
+  // Track tab navigation in Umami
+  const tabNames = { summary: 'Summary', transactions: 'All Transactions', cardscenarios: 'Card Scenarios', creditcalendar: 'Credit Calendar' };
+  if (tabNames[view] && typeof umami !== 'undefined') umami.track('View Tab', { tab: tabNames[view] });
+
   // Support both old .tab and new .shell-tab selectors
   document.querySelectorAll('.tab, .shell-tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
   const topMetricsEl = document.getElementById('topMetrics');
@@ -8798,7 +8804,10 @@ function updateStoredTxnCount() {
 // =============================================================================
 async function handleFile(file) {
   if (!file) return;
-  
+
+  // Track file upload event in Umami
+  if (typeof umami !== 'undefined') umami.track('File Upload');
+
   // Reset file inputs so the same file can be selected again
   document.getElementById('fileInput').value = '';
   document.getElementById('newFileInput').value = '';
@@ -9536,11 +9545,13 @@ async function initCore() {
   });
   
   document.getElementById('exportCSV').addEventListener('click', () => {
+    if (typeof umami !== 'undefined') umami.track('Export Data', { format: 'CSV' });
     exportAsCSV();
     document.getElementById('exportModal').classList.add('hidden');
   });
-  
+
   document.getElementById('exportJSON').addEventListener('click', () => {
+    if (typeof umami !== 'undefined') umami.track('Export Data', { format: 'JSON' });
     exportAsJSON();
     document.getElementById('exportModal').classList.add('hidden');
   });

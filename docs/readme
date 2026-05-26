@@ -1,0 +1,29 @@
+# _management
+
+Everything in this folder is for *running* the Credit Card Value Tracker project — not for shipping with it. Nothing here gets deployed.
+
+## What lives where
+
+- `CLAUDE_ONBOARDING.md` — the "read this first" file. Any new Cowork session should open with this. It points the model at the right context fast.
+- `WORKFLOWS.md` — step-by-step recipes for the recurring tasks (rate change, new card, new article, debug a bad classification, etc.). Saves re-deriving the same steps every session.
+- `writing/` — style guide, article template, pipeline tracker.
+- `decisions/` — log of architectural calls and why we made them. Read before relitigating.
+- `drafts/` — scratch space for articles in progress before they move to `site/creditcardroi/insights/`.
+
+## What does NOT live here
+
+- The DEVELOPMENT_GUIDE for the code — that's at `site/creditcardroi/DEVELOPMENT_GUIDE__3.md`. It's the source of truth for how the code works. This folder *points to it*; it does not mirror it. Mirrors go stale.
+- Anything that ships with the site. If it's user-facing, it goes in `site/`.
+- Long-term task tracking. Use Notion for that.
+
+## Conventions
+
+- New decisions: copy `decisions/_template.md` to `decisions/YYYY-MM-DD-short-name.md`.
+- New article drafts: start in `drafts/`, move the finished HTML to `site/creditcardroi/insights/` when shipping.
+- Update `writing/article_pipeline.md` when something moves between stages.
+
+## Keeping this folder accurate
+
+The rules for *when* each doc gets updated and *how* to compact a doc that's outgrown its job live in `MAINTENANCE.md`. Read that file before making structural changes to anything in `_management/`.
+
+The load-bearing rule, restated: **if you changed how something works in the project, or where something lives, update the relevant management doc in the same response as the change.** Not later.

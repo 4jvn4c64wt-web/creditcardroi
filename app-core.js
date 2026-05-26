@@ -279,6 +279,7 @@ function buildPluginCtx() {
     mapToCardCategory,
     getAddCardShiftRows,
     getRemoveCardShiftRows,
+    getCurrentWalletBiltSpend,
     calculateAddCardValue,
     calculateRemoveCardValue,
     calculateSwapValue,
@@ -2746,6 +2747,21 @@ function showResults(results, isNewUpload = false) {
 // =============================================================================
 
 /**
+ * Routing-decision point value for Card Scenarios.
+ * In the comparison tool, we deliberately equalize PVs so the routing engine
+ * only re-routes spend when (a) rates differ or (b) Bilt rent uplift applies.
+ * Without this, a card with a slightly lower PV would lose ties to a card with
+ * a higher PV even at identical rates — that's not the comparison the user wants.
+ *
+ * Actual point-value impact (the $ figures in the table) still uses getPointValue()
+ * so the user sees real dollar gains/losses based on their configured PVs.
+ */
+const SCENARIO_ROUTING_PV = 0.018;
+function getRoutingPV(_cardId) {
+  return SCENARIO_ROUTING_PV;
+}
+
+/**
  * Get multiplier for card scenarios. Uses current rates (today's date).
  * Cards can define getScenarioMultiplier() to provide forward-looking rates
  * (e.g., CFF skips quarterly bonuses since they're unpredictable).
@@ -2903,19 +2919,22 @@ function calculateAddCardValue(newCardId, year) {
     // Rent is non-transferable — requires Bilt rent payment system setup
     if (sub === 'rent') continue;
 
-    // Find the best existing card in the full wallet for this subcategory
+    // Find the best existing card in the full wallet for this subcategory.
+    // Selection uses equalized PV (rate-only); impact (newValue/bestExistingValue) uses real PV.
     let bestExistingCardId = t.cardId;
     let bestExistingRate = 0;
-    let bestExistingValue = 0;
+    let bestExistingValue = 0; // real-PV impact
     let bestExistingPV = getPointValue(t.cardId);
+    let bestExistingRoutingScore = -Infinity;
 
     for (const cid of walletCardIds) {
       const pv = getPointValue(cid);
       const mapped = mapToCardCategory(sub, cid, todayStr);
       const mult = getCardScenariosMultiplier(cid, mapped);
-      const val = mult.rate * pv;
-      if (val > bestExistingValue) {
-        bestExistingValue = val;
+      const routingScore = mult.rate * getRoutingPV(cid);
+      if (routingScore > bestExistingRoutingScore) {
+        bestExistingRoutingScore = routingScore;
+        bestExistingValue = mult.rate * pv;
         bestExistingCardId = cid;
         bestExistingRate = mult.rate;
         bestExistingPV = pv;
@@ -2924,10 +2943,12 @@ function calculateAddCardValue(newCardId, year) {
 
     const newCat = mapToCardCategory(sub, newCardId, todayStr);
     const newMult = getCardScenariosMultiplier(newCardId, newCat);
-    const newValue = newMult.rate * newPV;
+    const newRoutingScore = newMult.rate * getRoutingPV(newCardId);
+    const newValue = newMult.rate * newPV; // real-PV impact
 
-    // Only count if the new card beats the BEST existing card in the full wallet
-    if (newMult.rate > bestExistingRate && newValue > bestExistingValue) {
+    // Only count if the new card's rate beats the best existing card.
+    // (With equalized routing PV, routing score reduces to rate comparison.)
+    if (newMult.rate > bestExistingRate && newRoutingScore > bestExistingRoutingScore) {
       const key = `${bestExistingCardId}|${sub}`;
       if (!buckets[key]) {
         buckets[key] = {
@@ -3066,18 +3087,19 @@ function calculateRemoveCardValue(removeCardId, year) {
     // Use actual processed transaction values for the source rate.
     if (sub === 'rent') {
       if (!buckets['rent']) {
-        // Find best Bilt destination in remaining wallet
-        let destCardId = null, destValue = 0, destRate = 0, destPV = 0;
+        // Find best Bilt destination in remaining wallet.
+        // Selection uses equalized PV; _destValuePerDollar uses real PV for impact.
+        let destCardId = null, destRoutingScore = 0, destRate = 0, destPV = 0;
         let destName = 'None — rent requires Bilt';
         for (const cid of walletCardIds) {
           const c = CARDS[cid];
           if (!c || !c.isBilt) continue;
-          const pv = getPointValue(cid);
           const mapped = mapToCardCategory('rent', cid, todayStr);
           const mult = getCardScenariosMultiplier(cid, mapped);
-          const val = mult.rate * pv;
-          if (val > destValue) {
-            destValue = val; destCardId = cid; destRate = mult.rate; destPV = pv;
+          const routingScore = mult.rate * getRoutingPV(cid);
+          if (routingScore > destRoutingScore) {
+            destRoutingScore = routingScore; destCardId = cid;
+            destRate = mult.rate; destPV = getPointValue(cid);
             destName = c.shortName || c.name || cid;
           }
         }
@@ -3092,7 +3114,7 @@ function calculateRemoveCardValue(removeCardId, year) {
           spend: 0,
           valueChange: 0,
           _totalPoints: 0,
-          _destValuePerDollar: destValue,
+          _destValuePerDollar: destRate * destPV, // real-PV impact
           isCategory: true
         };
       }
@@ -3107,20 +3129,22 @@ function calculateRemoveCardValue(removeCardId, year) {
     const removeMult = getCardScenariosMultiplier(removeCardId, removeCat);
     const removeValue = removeMult.rate * removePV;
 
-    // Find best destination card
+    // Find best destination card. Selection uses equalized PV; bestValue uses real PV.
     let bestCardId = null;
     let bestValue = 0;
     let bestRate = 1;
     let bestPV = 0.01;
     let bestName = '';
+    let bestRoutingScore = -Infinity;
 
     for (const cardId of walletCardIds) {
       const cardPV = getPointValue(cardId);
       const mapped = mapToCardCategory(sub, cardId, todayStr);
       const mult = getCardScenariosMultiplier(cardId, mapped);
-      const val = mult.rate * cardPV;
-      if (val > bestValue) {
-        bestValue = val;
+      const routingScore = mult.rate * getRoutingPV(cardId);
+      if (routingScore > bestRoutingScore) {
+        bestRoutingScore = routingScore;
+        bestValue = mult.rate * cardPV;
         bestCardId = cardId;
         bestRate = mult.rate;
         bestPV = cardPV;
@@ -3180,9 +3204,11 @@ function calculateRemoveCardValue(removeCardId, year) {
   // Sort by value change ascending (biggest losses first)
   rows.sort((a, b) => a.valueChange - b.valueChange);
 
-  const totalChange = rows.reduce((sum, r) => sum + r.valueChange, 0);
-  const categoryChange = rows.filter(r => r.isCategory).reduce((sum, r) => sum + r.valueChange, 0);
-  const nonCategoryChange = rows.filter(r => !r.isCategory).reduce((sum, r) => sum + r.valueChange, 0);
+  // Exclude rent from totalChange — rent value is shown separately as rentPointsValueDelta
+  // via the plugin's renderPointValueExtra, so including it here would double-count.
+  const totalChange = rows.filter(r => r.subcategory !== 'rent').reduce((sum, r) => sum + r.valueChange, 0);
+  const categoryChange = rows.filter(r => r.isCategory && r.subcategory !== 'rent').reduce((sum, r) => sum + r.valueChange, 0);
+  const nonCategoryChange = rows.filter(r => !r.isCategory && r.subcategory !== 'rent').reduce((sum, r) => sum + r.valueChange, 0);
   return { totalChange, categoryChange, nonCategoryChange, rows, annualizationFactor };
 }
 
@@ -3225,8 +3251,13 @@ function calculateSwapValue(removeCardId, addCardId, year) {
   const annualizationFactor = monthCount > 0 && monthCount < 12 ? 12 / monthCount : 1;
 
   // === Component 1: Removed card spending redistribution ===
+  // Include credits/refunds so they OFFSET charges in the same subcategory bucket.
+  // Excluding them entirely (as we used to) made gross spend look higher than net spend —
+  // e.g. a $96 Uber charge with a $96 Uber One credit would have showed $96 of transit
+  // spend when the net is $0. We still exclude payments and annual fees, which aren't
+  // category-attributable spend.
   const removeTxns = state.results.processed.filter(t =>
-    !t.isPayment && !t.isCredit && !t.isRefund && !t.isAnnualFee && t.cardId === removeCardId &&
+    !t.isPayment && !t.isAnnualFee && t.cardId === removeCardId &&
     getYearFromDateString(t.date) === year
   );
 
@@ -3241,23 +3272,25 @@ function calculateSwapValue(removeCardId, addCardId, year) {
 
   for (const t of removeTxns) {
     const sub = t.subcategory || t.category || 'other';
-    const amt = Math.abs(t.amount);
+    // Signed amount: charges are negative in the data, so -t.amount makes charges positive
+    // and refunds/credits negative — refunds correctly offset same-bucket charges.
+    const amt = -t.amount;
 
     // Rent is only transferable to other Bilt cards — use actual processed values for source.
     if (sub === 'rent') {
       if (!removeBuckets['rent']) {
-        // Find best Bilt destination in hypothetical wallet
-        let destCardId = null, destValue = 0, destRate = 0, destPV = 0;
+        // Find best Bilt destination in hypothetical wallet.
+        // Routing decision uses equalized PV; impact (_destValuePerDollar) uses real PV.
+        let destCardId = null, destRoutingVal = 0, destRate = 0, destPV = 0;
         let destName = 'None — rent requires Bilt';
         for (const cid of hypotheticalWallet) {
           const c = CARDS[cid];
           if (!c || !c.isBilt) continue;
-          const pv = getPointValue(cid);
           const mapped = mapToCardCategory('rent', cid, todayStr);
           const mult = getCardScenariosMultiplier(cid, mapped);
-          const val = mult.rate * pv;
-          if (val > destValue) {
-            destValue = val; destCardId = cid; destRate = mult.rate; destPV = pv;
+          const routingVal = mult.rate * getRoutingPV(cid);
+          if (routingVal > destRoutingVal) {
+            destRoutingVal = routingVal; destCardId = cid; destRate = mult.rate; destPV = getPointValue(cid);
             destName = c.shortName || c.name || cid;
           }
         }
@@ -3268,7 +3301,7 @@ function calculateSwapValue(removeCardId, addCardId, year) {
           bestCardId: destCardId, bestCardName: destName, bestRate: destRate, bestPointValue: destPV,
           spend: 0, valueChange: 0,
           _totalPoints: 0,
-          _destValuePerDollar: destValue,
+          _destValuePerDollar: destRate * destPV, // real-PV impact
           isCategory: true
         };
       }
@@ -3280,22 +3313,27 @@ function calculateSwapValue(removeCardId, addCardId, year) {
 
     const removeCat = mapToCardCategory(sub, removeCardId, todayStr);
     const removeMult = getCardScenariosMultiplier(removeCardId, removeCat);
+    // sourceValue uses real PV (drives the $ impact column). Routing decisions in
+    // the comparison below use rate-only comparisons via getRoutingPV.
     const removeValue = removeMult.rate * removePV;
 
     if (!removeSpendBuckets[sub]) {
-      // Find best routing-card and best non-routing destinations
+      // Find best routing-card and best non-routing destinations.
+      // Selection uses equalized PV (rate-only); entry.val stores real-PV impact.
       let bestRouting = null, bestAlt = null;
+      let bestRoutingScore = -Infinity, bestAltScore = -Infinity;
       for (const cardId of hypotheticalWallet) {
         const cardPV = getPointValue(cardId);
         const mapped = mapToCardCategory(sub, cardId, todayStr);
         const mult = getCardScenariosMultiplier(cardId, mapped);
-        const val = mult.rate * cardPV;
+        const routingScore = mult.rate * getRoutingPV(cardId);
+        const val = mult.rate * cardPV; // real-PV impact
         const entry = { cardId, rate: mult.rate, pv: cardPV, cat: mapped, val,
           name: CARDS[cardId]?.shortName || CARDS[cardId]?.name || cardId };
         if (CARDS[cardId]?.scenarioPrompt?.computeRouting) {
-          if (!bestRouting || val > bestRouting.val) bestRouting = entry;
+          if (routingScore > bestRoutingScore) { bestRouting = entry; bestRoutingScore = routingScore; }
         } else {
-          if (!bestAlt || val > bestAlt.val) bestAlt = entry;
+          if (routingScore > bestAltScore) { bestAlt = entry; bestAltScore = routingScore; }
         }
       }
       removeSpendBuckets[sub] = {
@@ -3306,6 +3344,12 @@ function calculateSwapValue(removeCardId, addCardId, year) {
     }
     removeSpendBuckets[sub].spend += amt;
   }
+
+  // Clamp negative bucket spend to zero (happens when refunds exceed charges in a category)
+  for (const sub of Object.keys(removeSpendBuckets)) {
+    if (removeSpendBuckets[sub].spend < 0) removeSpendBuckets[sub].spend = 0;
+  }
+  if (removeBuckets['rent'] && removeBuckets['rent'].spend < 0) removeBuckets['rent'].spend = 0;
 
   // Compute effective source rate for rent from actual processed points
   if (removeBuckets['rent'] && removeBuckets['rent'].spend > 0) {
@@ -3350,15 +3394,20 @@ function calculateSwapValue(removeCardId, addCardId, year) {
         isCategory: bucket.isCategory
       };
     } else if (bucket.bestRouting && bucket.bestAlt) {
-      // Both exist — candidate for routing optimization
+      // Both exist — candidate for routing optimization.
+      // We pass equalized PVs to the routing plugin so its rate×PV comparisons reduce to
+      // rate-only. Real PVs are kept on _realBiltPV / _realAltPV for the impact math after.
       routingCandidates.push({
         sub, spend: annualizedSpend,
-        biltCardId: bucket.bestRouting.cardId, biltRate: bucket.bestRouting.rate, biltPV: bucket.bestRouting.pv,
+        biltCardId: bucket.bestRouting.cardId, biltRate: bucket.bestRouting.rate,
+        biltPV: getRoutingPV(bucket.bestRouting.cardId),
         biltCat: bucket.bestRouting.cat, biltName: bucket.bestRouting.name,
-        altCardId: bucket.bestAlt.cardId, altRate: bucket.bestAlt.rate, altPV: bucket.bestAlt.pv,
+        altCardId: bucket.bestAlt.cardId, altRate: bucket.bestAlt.rate,
+        altPV: getRoutingPV(bucket.bestAlt.cardId),
         altCat: bucket.bestAlt.cat, altName: bucket.bestAlt.name,
         sourceRate: bucket.sourceRate, sourcePV: bucket.sourcePV,
-        sourceValue: bucket.sourceValue, isCategory: bucket.isCategory
+        sourceValue: bucket.sourceValue, isCategory: bucket.isCategory,
+        _realBiltPV: bucket.bestRouting.pv, _realAltPV: bucket.bestAlt.pv
       });
     }
   }
@@ -3381,14 +3430,19 @@ function calculateSwapValue(removeCardId, addCardId, year) {
     for (const route of result.routes) {
       const orig = routingCandidates.find(c => c.sub === route.sub);
       const sourceValue = orig ? orig.sourceValue : 0;
-      const destValue = route.destRate * route.destPV;
+      // Routing returned route.destPV = equalized PV; recover real PV for impact math.
+      // Dest is either biltCardId (real PV = _realBiltPV) or altCardId (real PV = _realAltPV).
+      const destRealPV = orig
+        ? (route.destCardId === orig.biltCardId ? orig._realBiltPV : orig._realAltPV)
+        : route.destPV;
+      const destValue = route.destRate * destRealPV;
       const key = route.sub;
       const isRentMotivated = biltCashPlan !== 'cash' && !!route.routeReason && route.routeReason.includes('Rent uplift');
       if (!removeBuckets[key]) {
         removeBuckets[key] = {
           subcategory: route.sub, sourceRate: route.sourceRate, sourcePointValue: route.sourcePV,
           bestCardId: route.destCardId, bestCardName: route.destName,
-          bestRate: route.destRate, bestPointValue: route.destPV,
+          bestRate: route.destRate, bestPointValue: destRealPV,
           spend: route.spend, valueChange: route.spend * (destValue - sourceValue),
           isCategory: orig?.isCategory || false,
           routeReason: route.routeReason,
@@ -3400,7 +3454,7 @@ function calculateSwapValue(removeCardId, addCardId, year) {
         removeBuckets[splitKey] = {
           subcategory: route.sub, sourceRate: route.sourceRate, sourcePointValue: route.sourcePV,
           bestCardId: route.destCardId, bestCardName: route.destName,
-          bestRate: route.destRate, bestPointValue: route.destPV,
+          bestRate: route.destRate, bestPointValue: destRealPV,
           spend: route.spend, valueChange: route.spend * (destValue - sourceValue),
           isCategory: orig?.isCategory || false,
           routeReason: route.routeReason,
@@ -3425,14 +3479,18 @@ function calculateSwapValue(removeCardId, addCardId, year) {
 
   const removeRows = Object.values(removeBuckets);
   removeRows.sort((a, b) => a.valueChange - b.valueChange);
-  const removeChange = removeRows.reduce((sum, r) => sum + r.valueChange, 0);
-  const removeCategoryChange = removeRows.filter(r => r.isCategory).reduce((sum, r) => sum + r.valueChange, 0);
-  const removeNonCategoryChange = removeRows.filter(r => !r.isCategory).reduce((sum, r) => sum + r.valueChange, 0);
+  // Exclude rent from removeChange — rent value is shown separately as rentPointsValueDelta
+  // via the plugin's renderPointValueExtra, so including it here would double-count.
+  const removeChange = removeRows.filter(r => r.subcategory !== 'rent').reduce((sum, r) => sum + r.valueChange, 0);
+  const removeCategoryChange = removeRows.filter(r => r.isCategory && r.subcategory !== 'rent').reduce((sum, r) => sum + r.valueChange, 0);
+  const removeNonCategoryChange = removeRows.filter(r => !r.isCategory && r.subcategory !== 'rent').reduce((sum, r) => sum + r.valueChange, 0);
 
   // === Component 2: Additional shifts to new card from existing cards ===
-  // Excludes removed card transactions (handled in Component 1)
+  // Excludes removed card transactions (handled in Component 1). Includes credits/refunds
+  // so they OFFSET charges in the same subcategory bucket (e.g. a $96 Uber charge with
+  // a $96 Uber One credit = $0 net transit, not $96).
   const addTxns = state.results.processed.filter(t =>
-    !t.isPayment && !t.isCredit && !t.isRefund && !t.isAnnualFee && t.cardId && t.cardId !== 'skip' &&
+    !t.isPayment && !t.isAnnualFee && t.cardId && t.cardId !== 'skip' &&
     t.cardId !== addCardId && t.cardId !== removeCardId && CARDS[t.cardId] &&
     getYearFromDateString(t.date) === year
   );
@@ -3442,91 +3500,123 @@ function calculateSwapValue(removeCardId, addCardId, year) {
   const newCardHasRouting = !!CARDS[addCardId]?.scenarioPrompt?.computeRouting;
   const comp2RoutingCard = newCardHasRouting ? addCardId : existingWallet.find(id => CARDS[id]?.scenarioPrompt?.computeRouting);
 
-  // Phase 1: Accumulate spend per subcategory
-  const addSpendBuckets = {}; // sub → { spend, bestExisting }
+  // Phase 1: Accumulate spend per subcategory, tracking which card has the most spend
+  // so the source label reflects where the money actually is, not the highest-rate card.
+  const addSpendBuckets = {}; // sub → { spend, cardSpend: { cardId → spend } }
   for (const t of addTxns) {
     const sub = t.subcategory || t.category || 'other';
     if (sub === 'rent') continue;
-    const amt = Math.abs(t.amount);
-    if (!addSpendBuckets[sub]) addSpendBuckets[sub] = { spend: 0 };
+    // Signed amount: -t.amount makes charges positive and refunds/credits negative,
+    // so refunds correctly offset same-bucket, same-card charges.
+    const amt = -t.amount;
+    if (!addSpendBuckets[sub]) addSpendBuckets[sub] = { spend: 0, cardSpend: {} };
     addSpendBuckets[sub].spend += amt;
+    addSpendBuckets[sub].cardSpend[t.cardId] = (addSpendBuckets[sub].cardSpend[t.cardId] || 0) + amt;
+  }
+  // Clamp negative per-card and total spend to zero
+  for (const sub of Object.keys(addSpendBuckets)) {
+    const bucket = addSpendBuckets[sub];
+    for (const cid of Object.keys(bucket.cardSpend)) {
+      if (bucket.cardSpend[cid] < 0) bucket.cardSpend[cid] = 0;
+    }
+    if (bucket.spend < 0) bucket.spend = 0;
   }
 
   // Phase 2: For each subcategory, find best existing and new card values, apply routing
   const addRoutingCandidates = [];
   const addDirectRows = [];
 
+  // Emit ONE candidate/row per (subcategory, actual source card) pair.
+  // Previously this loop collapsed all source cards into a single bucket and attributed
+  // the full bucket spend to whichever card had the highest rate × PV. That caused phantom
+  // rows: e.g. if Amex Plat had $472 of transit and SR had $105, the engine emitted one
+  // row labeled "SR: $577.54 (annualized $1,386)" — fabricating spend on SR. Splitting
+  // per source card means each row's spend reflects only what that card actually spent.
+  //
+  // PV NOTE: routing decisions (newRoutingVal vs srcRoutingVal, plugin candidates' biltPV/altPV)
+  // use equalized PV so rates alone drive re-routing. Impact figures (additionalValue) use
+  // each card's real PV so the user sees real $ gains/losses.
   for (const [sub, bucket] of Object.entries(addSpendBuckets)) {
-    const annualizedSpend = bucket.spend * annualizationFactor;
-    if (annualizedSpend <= 0) continue;
+    if (!bucket.cardSpend || Object.keys(bucket.cardSpend).length === 0) continue;
 
-    // Find best existing card
-    let bestExisting = { cardId: null, rate: 0, pv: 0.01, val: 0, cat: 'other', name: '', hasRouting: false };
-    for (const cid of existingWallet) {
-      const pv = getPointValue(cid);
-      const mapped = mapToCardCategory(sub, cid, todayStr);
-      const mult = getCardScenariosMultiplier(cid, mapped);
-      const val = mult.rate * pv;
-      if (val > bestExisting.val) {
-        bestExisting = { cardId: cid, rate: mult.rate, pv, val, cat: mapped,
-          name: CARDS[cid]?.shortName || CARDS[cid]?.name || cid, hasRouting: !!CARDS[cid]?.scenarioPrompt?.computeRouting };
-      }
-    }
-
-    // New card value
+    // New card values for this subcategory
     const newCat = mapToCardCategory(sub, addCardId, todayStr);
     const newMult = getCardScenariosMultiplier(addCardId, newCat);
-    const newValue = newMult.rate * addPV;
+    const newRoutingVal = newMult.rate * getRoutingPV(addCardId);
+    const newRealVal = newMult.rate * addPV; // real-PV impact
 
-    // Determine if routing optimization applies
-    const hasRoutingOption = newCardHasRouting || bestExisting.hasRouting;
-    if (!hasRoutingOption || !comp2RoutingCard) {
-      // No routing involved — pure points comparison
-      if (newValue > bestExisting.val) {
-        addDirectRows.push({
-          sourceCardId: bestExisting.cardId, sourceCardName: bestExisting.name,
-          subcategory: sub, sourceRate: bestExisting.rate, sourcePointValue: bestExisting.pv,
-          newRate: newMult.rate, newPointValue: addPV,
-          spend: annualizedSpend, additionalValue: annualizedSpend * (newValue - bestExisting.val)
-        });
+    for (const [srcCardId, srcSpendRaw] of Object.entries(bucket.cardSpend)) {
+      if (!CARDS[srcCardId]) continue;
+      const annualizedSpend = srcSpendRaw * annualizationFactor;
+      if (annualizedSpend <= 0) continue;
+
+      const srcPV = getPointValue(srcCardId);
+      const srcMapped = mapToCardCategory(sub, srcCardId, todayStr);
+      const srcMult = getCardScenariosMultiplier(srcCardId, srcMapped);
+      const srcRoutingVal = srcMult.rate * getRoutingPV(srcCardId);
+      const srcRealVal = srcMult.rate * srcPV; // real-PV impact
+      const srcName = CARDS[srcCardId]?.shortName || CARDS[srcCardId]?.name || srcCardId;
+      const srcHasRouting = !!CARDS[srcCardId]?.scenarioPrompt?.computeRouting;
+      // _bestExisting.val carries the routing score (used downstream as oldVal in route
+      // matching). Impact math uses srcRealVal directly.
+      const srcExisting = { cardId: srcCardId, rate: srcMult.rate, pv: srcPV, val: srcRoutingVal,
+        cat: srcMapped, name: srcName, hasRouting: srcHasRouting, _realVal: srcRealVal };
+
+      // Determine if routing optimization applies for THIS source card
+      const hasRoutingOption = newCardHasRouting || srcHasRouting;
+      if (!hasRoutingOption || !comp2RoutingCard) {
+        // No routing involved — pure rate comparison (routing PV equal, so this is rate-only)
+        if (newRoutingVal > srcRoutingVal) {
+          addDirectRows.push({
+            sourceCardId: srcCardId, sourceCardName: srcName,
+            subcategory: sub, sourceRate: srcMult.rate, sourcePointValue: srcPV,
+            newRate: newMult.rate, newPointValue: addPV,
+            spend: annualizedSpend, additionalValue: annualizedSpend * (newRealVal - srcRealVal)
+          });
+        }
+        continue;
       }
-      continue;
-    }
 
-    // Routing vs non-routing card optimization
-    let routingOption, altOption;
-    if (newCardHasRouting && !bestExisting.hasRouting) {
-      routingOption = { cardId: addCardId, rate: newMult.rate, pv: addPV, cat: newCat,
-        name: CARDS[addCardId]?.shortName || CARDS[addCardId]?.name || addCardId };
-      altOption = bestExisting;
-    } else if (!newCardHasRouting && bestExisting.hasRouting) {
-      routingOption = { cardId: bestExisting.cardId, rate: bestExisting.rate, pv: bestExisting.pv,
-        cat: bestExisting.cat, name: bestExisting.name };
-      altOption = { cardId: addCardId, rate: newMult.rate, pv: addPV, cat: newCat,
-        name: CARDS[addCardId]?.shortName || CARDS[addCardId]?.name || addCardId };
-    } else {
-      // Both have routing — pure comparison
-      if (newValue > bestExisting.val) {
-        addDirectRows.push({
-          sourceCardId: bestExisting.cardId, sourceCardName: bestExisting.name,
-          subcategory: sub, sourceRate: bestExisting.rate, sourcePointValue: bestExisting.pv,
-          newRate: newMult.rate, newPointValue: addPV,
-          spend: annualizedSpend, additionalValue: annualizedSpend * (newValue - bestExisting.val)
-        });
+      // Routing vs non-routing card optimization
+      let routingOption, altOption;
+      if (newCardHasRouting && !srcHasRouting) {
+        routingOption = { cardId: addCardId, rate: newMult.rate, pv: getRoutingPV(addCardId), cat: newCat,
+          name: CARDS[addCardId]?.shortName || CARDS[addCardId]?.name || addCardId, realPV: addPV };
+        altOption = { cardId: srcCardId, rate: srcMult.rate, pv: getRoutingPV(srcCardId), cat: srcMapped,
+          name: srcName, realPV: srcPV };
+      } else if (!newCardHasRouting && srcHasRouting) {
+        routingOption = { cardId: srcCardId, rate: srcMult.rate, pv: getRoutingPV(srcCardId),
+          cat: srcMapped, name: srcName, realPV: srcPV };
+        altOption = { cardId: addCardId, rate: newMult.rate, pv: getRoutingPV(addCardId), cat: newCat,
+          name: CARDS[addCardId]?.shortName || CARDS[addCardId]?.name || addCardId, realPV: addPV };
+      } else {
+        // Both have routing — pure rate comparison
+        if (newRoutingVal > srcRoutingVal) {
+          addDirectRows.push({
+            sourceCardId: srcCardId, sourceCardName: srcName,
+            subcategory: sub, sourceRate: srcMult.rate, sourcePointValue: srcPV,
+            newRate: newMult.rate, newPointValue: addPV,
+            spend: annualizedSpend, additionalValue: annualizedSpend * (newRealVal - srcRealVal)
+          });
+        }
+        continue;
       }
-      continue;
-    }
 
-    addRoutingCandidates.push({
-      sub, spend: annualizedSpend,
-      biltCardId: routingOption.cardId, biltRate: routingOption.rate, biltPV: routingOption.pv,
-      biltCat: routingOption.cat, biltName: routingOption.name,
-      altCardId: altOption.cardId, altRate: altOption.rate, altPV: altOption.pv,
-      altCat: altOption.cat, altName: altOption.name,
-      sourceRate: bestExisting.rate, sourcePV: bestExisting.pv,
-      _newCardHasRouting: newCardHasRouting, _existingHasRouting: bestExisting.hasRouting,
-      _bestExisting: bestExisting, _newCat: newCat, _newRate: newMult.rate, _newPV: addPV
-    });
+      addRoutingCandidates.push({
+        sub, spend: annualizedSpend,
+        biltCardId: routingOption.cardId, biltRate: routingOption.rate, biltPV: routingOption.pv,
+        biltCat: routingOption.cat, biltName: routingOption.name,
+        altCardId: altOption.cardId, altRate: altOption.rate, altPV: altOption.pv,
+        altCat: altOption.cat, altName: altOption.name,
+        sourceRate: srcMult.rate, sourcePV: srcPV,
+        _sourceCardId: srcCardId, // disambiguates routes when multiple sources share a sub
+        _displayCardId: srcCardId, _displayCardName: srcName, _displayRate: srcMult.rate,
+        _newCardHasRouting: newCardHasRouting, _existingHasRouting: srcHasRouting,
+        _bestExisting: srcExisting, _newCat: newCat, _newRate: newMult.rate, _newPV: addPV,
+        _realBiltPV: routingOption.realPV, _realAltPV: altOption.realPV,
+        _srcRealVal: srcRealVal, _newRealVal: newRealVal
+      });
+    }
   }
 
   const addRows = [...addDirectRows];
@@ -3535,18 +3625,43 @@ function calculateSwapValue(removeCardId, addCardId, year) {
   if (addRoutingCandidates.length > 0 && comp2RoutingCard) {
     const comp2Plugin = CARDS[comp2RoutingCard]?.scenarioPrompt;
     const comp2Result = comp2Plugin.computeRouting(addRoutingCandidates, comp2RoutingCard, component1RoutingSpend, buildPluginCtx());
+    // Track which candidates have been matched so duplicate-sub candidates pair 1:1 with routes.
+    const matchedCandidates = new Set();
     for (const route of comp2Result.routes) {
-      const orig = addRoutingCandidates.find(c => c.sub === route.sub && c.spend >= route.spend - 0.01);
+      // Prefer source-card disambiguation (route carries _sourceCardId via the plugin's
+      // candidate-field passthrough). Fall back to sub+spend matching for safety.
+      let orig = null;
+      if (route._sourceCardId) {
+        orig = addRoutingCandidates.find((c, i) => !matchedCandidates.has(i) &&
+          c.sub === route.sub && c._sourceCardId === route._sourceCardId);
+      }
+      if (!orig) {
+        orig = addRoutingCandidates.find((c, i) => !matchedCandidates.has(i) &&
+          c.sub === route.sub && c.spend >= route.spend - 0.01);
+      }
       if (!orig) continue;
+      matchedCandidates.add(addRoutingCandidates.indexOf(orig));
+
+      // Belt-and-suspenders: enforce the "spend only moves on rate diff or rent motivation"
+      // rule at the row-emit layer too. If new and source rates are equal AND the route
+      // isn't rent-motivated, skip the row regardless of what the plugin returned.
+      const isRentMotivatedRoute = !!route.routeReason && route.routeReason.includes('Rent uplift');
+      const ratesEqual = orig._newRate === orig._bestExisting.rate;
+      if (ratesEqual && !isRentMotivatedRoute) continue;
 
       if (orig._newCardHasRouting && route.destCardId === addCardId) {
-        // New routing card won — shift from existing to new card
-        const oldVal = orig._bestExisting.val;
-        const newVal = route.destRate * route.destPV;
+        // New routing card won — shift from existing to new card.
+        // additionalValue uses real PVs (precomputed on the candidate) so the $ column
+        // reflects the user's actual point values.
+        const oldVal = orig._srcRealVal;
+        const newVal = orig._newRealVal;
         const isRentMotivated = biltCashPlan !== 'cash' && !!route.routeReason && route.routeReason.includes('Rent uplift');
         addRows.push({
-          sourceCardId: orig._bestExisting.cardId, sourceCardName: orig._bestExisting.name,
-          subcategory: route.sub, sourceRate: orig._bestExisting.rate, sourcePointValue: orig._bestExisting.pv,
+          sourceCardId: orig._displayCardId || orig._bestExisting.cardId,
+          sourceCardName: orig._displayCardName || orig._bestExisting.name,
+          subcategory: route.sub,
+          sourceRate: orig._displayRate !== undefined ? orig._displayRate : orig._bestExisting.rate,
+          sourcePointValue: orig._bestExisting.pv,
           newRate: orig._newRate, newPointValue: orig._newPV,
           spend: route.spend, additionalValue: route.spend * (newVal - oldVal),
           routeReason: route.routeReason,
@@ -3554,11 +3669,14 @@ function calculateSwapValue(removeCardId, addCardId, year) {
         });
       } else if (!orig._newCardHasRouting && route.destCardId === addCardId) {
         // New non-routing card won over existing routing card — shift to new card
-        const oldVal = orig._bestExisting.val;
-        const newVal = orig._newRate * orig._newPV;
+        const oldVal = orig._srcRealVal;
+        const newVal = orig._newRealVal;
         addRows.push({
-          sourceCardId: orig._bestExisting.cardId, sourceCardName: orig._bestExisting.name,
-          subcategory: route.sub, sourceRate: orig._bestExisting.rate, sourcePointValue: orig._bestExisting.pv,
+          sourceCardId: orig._displayCardId || orig._bestExisting.cardId,
+          sourceCardName: orig._displayCardName || orig._bestExisting.name,
+          subcategory: route.sub,
+          sourceRate: orig._displayRate !== undefined ? orig._displayRate : orig._bestExisting.rate,
+          sourcePointValue: orig._bestExisting.pv,
           newRate: orig._newRate, newPointValue: orig._newPV,
           spend: route.spend, additionalValue: route.spend * (newVal - oldVal),
           routeReason: route.routeReason
@@ -3690,6 +3808,96 @@ function formatSubcategoryName(sub) {
 }
 
 /**
+ * Compute the routing-engine-predicted non-rent Bilt spend for the current wallet.
+ * This is the amount that would flow to Bilt cards under the current Bilt Cash plan,
+ * using the same routing logic as the scenario engine — not just raw transaction data.
+ * Used to compute a consistent baseline for rentPointsValueDelta comparisons.
+ */
+function getCurrentWalletBiltSpend(year) {
+  if (!state.results || !state.results.processed) return 0;
+  const activeCards = getActiveCardIds();
+  const biltCards = activeCards.filter(id => CARDS[id]?.isBilt);
+  if (biltCards.length === 0) return 0;
+
+  const today = new Date();
+  const sampleDate = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  const wi = state.cardScenarios;
+
+  // Step 1: actual non-rent Bilt spend from transaction data
+  let biltSpend = 0;
+  for (const cid of biltCards) {
+    const { subcategories } = getAnnualizedCardSpend(cid, year);
+    for (const [sub, data] of Object.entries(subcategories)) {
+      if (sub === 'rent') continue;
+      biltSpend += data.spend || 0;
+    }
+  }
+
+  // Step 2: additional non-Bilt spend the routing engine would direct to Bilt
+  // under the current Bilt Cash plan (e.g. cheapest-sacrifice categories for rent points).
+  const routingCard = activeCards.find(id => CARDS[id]?.scenarioPrompt?.computeRouting);
+  if (!routingCard) return biltSpend;
+
+  const routingPlugin = CARDS[routingCard]?.scenarioPrompt;
+  if (!routingPlugin?.computeRouting) return biltSpend;
+
+  // Collect non-Bilt spend candidates
+  const nonBiltCards = activeCards.filter(id => !CARDS[id]?.isBilt);
+  const subSpendMap = {};
+  for (const cid of nonBiltCards) {
+    const { subcategories } = getAnnualizedCardSpend(cid, year);
+    for (const [sub, data] of Object.entries(subcategories)) {
+      if (sub === 'rent' || data.spend <= 0) continue;
+      if (!subSpendMap[sub]) subSpendMap[sub] = 0;
+      subSpendMap[sub] += data.spend;
+    }
+  }
+
+  // Build routing candidates: subs where Bilt + rent uplift beats best non-Bilt option.
+  // Use equalized PVs for routing decisions (rate-only).
+  const biltRoutingPV = getRoutingPV(routingCard);
+  const rentUpliftPerDollar = (0.04 / 3) * 100 * biltRoutingPV;
+  const candidates = [];
+  for (const [sub, spend] of Object.entries(subSpendMap)) {
+    const biltCat = mapToCardCategory(sub, routingCard, sampleDate);
+    const biltMult = getCardScenariosMultiplier(routingCard, biltCat);
+    const biltBaseVal = biltMult.rate * biltRoutingPV;
+
+    let bestAlt = { val: 0, rate: 0, pv: 0.01, name: '', cardId: null, cat: 'other' };
+    let bestAltRoutingScore = -Infinity;
+    for (const cid of nonBiltCards) {
+      const mapped = mapToCardCategory(sub, cid, sampleDate);
+      const mult = getCardScenariosMultiplier(cid, mapped);
+      const routingScore = mult.rate * getRoutingPV(cid);
+      if (routingScore > bestAltRoutingScore) {
+        bestAltRoutingScore = routingScore;
+        bestAlt = { val: routingScore, rate: mult.rate, pv: getRoutingPV(cid),
+          name: CARDS[cid]?.shortName || cid, cardId: cid, cat: mapped };
+      }
+    }
+
+    candidates.push({
+      sub, spend,
+      biltCardId: routingCard, biltRate: biltMult.rate, biltPV: biltRoutingPV, biltBaseVal,
+      altCardId: bestAlt.cardId, altRate: bestAlt.rate, altPV: bestAlt.pv,
+      altVal: bestAlt.val, altName: bestAlt.name,
+      sourceRate: bestAlt.rate, sourcePV: bestAlt.pv, sourceValue: bestAlt.val
+    });
+  }
+
+  if (candidates.length > 0) {
+    const result = routingPlugin.computeRouting(candidates, routingCard, biltSpend, buildPluginCtx());
+    for (const route of result.routes) {
+      if (route.destCardId === routingCard || (CARDS[route.destCardId] && CARDS[route.destCardId].isBilt)) {
+        biltSpend += route.spend || 0;
+      }
+    }
+  }
+
+  return biltSpend;
+}
+
+/**
  * Get spending shift rows for "Add a Card" scenario.
  * Uses Bilt-aware routing when the new card or existing wallet cards are Bilt.
  * Cheapest-sacrifice categories route to Bilt first, up to rent cap.
@@ -3748,22 +3956,25 @@ function getAddCardShiftRows(newCardId, year) {
   const directRows = []; // Rows where no Bilt routing optimization is needed
 
   for (const [sub, info] of Object.entries(subSpendMap)) {
-    // Best existing card in wallet (pure points)
+    // Best existing card in wallet. Selection uses equalized PV (rate-only).
     let bestExisting = { cardId: null, rate: 0, pv: 0.01, val: 0, cat: 'other', name: '', hasRouting: false };
+    let bestExistingRoutingScore = -Infinity;
     for (const cid of walletCardIds) {
       const pv = getPointValue(cid);
       const mapped = mapToCardCategory(sub, cid, sampleDate);
       const mult = getCardScenariosMultiplier(cid, mapped);
-      const val = mult.rate * pv;
-      if (val > bestExisting.val) {
-        bestExisting = { cardId: cid, rate: mult.rate, pv, val, cat: mapped,
+      const routingScore = mult.rate * getRoutingPV(cid);
+      if (routingScore > bestExistingRoutingScore) {
+        bestExistingRoutingScore = routingScore;
+        bestExisting = { cardId: cid, rate: mult.rate, pv, val: mult.rate * pv, cat: mapped,
           name: CARDS[cid]?.shortName || CARDS[cid]?.name || cid, hasRouting: !!CARDS[cid]?.scenarioPrompt?.computeRouting };
       }
     }
 
-    // New card value (pure points)
+    // New card value. Use routing score for the comparison; real-PV val kept for downstream use.
     const newCat = mapToCardCategory(sub, newCardId, sampleDate);
     const newMult = getCardScenariosMultiplier(newCardId, newCat);
+    const newRoutingScore = newMult.rate * getRoutingPV(newCardId);
     const newVal = newMult.rate * newPV;
 
     // Determine the "routing option" and the "alt option"
@@ -3771,8 +3982,8 @@ function getAddCardShiftRows(newCardId, year) {
     // The alt option is whichever does not
     const hasRoutingOption = newCardHasRouting || bestExisting.hasRouting;
     if (!hasRoutingOption || !routingCard) {
-      // No routing involved — pure points comparison
-      if (newVal > bestExisting.val) {
+      // No routing involved — pure rate comparison (PVs equalized for routing)
+      if (newRoutingScore > bestExistingRoutingScore) {
         directRows.push({
           sourceCardId: bestExisting.cardId || info.sources[0]?.cardId,
           sourceCardName: bestExisting.name || 'Unknown',
@@ -3784,22 +3995,24 @@ function getAddCardShiftRows(newCardId, year) {
       continue;
     }
 
-    // Determine routing and alt options for the routing algorithm
+    // Determine routing and alt options for the routing algorithm.
+    // Pass equalized PVs to the routing plugin so its rate×PV reduces to rate-only.
     let routingOption, altOption;
     if (newCardHasRouting && !bestExisting.hasRouting) {
       // New card has routing, existing best does not
-      routingOption = { cardId: newCardId, rate: newMult.rate, pv: newPV, cat: newCat,
+      routingOption = { cardId: newCardId, rate: newMult.rate, pv: getRoutingPV(newCardId), cat: newCat,
         name: newCard.shortName || newCard.name || newCardId };
-      altOption = bestExisting;
+      altOption = { cardId: bestExisting.cardId, rate: bestExisting.rate, pv: getRoutingPV(bestExisting.cardId),
+        cat: bestExisting.cat, name: bestExisting.name };
     } else if (!newCardHasRouting && bestExisting.hasRouting) {
       // Existing best has routing, new card does not — routing card "defends" with rent uplift
-      routingOption = { cardId: bestExisting.cardId, rate: bestExisting.rate, pv: bestExisting.pv,
+      routingOption = { cardId: bestExisting.cardId, rate: bestExisting.rate, pv: getRoutingPV(bestExisting.cardId),
         cat: bestExisting.cat, name: bestExisting.name };
-      altOption = { cardId: newCardId, rate: newMult.rate, pv: newPV, cat: newCat,
+      altOption = { cardId: newCardId, rate: newMult.rate, pv: getRoutingPV(newCardId), cat: newCat,
         name: newCard.shortName || newCard.name || newCardId };
     } else {
       // Both have routing — just compare rates, no routing optimization needed
-      if (newVal > bestExisting.val) {
+      if (newRoutingScore > bestExistingRoutingScore) {
         directRows.push({
           sourceCardId: bestExisting.cardId, sourceCardName: bestExisting.name,
           sourceCategory: sub, sourceRate: bestExisting.rate, sourcePointValue: bestExisting.pv,
@@ -3926,20 +4139,21 @@ function getRemoveCardShiftRows(removeCardId, year, extraCardIds) {
   for (const [sub, data] of Object.entries(subcategories)) {
     if (data.spend <= 0) continue;
 
-    // Rent: only transferable to other Bilt cards (rent exclusivity)
+    // Rent: only transferable to other Bilt cards (rent exclusivity).
+    // Selection uses equalized PV (rate-only); display uses real PV.
     if (sub === 'rent') {
       const effectiveRate = data.spend > 0 ? data.points / data.spend : 0;
-      let destCardId = null, destRate = 0, destPV = 0;
+      let destCardId = null, destRate = 0, destPV = 0, destRoutingScore = -Infinity;
       let destName = 'None — rent requires Bilt';
       for (const cid of walletCardIds) {
         const c = CARDS[cid];
         if (!c || !c.isBilt) continue;
-        const pv = getPointValue(cid);
         const mapped = mapToCardCategory('rent', cid, sampleDate);
         const mult = getCardScenariosMultiplier(cid, mapped);
-        const val = mult.rate * pv;
-        if (val > destRate * destPV) {
-          destCardId = cid; destRate = mult.rate; destPV = pv;
+        const routingScore = mult.rate * getRoutingPV(cid);
+        if (routingScore > destRoutingScore) {
+          destRoutingScore = routingScore;
+          destCardId = cid; destRate = mult.rate; destPV = getPointValue(cid);
           destName = c.shortName || c.name || cid;
         }
       }
@@ -3954,19 +4168,21 @@ function getRemoveCardShiftRows(removeCardId, year, extraCardIds) {
     const removeCat = mapToCardCategory(sub, removeCardId, sampleDate);
     const removeMult = getCardScenariosMultiplier(removeCardId, removeCat);
 
-    // Find best routing-card and best non-routing destinations
+    // Find best routing-card and best non-routing destinations.
+    // Selection uses equalized PV; entry.val keeps real-PV for any downstream impact use.
     let bestRouting = null, bestAlt = null;
+    let bestRoutingScore = -Infinity, bestAltScore = -Infinity;
     for (const cardId of walletCardIds) {
       const cardPV = getPointValue(cardId);
       const mapped = mapToCardCategory(sub, cardId, sampleDate);
       const mult = getCardScenariosMultiplier(cardId, mapped);
-      const val = mult.rate * cardPV;
-      const entry = { cardId, rate: mult.rate, pv: cardPV, cat: mapped, val,
+      const routingScore = mult.rate * getRoutingPV(cardId);
+      const entry = { cardId, rate: mult.rate, pv: cardPV, cat: mapped, val: mult.rate * cardPV,
         name: CARDS[cardId]?.shortName || CARDS[cardId]?.name || cardId };
       if (CARDS[cardId]?.scenarioPrompt?.computeRouting) {
-        if (!bestRouting || val > bestRouting.val) bestRouting = entry;
+        if (routingScore > bestRoutingScore) { bestRouting = entry; bestRoutingScore = routingScore; }
       } else {
-        if (!bestAlt || val > bestAlt.val) bestAlt = entry;
+        if (routingScore > bestAltScore) { bestAlt = entry; bestAltScore = routingScore; }
       }
     }
 
@@ -3984,14 +4200,16 @@ function getRemoveCardShiftRows(removeCardId, year, extraCardIds) {
         bestCategory: bestRouting.cat, bestRate: bestRouting.rate, bestPointValue: bestRouting.pv
       });
     } else if (bestRouting && bestAlt) {
-      // Both options exist — add as candidate for routing optimization
+      // Both options exist — candidate for routing optimization.
+      // Plugin sees equalized PVs (rate-only decisions).
       routingCandidates.push({
         sub, spend: data.spend,
-        biltCardId: bestRouting.cardId, biltRate: bestRouting.rate, biltPV: bestRouting.pv,
+        biltCardId: bestRouting.cardId, biltRate: bestRouting.rate, biltPV: getRoutingPV(bestRouting.cardId),
         biltCat: bestRouting.cat, biltName: bestRouting.name,
-        altCardId: bestAlt.cardId, altRate: bestAlt.rate, altPV: bestAlt.pv,
+        altCardId: bestAlt.cardId, altRate: bestAlt.rate, altPV: getRoutingPV(bestAlt.cardId),
         altCat: bestAlt.cat, altName: bestAlt.name,
-        sourceRate: removeMult.rate, sourcePV: removePV
+        sourceRate: removeMult.rate, sourcePV: removePV,
+        _realBiltPV: bestRouting.pv, _realAltPV: bestAlt.pv
       });
     }
   }
@@ -4001,10 +4219,15 @@ function getRemoveCardShiftRows(removeCardId, year, extraCardIds) {
     const routingPlugin = CARDS[routingCard]?.scenarioPrompt;
     const result = routingPlugin.computeRouting(routingCandidates, routingCard, existingRoutingSpend, buildPluginCtx());
     for (const route of result.routes) {
+      // Recover real PV for display (route carries equalized PV in destPV).
+      const orig = routingCandidates.find(c => c.sub === route.sub);
+      const realDestPV = orig
+        ? (route.destCardId === orig.biltCardId ? orig._realBiltPV : orig._realAltPV)
+        : route.destPV;
       rows.push({
         sourceCategory: route.sub, sourceRate: route.sourceRate, sourcePointValue: route.sourcePV,
         actualSpend: route.spend, bestCardId: route.destCardId, bestCardName: route.destName,
-        bestCategory: route.destCat, bestRate: route.destRate, bestPointValue: route.destPV,
+        bestCategory: route.destCat, bestRate: route.destRate, bestPointValue: realDestPV,
         routeReason: route.routeReason
       });
     }
@@ -4118,11 +4341,11 @@ function calculateCardScenariosNetImpact() {
   const rentPointsValueDelta = pluginImpact.rentPointsValueDelta || 0;
   const biltCashKeptDelta = pluginImpact.biltCashKeptDelta || 0;
 
-  // pointValueChange = spend shifts + rent points (NO Bilt Cash — that's a separate line)
-  const pointValueChange = spendingImpact + rentPointsValueDelta;
+  // pointValueChange = spend shifts only (NO rent pts, NO Bilt Cash — both shown as separate lines)
+  const pointValueChange = spendingImpact;
 
-  // Total = points + credits + Bilt Cash kept + fee
-  const totalImpact = pointValueChange + creditsImpact + biltCashKeptDelta + feeImpact;
+  // Total = points + rent pts + credits + Bilt Cash kept + fee
+  const totalImpact = pointValueChange + rentPointsValueDelta + creditsImpact + biltCashKeptDelta + feeImpact;
 
   return {
     pointValueChange,
@@ -4438,11 +4661,11 @@ function renderStep4Add() {
   }
 
   const combinedPointValue = pluginImpact ? pluginImpact.pointValueChange : totalGain;
+  const rentPtsDelta = pluginImpact ? (pluginImpact.rentPointsValueDelta || 0) : 0;
   const pluginExtraDelta = pluginImpact ? (pluginImpact.biltCashKeptDelta || 0) : 0;
-  const netImpact = combinedPointValue + creditsTotal + pluginExtraDelta - annualFee;
+  const netImpact = combinedPointValue + rentPtsDelta + creditsTotal + pluginExtraDelta - annualFee;
   const isPositive = netImpact >= 0;
   const cardName = addCard.shortName || addCard.name;
-  const showRentPtsHint = pluginImpact && (pluginImpact.rentPointsValueDelta || 0) !== 0;
 
   let html = `<div class="cardscenarios-step">`;
 
@@ -4463,7 +4686,7 @@ function renderStep4Add() {
     <span class="mono" style="font-weight:600;color:${creditsTotal > 0 ? '#059669' : '#78716c'};" id="cardscenariosAddCreditsLine">+${formatCurrencyPrecise(creditsTotal)}</span>
   </div>`;
   html += `<div style="display:flex;justify-content:space-between;">
-      <span>Point value change${showRentPtsHint ? ' <span style="font-size:11px;color:#78716c;font-weight:400;">(incl. rent pts)</span>' : ''}</span>
+      <span>Point value change</span>
       <span class="mono" style="font-weight:600;color:${combinedPointValue >= 0 ? '#059669' : combinedPointValue < 0 ? '#dc2626' : '#78716c'};" id="cardscenariosAddRewardsLine">${combinedPointValue >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(combinedPointValue))}</span>
     </div>`;
   if (addPromptCard?.scenarioPrompt?.renderSummaryLines) {
@@ -4784,11 +5007,11 @@ function renderStep4Remove() {
   }
 
   const combinedPointValue = pluginImpact ? pluginImpact.pointValueChange : totalChange;
+  const rentPtsDelta = pluginImpact ? (pluginImpact.rentPointsValueDelta || 0) : 0;
   const pluginExtraDelta = pluginImpact ? (pluginImpact.biltCashKeptDelta || 0) : 0;
-  const netImpact = combinedPointValue - creditsTotal + pluginExtraDelta + annualFee;
+  const netImpact = combinedPointValue + rentPtsDelta - creditsTotal + pluginExtraDelta + annualFee;
   const isPositive = netImpact >= 0;
   const cardName = removeCard.shortName || removeCard.name;
-  const showRentPtsHint = pluginImpact && (pluginImpact.rentPointsValueDelta || 0) !== 0;
 
   let html = `<div class="cardscenarios-step">`;
 
@@ -4809,7 +5032,7 @@ function renderStep4Remove() {
     <span class="mono" style="font-weight:600;color:${creditsTotal > 0 ? '#dc2626' : '#78716c'};" id="cardscenariosRemoveCreditsLine">-${formatCurrencyPrecise(creditsTotal)}</span>
   </div>`;
   html += `<div style="display:flex;justify-content:space-between;">
-      <span>Point value change${showRentPtsHint ? ' <span style="font-size:11px;color:#78716c;font-weight:400;">(incl. rent pts)</span>' : ''}</span>
+      <span>Point value change</span>
       <span class="mono" style="font-weight:600;color:${combinedPointValue >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosRemoveRewardsLine">${combinedPointValue >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(combinedPointValue))}</span>
     </div>`;
   if (removePromptCard?.scenarioPrompt?.renderSummaryLines) {
@@ -4848,8 +5071,8 @@ function renderStep4Remove() {
   // may generate extra value. For non-routing destinations, hide near-zero rows.
   const removeNormalizedRows = rows
     .filter(r => {
-      // Hide rent rows at $0 — rent impact is shown in the subtotal line.
-      if (r.subcategory === 'rent' && Math.abs(r.valueChange) < 0.005) return false;
+      // Always exclude rent — rent impact is shown separately in the Rent Points line below.
+      if (r.subcategory === 'rent') return false;
       const destHasRouting = r.bestCardId && CARDS[r.bestCardId]?.scenarioPrompt?.computeRouting;
       return Math.abs(r.valueChange) >= 0.005 || destHasRouting;
     })
@@ -4916,8 +5139,9 @@ function renderStep4Swap() {
   }
 
   const combinedPointValue = pluginImpact ? pluginImpact.pointValueChange : totalSpendChange;
+  const rentPtsDelta = pluginImpact ? (pluginImpact.rentPointsValueDelta || 0) : 0;
   const pluginExtraDelta = pluginImpact ? (pluginImpact.biltCashKeptDelta || 0) : 0;
-  const netImpact = combinedPointValue + netCredits + pluginExtraDelta + netFee;
+  const netImpact = combinedPointValue + rentPtsDelta + netCredits + pluginExtraDelta + netFee;
   const isPositive = netImpact >= 0;
   const removeName = removeCard.shortName || removeCard.name;
   const addName = addCard.shortName || addCard.name;
@@ -4942,9 +5166,8 @@ function renderStep4Swap() {
     <span class="mono" style="font-weight:600;color:${netCredits >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosSwapCreditsLine">${netCredits >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(netCredits))}</span>
   </div>`;
 
-  const showRentPtsHint = pluginImpact && (pluginImpact.rentPointsValueDelta || 0) !== 0;
   html += `<div style="display:flex;justify-content:space-between;">
-      <span>Point value change${showRentPtsHint ? ' <span style="font-size:11px;color:#78716c;font-weight:400;">(incl. rent pts)</span>' : ''}</span>
+      <span>Point value change</span>
       <span class="mono" style="font-weight:600;color:${combinedPointValue >= 0 ? '#059669' : '#dc2626'};" id="cardscenariosSwapRewardsLine">${combinedPointValue >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(combinedPointValue))}</span>
     </div>`;
   if (swapPromptCard?.scenarioPrompt?.renderSummaryLines) {
@@ -4981,12 +5204,12 @@ function renderStep4Swap() {
     </div>
     <div id="cardscenariosSwapRewardsDetail" style="margin-top:12px;">`;
 
-  // Normalize removeRows + addRows for grouped rendering
+  // Normalize removeRows + addRows for grouped rendering.
+  // Rent is always excluded — it's shown separately in the Rent Points line below.
   const swapNormalizedRows = [];
   for (const r of removeRows) {
-    // Hide rent rows at $0 — rent impact is shown in the subtotal line.
-    if (r.subcategory === 'rent' && Math.abs(r.valueChange) < 0.005) continue;
-    // Always show non-rent rows shifting to a routing card (even $0 impact).
+    if (r.subcategory === 'rent') continue;
+    // Always show rows shifting to a routing card (even $0 impact).
     const destHasRouting = r.bestCardId && CARDS[r.bestCardId]?.scenarioPrompt?.computeRouting;
     if (Math.abs(r.valueChange) < 0.005 && !destHasRouting) continue;
     swapNormalizedRows.push({
@@ -4996,9 +5219,11 @@ function renderStep4Swap() {
     });
   }
   for (const r of addRows) {
-    if (r.subcategory === 'rent' && Math.abs(r.additionalValue) < 0.005) continue;
-    const destHasRouting = CARDS[wi.addCardId]?.scenarioPrompt?.computeRouting;
-    if (Math.abs(r.additionalValue) < 0.005 && !destHasRouting) continue;
+    if (r.subcategory === 'rent') continue;
+    // For Component 2, only show rows that have a real impact or were routing-motivated.
+    // Zero-impact rows (same rate on both cards) don't represent shifting spend and
+    // would clutter the table with phantom sources (e.g. "Sapphire Reserve 1x → Obsidian 1x").
+    if (Math.abs(r.additionalValue) < 0.005 && !r._isRentMotivated) continue;
     swapNormalizedRows.push({
       subcategory: r.subcategory, sourceCardId: r.sourceCardId, sourceCardName: r.sourceCardName,
       sourceRate: r.sourceRate, destCardName: addName, destRate: r.newRate,
@@ -5699,7 +5924,7 @@ function canProceedStep2() {
   return false;
 }
 
-function _updateSummaryElements(prefix, combinedPointValue, netImpact, biltCashDelta) {
+function _updateSummaryElements(prefix, combinedPointValue, netImpact, biltCashDelta, rentPtsDelta) {
   const isPositive = netImpact >= 0;
   const rewardsLineEl = document.getElementById(`cardscenarios${prefix}RewardsLine`);
   if (rewardsLineEl) {
@@ -5711,7 +5936,15 @@ function _updateSummaryElements(prefix, combinedPointValue, netImpact, biltCashD
     rewardsValueEl.textContent = `${combinedPointValue >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(combinedPointValue))}`;
     rewardsValueEl.style.color = combinedPointValue >= 0 ? '#059669' : '#dc2626';
   }
-  // Update the static Bilt Cash line in top summary
+  // Update rent points top-summary line (separate from Point Value Change)
+  if (rentPtsDelta !== undefined) {
+    const rentTopEl = document.getElementById(`cardscenarios${prefix}RentPtsTopLine`);
+    if (rentTopEl) {
+      rentTopEl.textContent = `${rentPtsDelta >= 0 ? '+' : '-'}${formatCurrencyPrecise(Math.abs(rentPtsDelta))}`;
+      rentTopEl.style.color = rentPtsDelta >= 0 ? '#059669' : '#dc2626';
+    }
+  }
+  // Update the Bilt Cash line in top summary
   if (biltCashDelta !== undefined) {
     const biltTopEl = document.getElementById(`cardscenarios${prefix}BiltCashTopLine`);
     if (biltTopEl) {
@@ -5747,8 +5980,9 @@ function updateAddCardResult() {
   }
 
   const combinedPointValue = pluginImpact ? pluginImpact.pointValueChange : totalGain;
+  const rentPtsDelta = pluginImpact ? (pluginImpact.rentPointsValueDelta || 0) : 0;
   const pluginExtraDelta = pluginImpact ? (pluginImpact.biltCashKeptDelta || 0) : 0;
-  const netImpact = combinedPointValue + creditsTotal + pluginExtraDelta - annualFee;
+  const netImpact = combinedPointValue + rentPtsDelta + creditsTotal + pluginExtraDelta - annualFee;
   const isPositive = netImpact >= 0;
 
   const headlineEl = document.getElementById('cardscenariosAddHeadline');
@@ -5764,7 +5998,7 @@ function updateAddCardResult() {
   const creditsLineEl = document.getElementById('cardscenariosAddCreditsLine');
   if (creditsLineEl) creditsLineEl.textContent = `+${formatCurrencyPrecise(creditsTotal)}`;
 
-  _updateSummaryElements('Add', combinedPointValue, netImpact, pluginExtraDelta);
+  _updateSummaryElements('Add', combinedPointValue, netImpact, pluginExtraDelta, rentPtsDelta);
   if (addUpdatePromptCardId) {
     const addUpdateCard = CARDS[addUpdatePromptCardId];
     if (addUpdateCard?.scenarioPrompt?.updateResult) {
@@ -5789,8 +6023,9 @@ function updateRemoveCardResult() {
   }
 
   const combinedPointValue = pluginImpact ? pluginImpact.pointValueChange : totalChange;
+  const rentPtsDelta = pluginImpact ? (pluginImpact.rentPointsValueDelta || 0) : 0;
   const pluginExtraDelta = pluginImpact ? (pluginImpact.biltCashKeptDelta || 0) : 0;
-  const netImpact = combinedPointValue - creditsTotal + pluginExtraDelta + annualFee;
+  const netImpact = combinedPointValue + rentPtsDelta - creditsTotal + pluginExtraDelta + annualFee;
   const isPositive = netImpact >= 0;
 
   const headlineEl = document.getElementById('cardscenariosRemoveHeadline');
@@ -5806,7 +6041,7 @@ function updateRemoveCardResult() {
   const creditsLineEl = document.getElementById('cardscenariosRemoveCreditsLine');
   if (creditsLineEl) creditsLineEl.textContent = `-${formatCurrencyPrecise(creditsTotal)}`;
 
-  _updateSummaryElements('Remove', combinedPointValue, netImpact, pluginExtraDelta);
+  _updateSummaryElements('Remove', combinedPointValue, netImpact, pluginExtraDelta, rentPtsDelta);
   if (removeUpdatePromptCardId) {
     const removeUpdateCard = CARDS[removeUpdatePromptCardId];
     if (removeUpdateCard?.scenarioPrompt?.updateResult) {
@@ -5834,8 +6069,9 @@ function updateSwapCardResult() {
   }
 
   const combinedPointValue = pluginImpact ? pluginImpact.pointValueChange : totalSpendChange;
+  const rentPtsDelta = pluginImpact ? (pluginImpact.rentPointsValueDelta || 0) : 0;
   const pluginExtraDelta = pluginImpact ? (pluginImpact.biltCashKeptDelta || 0) : 0;
-  const netImpact = combinedPointValue + netCredits + pluginExtraDelta + netFee;
+  const netImpact = combinedPointValue + rentPtsDelta + netCredits + pluginExtraDelta + netFee;
   const isPositive = netImpact >= 0;
 
   const headlineEl = document.getElementById('cardscenariosSwapHeadline');
@@ -5859,7 +6095,7 @@ function updateSwapCardResult() {
     creditsTotalEl.style.color = netCredits >= 0 ? '#059669' : '#dc2626';
   }
 
-  _updateSummaryElements('Swap', combinedPointValue, netImpact, pluginExtraDelta);
+  _updateSummaryElements('Swap', combinedPointValue, netImpact, pluginExtraDelta, rentPtsDelta);
   if (swapUpdatePromptCardId) {
     const swapUpdateCard = CARDS[swapUpdatePromptCardId];
     if (swapUpdateCard?.scenarioPrompt?.updateResult) {

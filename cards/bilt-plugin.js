@@ -935,14 +935,25 @@ window.CardTracker.biltPlugin = {
         return merged;
       });
 
-      // Separate: Bilt wins on pure base rate (sacrifice <= 0) vs alt wins (sacrifice > 0)
-      var biltWins = categorized.filter(function(c) { return c.sacrificeCost <= 0; });
+      // Separate: Bilt wins strictly on base rate (sacrifice < 0) vs alt wins (sacrifice > 0).
+      // Tied rates (sacrifice == 0) get their own bucket — spend doesn't move unless rent
+      // uplift justifies it. This enforces the rule: spend only re-routes when there's a
+      // multiplier advantage or rent motivation.
+      var biltWins = categorized.filter(function(c) { return c.sacrificeCost < 0; });
       var altWins = categorized.filter(function(c) { return c.sacrificeCost > 0; });
+      var tied    = categorized.filter(function(c) { return c.sacrificeCost === 0; });
 
       // Step D: Sort alt-wins by sacrifice cost ascending (cheapest sacrifice first)
       altWins.sort(function(a, b) { return a.sacrificeCost - b.sacrificeCost; });
 
       var routes = [];
+
+      // Helper: build a unique key per candidate so two candidates sharing a `sub` but
+      // coming from different source cards (Component 2 splits per source) are treated
+      // independently in handledSubs and downstream route disambiguation.
+      function candidateKey(c) {
+        return c.sub + '|' + (c._sourceCardId || '');
+      }
 
       // Categories where Bilt wins on base rate — always route to Bilt
       for (var i = 0; i < biltWins.length; i++) {
@@ -954,7 +965,8 @@ window.CardTracker.biltPlugin = {
           sub: c.sub, spend: c.spend,
           destCardId: c.biltCardId || routingCardId, destRate: c.biltRate, destPV: c.biltPV,
           destCat: c.biltCat, destName: c.biltName || biltName,
-          sourceRate: c.sourceRate, sourcePV: c.sourcePV, routeReason: reason
+          sourceRate: c.sourceRate, sourcePV: c.sourcePV, routeReason: reason,
+          _sourceCardId: c._sourceCardId
         });
         cumulativeBiltSpend += c.spend;
       }
@@ -978,16 +990,18 @@ window.CardTracker.biltPlugin = {
               destCardId: c2.biltCardId || routingCardId, destRate: c2.biltRate, destPV: c2.biltPV,
               destCat: c2.biltCat, destName: c2.biltName || biltName,
               sourceRate: c2.sourceRate, sourcePV: c2.sourcePV,
-              routeReason: 'Rent uplift: ' + c2.biltRate + 'x ($' + c2.biltBaseVal.toFixed(4) + ') + rent uplift ($' + rentUpliftPerDollar.toFixed(4) + ') = $' + (c2.biltBaseVal + rentUpliftPerDollar).toFixed(4) + '/dollar vs ' + c2.altName + ' $' + c2.altVal.toFixed(4) + '/dollar (partial \u2014 rent cap reached)'
+              routeReason: 'Rent uplift: ' + c2.biltRate + 'x ($' + c2.biltBaseVal.toFixed(4) + ') + rent uplift ($' + rentUpliftPerDollar.toFixed(4) + ') = $' + (c2.biltBaseVal + rentUpliftPerDollar).toFixed(4) + '/dollar vs ' + c2.altName + ' $' + c2.altVal.toFixed(4) + '/dollar (partial \u2014 rent cap reached)',
+              _sourceCardId: c2._sourceCardId
             });
             routes.push({
               sub: c2.sub, spend: c2.spend - availableToRoute,
               destCardId: c2.altCardId, destRate: c2.altRate, destPV: c2.altPV,
               destCat: c2.altCat, destName: c2.altName,
               sourceRate: c2.sourceRate, sourcePV: c2.sourcePV,
-              routeReason: 'Post-cap: ' + c2.altName + ' ' + c2.altRate + 'x ($' + c2.altVal.toFixed(4) + '/dollar) \u2014 no rent uplift'
+              routeReason: 'Post-cap: ' + c2.altName + ' ' + c2.altRate + 'x ($' + c2.altVal.toFixed(4) + '/dollar) \u2014 no rent uplift',
+              _sourceCardId: c2._sourceCardId
             });
-            handledSubs[c2.sub] = true;
+            handledSubs[candidateKey(c2)] = true;
             cumulativeBiltSpend += availableToRoute;
           } else {
             routes.push({
@@ -995,28 +1009,29 @@ window.CardTracker.biltPlugin = {
               destCardId: c2.biltCardId || routingCardId, destRate: c2.biltRate, destPV: c2.biltPV,
               destCat: c2.biltCat, destName: c2.biltName || biltName,
               sourceRate: c2.sourceRate, sourcePV: c2.sourcePV,
-              routeReason: 'Rent uplift: ' + c2.biltRate + 'x ($' + c2.biltBaseVal.toFixed(4) + ') + rent uplift ($' + rentUpliftPerDollar.toFixed(4) + ') = $' + (c2.biltBaseVal + rentUpliftPerDollar).toFixed(4) + '/dollar vs ' + c2.altName + ' $' + c2.altVal.toFixed(4) + '/dollar'
+              routeReason: 'Rent uplift: ' + c2.biltRate + 'x ($' + c2.biltBaseVal.toFixed(4) + ') + rent uplift ($' + rentUpliftPerDollar.toFixed(4) + ') = $' + (c2.biltBaseVal + rentUpliftPerDollar).toFixed(4) + '/dollar vs ' + c2.altName + ' $' + c2.altVal.toFixed(4) + '/dollar',
+              _sourceCardId: c2._sourceCardId
             });
-            handledSubs[c2.sub] = true;
+            handledSubs[candidateKey(c2)] = true;
             cumulativeBiltSpend += c2.spend;
           }
         }
       }
 
-      // Step F: Handle remaining spend (post-cap, not worth routing, or 'cash' plan)
+      // Step F: Handle remaining altWins spend (post-cap or not worth routing).
+      // Strict rule: spend only moves to Bilt if Bilt's rate strictly beats alt's rate.
+      // Tied rates leave spend on alt (no Bilt Cash tiebreaker).
       for (var m = 0; m < altWins.length; m++) {
         var c3 = altWins[m];
-        if (handledSubs[c3.sub]) continue; // Already handled above
-        // Post-cap: pure comparison, Bilt Cash as tiebreaker only
-        if (c3.biltBaseVal >= c3.altVal) {
+        if (handledSubs[candidateKey(c3)]) continue;
+        if (c3.biltBaseVal > c3.altVal) {
           routes.push({
             sub: c3.sub, spend: c3.spend,
             destCardId: c3.biltCardId || routingCardId, destRate: c3.biltRate, destPV: c3.biltPV,
             destCat: c3.biltCat, destName: c3.biltName || biltName,
             sourceRate: c3.sourceRate, sourcePV: c3.sourcePV,
-            routeReason: c3.biltBaseVal === c3.altVal
-              ? 'Tied \u2014 Bilt wins (Bilt Cash tiebreaker)'
-              : c3.biltRate + 'x Bilt ($' + c3.biltBaseVal.toFixed(4) + '/dollar) beats ' + c3.altName + ' ($' + c3.altVal.toFixed(4) + '/dollar)'
+            routeReason: c3.biltRate + 'x Bilt ($' + c3.biltBaseVal.toFixed(4) + '/dollar) beats ' + c3.altName + ' ($' + c3.altVal.toFixed(4) + '/dollar)',
+            _sourceCardId: c3._sourceCardId
           });
           cumulativeBiltSpend += c3.spend;
         } else {
@@ -1025,8 +1040,64 @@ window.CardTracker.biltPlugin = {
             destCardId: c3.altCardId, destRate: c3.altRate, destPV: c3.altPV,
             destCat: c3.altCat, destName: c3.altName,
             sourceRate: c3.sourceRate, sourcePV: c3.sourcePV,
-            routeReason: c3.altName + ' ' + c3.altRate + 'x ($' + c3.altVal.toFixed(4) + '/dollar) beats Bilt ' + c3.biltRate + 'x ($' + c3.biltBaseVal.toFixed(4) + '/dollar)'
+            routeReason: c3.altName + ' ' + c3.altRate + 'x ($' + c3.altVal.toFixed(4) + '/dollar) beats or ties Bilt ' + c3.biltRate + 'x ($' + c3.biltBaseVal.toFixed(4) + '/dollar)',
+            _sourceCardId: c3._sourceCardId
           });
+        }
+      }
+
+      // Step G: Tied-rate candidates. Only move to Bilt if rent uplift cap allows and
+      // we have remaining cap room. Otherwise, spend stays on alt \u2014 no Bilt Cash tiebreaker.
+      // Sort by spend ascending so smallest tied amounts get the remaining rent-cap room first
+      // (lets larger Bilt-Cash producers stay on alt if cap is tight). Then route what fits.
+      tied.sort(function(a, b) { return a.spend - b.spend; });
+      for (var t = 0; t < tied.length; t++) {
+        var c4 = tied[t];
+        var rentMotivated = annualBiltSpendCap > 0
+          && cumulativeBiltSpend < annualBiltSpendCap
+          && rentUpliftPerDollar > 0;
+        if (!rentMotivated) {
+          // Stay on alt \u2014 no movement
+          routes.push({
+            sub: c4.sub, spend: c4.spend,
+            destCardId: c4.altCardId, destRate: c4.altRate, destPV: c4.altPV,
+            destCat: c4.altCat, destName: c4.altName,
+            sourceRate: c4.sourceRate, sourcePV: c4.sourcePV,
+            routeReason: 'Tied rate \u2014 no movement',
+            _sourceCardId: c4._sourceCardId
+          });
+          continue;
+        }
+        var canRoute = Math.min(c4.spend, annualBiltSpendCap - cumulativeBiltSpend);
+        if (canRoute >= c4.spend) {
+          routes.push({
+            sub: c4.sub, spend: c4.spend,
+            destCardId: c4.biltCardId || routingCardId, destRate: c4.biltRate, destPV: c4.biltPV,
+            destCat: c4.biltCat, destName: c4.biltName || biltName,
+            sourceRate: c4.sourceRate, sourcePV: c4.sourcePV,
+            routeReason: 'Rent uplift on tied rate: +$' + rentUpliftPerDollar.toFixed(4) + '/dollar',
+            _sourceCardId: c4._sourceCardId
+          });
+          cumulativeBiltSpend += c4.spend;
+        } else {
+          // Partial: route up to cap, remainder stays on alt
+          routes.push({
+            sub: c4.sub, spend: canRoute,
+            destCardId: c4.biltCardId || routingCardId, destRate: c4.biltRate, destPV: c4.biltPV,
+            destCat: c4.biltCat, destName: c4.biltName || biltName,
+            sourceRate: c4.sourceRate, sourcePV: c4.sourcePV,
+            routeReason: 'Rent uplift on tied rate (partial \u2014 cap reached): +$' + rentUpliftPerDollar.toFixed(4) + '/dollar',
+            _sourceCardId: c4._sourceCardId
+          });
+          routes.push({
+            sub: c4.sub, spend: c4.spend - canRoute,
+            destCardId: c4.altCardId, destRate: c4.altRate, destPV: c4.altPV,
+            destCat: c4.altCat, destName: c4.altName,
+            sourceRate: c4.sourceRate, sourcePV: c4.sourcePV,
+            routeReason: 'Tied rate, post-cap \u2014 no movement',
+            _sourceCardId: c4._sourceCardId
+          });
+          cumulativeBiltSpend += canRoute;
         }
       }
 
@@ -1048,17 +1119,21 @@ window.CardTracker.biltPlugin = {
       var rentMotivatedRows = [];
 
       // --- Current Bilt state ---
-      var currentBiltSpend = 0;
-      for (var i = 0; i < currentWallet.length; i++) {
-        var cid = currentWallet[i];
-        if (!CARDS[cid] || !CARDS[cid].isBilt) continue;
-        var cardSpend = ctx.getAnnualizedCardSpend(cid, year);
-        var subs = cardSpend.subcategories;
-        for (var sub in subs) {
-          if (sub === 'rent') continue;
-          currentBiltSpend += subs[sub].spend || 0;
-        }
-      }
+      // Use routing-engine-predicted Bilt spend for the current wallet so it's on the
+      // same basis as finalBiltSpend (which is also routing-engine computed).
+      // Falls back to raw transaction data if the helper isn't available.
+      var currentBiltSpend = ctx.getCurrentWalletBiltSpend
+        ? ctx.getCurrentWalletBiltSpend(year)
+        : (function() {
+            var s = 0;
+            for (var i = 0; i < currentWallet.length; i++) {
+              var cid = currentWallet[i];
+              if (!CARDS[cid] || !CARDS[cid].isBilt) continue;
+              var subs = ctx.getAnnualizedCardSpend(cid, year).subcategories;
+              for (var sub in subs) { if (sub !== 'rent') s += subs[sub].spend || 0; }
+            }
+            return s;
+          })();
       var currentBiltCash = currentBiltSpend * window.CardTracker.biltPlugin.BILT_CASH_RATE;
       var currentBiltCardId = null;
       for (var j = 0; j < currentWallet.length; j++) {
@@ -1102,8 +1177,10 @@ window.CardTracker.biltPlugin = {
           }
         } else if (wi.scenarioType === 'swap') {
           var swapResult = ctx.calculateSwapValue(wi.removeCardId, wi.addCardId, year);
+          var removedCardIsBilt = CARDS[wi.removeCardId] && CARDS[wi.removeCardId].isBilt;
 
-          // Component 1: removed card's spend redistributed
+          // Component 1: removed card's spend that routes to a Bilt card in the hypothetical wallet.
+          // Uses routing-aware results (already reflects Bilt Cash plan decisions).
           for (var si = 0; si < swapResult.removeRows.length; si++) {
             var row = swapResult.removeRows[si];
             if (row.subcategory === 'rent') continue;
@@ -1112,18 +1189,24 @@ window.CardTracker.biltPlugin = {
             }
           }
 
-          // Component 2: other cards' spend shifting to the new card
-          if (CARDS[wi.addCardId] && CARDS[wi.addCardId].isBilt) {
-            for (var ai = 0; ai < swapResult.addRows.length; ai++) {
-              var aRow = swapResult.addRows[ai];
-              if (aRow.subcategory === 'rent') continue;
-              if (!CARDS[aRow.sourceCardId] || !CARDS[aRow.sourceCardId].isBilt) {
-                finalBiltSpend += aRow.spend || 0;
-              }
+          // Component 2: other cards' spend shifting to the new Bilt card.
+          // For a Bilt→Bilt swap: include spend shifting TO a Bilt destination (adds Bilt Cash)
+          //   but NOT spend newly shifting away from Bilt (that loss is in component 1 via
+          //   removeRows routing to non-Bilt destinations, which are excluded above).
+          // For a non-Bilt→Bilt swap: same logic — only count spend landing on Bilt cards.
+          for (var ai = 0; ai < swapResult.addRows.length; ai++) {
+            var aRow = swapResult.addRows[ai];
+            if (aRow.subcategory === 'rent') continue;
+            // Only add spend whose source is not already a Bilt card (avoid double-counting
+            // spend that was already counted in currentBiltSpend via component 3 below).
+            if (CARDS[aRow.sourceCardId] && CARDS[aRow.sourceCardId].isBilt) continue;
+            // The destination for addRows is always the new card (wi.addCardId).
+            if (CARDS[wi.addCardId] && CARDS[wi.addCardId].isBilt) {
+              finalBiltSpend += aRow.spend || 0;
             }
           }
 
-          // Unchanged Bilt spend
+          // Component 3: unchanged non-removed Bilt spend on other existing Bilt cards.
           for (var ui = 0; ui < currentWallet.length; ui++) {
             var uid = currentWallet[ui];
             if (uid === wi.removeCardId || uid === wi.addCardId) continue;
@@ -1164,11 +1247,14 @@ window.CardTracker.biltPlugin = {
       var currentBiltCashEarned = currentBiltSpend * window.CardTracker.biltPlugin.BILT_CASH_RATE;
       var maxBiltCashForRent = monthlyRent > 0 ? monthlyRent * 0.03 * 12 : 0;
 
-      // Determine how much Bilt Cash is redeemed
+      // Determine how much Bilt Cash is redeemed for rent points.
+      // biltCashKeptOverride now represents non-rent redemption (face value use),
+      // not "amount to keep." Rent redemption is separate and capped at maxBiltCashForRent.
       var finalBiltCashRedeemed;
       if (wi.biltCashKeptOverride !== undefined) {
-        var kept = Math.max(0, Math.min(wi.biltCashKeptOverride, finalBiltCashEarned));
-        finalBiltCashRedeemed = Math.min(finalBiltCashEarned - kept, maxBiltCashForRent);
+        // Non-rent redemption is set — rent redemption fills up to the cap from remaining
+        var nonRentAmt = Math.max(0, Math.min(wi.biltCashKeptOverride, finalBiltCashEarned));
+        finalBiltCashRedeemed = Math.min(Math.max(0, finalBiltCashEarned - nonRentAmt), maxBiltCashForRent);
       } else if (biltCashPlan === 'cash') {
         finalBiltCashRedeemed = 0;
       } else if (biltCashPlan === 'custom') {
@@ -1198,15 +1284,21 @@ window.CardTracker.biltPlugin = {
         ? Math.min(currentBiltCashRedeemed * (100 / 3), monthlyRent * 12) : 0;
       var currentRentPointsValue = currentRentPointsAnnual * currentBiltPV;
 
-      // Remaining Bilt Cash
-      var finalBiltCashRemaining = finalBiltCashEarned - finalBiltCashRedeemed;
-      var currentBiltCashRemaining = currentBiltCashEarned - currentBiltCashRedeemed;
+      // Non-rent redemption (face value — what the user said they'll redeem for other purposes)
+      var finalNonRentRedemption = wi.biltCashKeptOverride !== undefined
+        ? Math.max(0, Math.min(wi.biltCashKeptOverride, Math.max(0, finalBiltCashEarned - finalBiltCashRedeemed)))
+        : 0;
+      var currentNonRentRedemption = 0; // Baseline: assume current wallet has same non-rent redemption
+      // Remaining Bilt Cash (after rent redemption and non-rent redemption)
+      var finalBiltCashRemaining = finalBiltCashEarned - finalBiltCashRedeemed - finalNonRentRedemption;
+      var currentBiltCashRemaining = currentBiltCashEarned - currentBiltCashRedeemed - currentNonRentRedemption;
 
       var countCashAsValue = biltCashPlan !== 'maximize';
 
       // Deltas
       var rentPointsValueDelta = finalRentPointsValue - currentRentPointsValue;
-      var biltCashKeptDelta = finalBiltCashRemaining - currentBiltCashRemaining;
+      // biltCashKeptDelta = change in non-rent Bilt Cash redemption value (face value)
+      var biltCashKeptDelta = finalNonRentRedemption - currentNonRentRedemption;
 
       // Rent cap usage
       var rentCapUsedPct = annualBiltSpendCap > 0 ? Math.min(100, (finalBiltSpend / annualBiltSpendCap) * 100) : 0;
@@ -1217,6 +1309,7 @@ window.CardTracker.biltPlugin = {
         biltCashKeptDelta: biltCashKeptDelta,
         finalBiltCashEarned: finalBiltCashEarned,
         finalBiltCashRedeemed: finalBiltCashRedeemed,
+        finalNonRentRedemption: finalNonRentRedemption,
         finalMaxRedemption: maxBiltCashForRent,
         finalRentPointsAnnual: finalRentPointsAnnual,
         finalRentPointsValue: finalRentPointsValue,
@@ -1257,26 +1350,48 @@ window.CardTracker.biltPlugin = {
     // Render the "Bilt Cash (kept)" summary line in the compact summary
     renderSummaryLines: function(impact, prefix, ctx) {
       if (!impact) return '';
+      var rentPtsDelta = impact.rentPointsValueDelta || 0;
       var biltCashDelta = impact.biltCashKeptDelta || 0;
-      return '<div style="display:flex;justify-content:space-between;">' +
-        '<span>Bilt Cash <span style="font-size:11px;color:#78716c;font-weight:400;">(kept)</span></span>' +
+      var html = '';
+      // Rent points line (always shown when there is a delta)
+      if (rentPtsDelta !== 0) {
+        var finalRentPts = impact.finalRentPointsAnnual || 0;
+        var biltPV = finalRentPts > 0 ? (impact.finalRentPointsValue || 0) / finalRentPts : 0.018;
+        html += '<div style="display:flex;justify-content:space-between;">' +
+          '<span>Rent points <span style="font-size:11px;color:#78716c;font-weight:400;">(' + Math.round(finalRentPts).toLocaleString() + ' pts @ $' + biltPV.toFixed(3) + ')</span></span>' +
+          '<span class="mono" style="font-weight:600;color:' + (rentPtsDelta >= 0 ? '#059669' : '#dc2626') + ';" id="cardscenarios' + prefix + 'RentPtsTopLine">' + (rentPtsDelta >= 0 ? '+' : '-') + ctx.formatCurrencyPrecise(Math.abs(rentPtsDelta)) + '</span>' +
+        '</div>';
+      }
+      // Bilt Cash line
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+        '<span>Bilt Cash (non-rent) ' +
+          '<span title="Bilt Cash you redeem for things other than rent points — e.g. statement credits or travel. Set your expected annual amount in the ledger below." ' +
+               'style="display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border-radius:50%;background:#d6d3d1;color:#57534e;font-size:9px;font-weight:700;cursor:default;vertical-align:middle;line-height:1;">?</span>' +
+        '</span>' +
         '<span class="mono" style="font-weight:600;color:' + (biltCashDelta >= 0 ? '#059669' : '#dc2626') + ';" id="cardscenarios' + prefix + 'BiltCashTopLine">' + (biltCashDelta >= 0 ? '+' : '-') + ctx.formatCurrencyPrecise(Math.abs(biltCashDelta)) + '</span>' +
       '</div>';
+      return html;
     },
 
     // Render the editable Bilt Cash input in the ledger section
     renderLedgerSection: function(impact, prefix, ctx) {
       if (!impact) return '';
       var biltCashEarned = impact.finalBiltCashEarned || 0;
-      var biltCashKept = impact.finalBiltCashRemaining || 0;
+      var biltCashForRent = impact.finalBiltCashRedeemed || 0;
+      var surplus = Math.max(0, biltCashEarned - biltCashForRent);
+      // Default to $0 — user sets how much they expect to redeem for non-rent purposes
+      var nonRentRedemption = impact.finalNonRentRedemption !== undefined ? impact.finalNonRentRedemption : 0;
       return '<div style="margin-top:12px;border-top:1px solid #e7e5e4;padding-top:12px;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;">' +
-          '<span style="font-weight:600;color:#57534e;">Bilt Cash <span style="font-weight:400;color:#78716c;">(kept)</span></span>' +
+          '<span style="font-weight:600;color:#57534e;">Bilt Cash (non-rent) ' +
+            '<span title="Bilt Cash you redeem for things other than rent points — e.g. statement credits or travel. Enter your expected annual redemption amount. Up to ' + ctx.formatCurrencyPrecise(surplus) + ' is available after rent points are funded." ' +
+                 'style="display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border-radius:50%;background:#d6d3d1;color:#57534e;font-size:9px;font-weight:700;cursor:default;vertical-align:middle;line-height:1;">?</span>' +
+          '</span>' +
           '<span style="display:flex;align-items:center;gap:4px;">' +
             '<span class="mono" style="font-size:12px;color:#78716c;">$</span>' +
-            '<input type="number" id="cardscenarios' + prefix + 'BiltCashInput" min="0" max="' + biltCashEarned.toFixed(2) + '" step="0.01" value="' + biltCashKept.toFixed(2) + '"' +
+            '<input type="number" id="cardscenarios' + prefix + 'BiltCashInput" min="0" max="' + surplus.toFixed(2) + '" step="0.01" value="' + nonRentRedemption.toFixed(2) + '"' +
               ' style="width:72px;padding:2px 4px;border:1px solid #d6d3d1;border-radius:4px;font-size:13px;text-align:right;font-family:monospace;" />' +
-            '<span style="font-size:11px;color:#a8a29e;">of ' + ctx.formatCurrencyPrecise(biltCashEarned) + '</span>' +
+            '<span style="font-size:11px;color:#a8a29e;">of ' + ctx.formatCurrencyPrecise(surplus) + ' available</span>' +
           '</span>' +
         '</div>' +
       '</div>';
@@ -1307,13 +1422,15 @@ window.CardTracker.biltPlugin = {
     updateResult: function(pluginImpact, prefix, ctx) {
       if (!pluginImpact) return;
 
-      // Update Bilt Cash input
+      // Update Bilt Cash input — max and label show surplus available after rent redemption
       var input = document.getElementById('cardscenarios' + prefix + 'BiltCashInput');
       if (input) {
         var earned = pluginImpact.finalBiltCashEarned || 0;
-        input.max = earned.toFixed(2);
+        var redeemedForRent = pluginImpact.finalBiltCashRedeemed || 0;
+        var surplus = Math.max(0, earned - redeemedForRent);
+        input.max = surplus.toFixed(2);
         var ofLabel = input.parentElement && input.parentElement.querySelector('span:last-child');
-        if (ofLabel) ofLabel.textContent = 'of ' + ctx.formatCurrencyPrecise(earned);
+        if (ofLabel) ofLabel.textContent = 'of ' + ctx.formatCurrencyPrecise(surplus) + ' available';
       }
 
       // Update rent points row

@@ -418,7 +418,7 @@
         </details>
         <details class="faq-item">
           <summary class="faq-q">How is this different from real-time card optimization tools?</summary>
-          <div class="faq-a">Those tools help you maximize future purchases by suggesting which card to use at checkout or auto-applying offers. We do something different: we analyze past transaction data to tell you how much value you got from each card and whether the annual fee was worth it.</div>
+          <div class="faq-a">Those tools help you maximize future purchases by suggesting which card to use at checkout or auto-applying offers. We analyze past transaction data to tell you how much value you got from each card and whether the annual fee was worth it.</div>
         </details>
         <details class="faq-item">
           <summary class="faq-q">Do I need to use this regularly?</summary>
@@ -433,11 +433,11 @@
         <div id="faqMore" class="faq-more" style="display:none;">
           <details class="faq-item">
             <summary class="faq-q">Do you have a privacy policy?</summary>
-            <div class="faq-a">We don't collect your transaction data, period. Everything runs locally in your browser. Future Pro users will need to verify a license key online, and we use Umami for privacy-friendly analytics. That's it.</div>
+            <div class="faq-a">We do not collect your transaction data. Everything runs locally in your browser.</div>
           </details>
           <details class="faq-item">
             <summary class="faq-q">How accurate is the categorization?</summary>
-            <div class="faq-a">The tracker uses a rule-based engine with hundreds of known merchants. When it doesn't recognize a merchant, it looks at other details embedded in the transaction to classify it. If it's still unsure, it defaults safely and flags it for your review. Pro users will be able to add their own merchant rules to improve accuracy over time.</div>
+            <div class="faq-a">The tracker uses a rule-based engine with hundreds of known merchants. When it doesn't recognize a merchant, it looks at other details embedded in the transaction to classify it. If it's still unsure, it defaults safely and flags it for your review. Users are also able to add their own merchant rules to improve accuracy over time.</div>
           </details>
           <details class="faq-item">
             <summary class="faq-q">Can I map more than one card number to a single card?</summary>
@@ -451,10 +451,7 @@
             <summary class="faq-q">What happens if I clear my browser?</summary>
             <div class="faq-a">Because the tracker stores everything in your browser's local storage, your data will be cleared too. Export a JSON backup before clearing your browser and upload it instead of a CSV next time you boot up the tracker. The backup file will restore all your data and preferences.</div>
           </details>
-          <details class="faq-item">
-            <summary class="faq-q">Who built this?</summary>
-            <div class="faq-a">A lawyer who got tired of spreadsheets.</div>
-          </details>
+
         </div>
 
         <button id="faqToggle" class="faq-toggle" onclick="var m=document.getElementById('faqMore');var b=this;if(m.style.display==='none'){m.style.display='block';b.textContent='Show fewer questions';}else{m.style.display='none';b.textContent='Show more questions';}">Show more questions</button>

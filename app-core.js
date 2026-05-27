@@ -1305,6 +1305,21 @@ function calculateCardYearMetrics(cardId, startDate, endDate, allTransactions) {
 }
 
 /**
+ * Return the value of one claimed entry for a manual credit, based on its frequency.
+ * Monthly credits store one entry per month claimed (amount/12 each).
+ * Semi-annual credits store one representative month per period (amount/2 each).
+ * Quarterly credits store one representative month per quarter (amount/4 each).
+ * Annual credits store one representative month for the year (full amount each).
+ */
+function perEntryAmount(credit) {
+  const freq = credit.frequency || 'annual';
+  if (freq === 'monthly')      return credit.amount / 12;
+  if (freq === 'quarterly')    return credit.amount / 4;
+  if (freq === 'semi-annual')  return credit.amount / 2;
+  return credit.amount; // annual (or unknown)
+}
+
+/**
  * Get manual credits claimed within a card year period
  * @param {string} cardId - Card ID
  * @param {Date} startDate - Start of period
@@ -1324,7 +1339,7 @@ function getCardYearManualCredits(cardId, startDate, endDate) {
     const yearData = monthlyForCard[credit.name];
     if (!yearData) continue;
 
-    const monthlyAmount = credit.amount / 12;
+    const entryAmount = perEntryAmount(credit);
     const isDisabled = (state.disabledCredits[cardId] || []).includes(credit.name);
     if (isDisabled) continue;
 
@@ -1339,7 +1354,7 @@ function getCardYearManualCredits(cardId, startDate, endDate) {
         // Create date for the claimed month (use 15th as middle of month)
         const claimDate = new Date(year, monthIndex, 15);
         if (claimDate >= startDate && claimDate < endDate) {
-          total += monthlyAmount;
+          total += entryAmount;
         }
       }
     }
@@ -1402,7 +1417,7 @@ function getCardYearCreditsUsed(cardId, startDate, endDate, allTransactions) {
     const yearData = monthlyForCard[credit.name];
     if (!yearData) continue;
 
-    const monthlyAmount = credit.amount / 12;
+    const entryAmount = perEntryAmount(credit);
     const isDisabled = (state.disabledCredits[cardId] || []).includes(credit.name);
     if (isDisabled) continue;
 
@@ -1418,7 +1433,7 @@ function getCardYearCreditsUsed(cardId, startDate, endDate, allTransactions) {
         const claimDate = new Date(year, monthIndex, 15);
         if (claimDate >= startDate && claimDate < endDate) {
           if (!result[credit.name]) result[credit.name] = 0;
-          result[credit.name] += monthlyAmount;
+          result[credit.name] += entryAmount;
         }
       }
     }
@@ -2275,13 +2290,13 @@ function showCardConfigEditor(preselectedCardId = null) {
     const renderCreditRow = (cr, selectedCreditYear) => {
       const isDisabled = disabled.includes(cr.name);
       const isManual = cr.manual === true;
-      const monthlyAmount = cr.amount / 12;
+      const entryAmount = perEntryAmount(cr);
       // Year-specific claimed months
       const yearCredits = state.monthlyCredits?.[cardId]?.[cr.name];
       const claimedMonths = (typeof yearCredits === 'object' && !Array.isArray(yearCredits))
         ? (yearCredits[selectedCreditYear] || [])
         : (Array.isArray(yearCredits) ? yearCredits : []); // Legacy support
-      const totalClaimed = isManual ? claimedMonths.length * monthlyAmount : 0;
+      const totalClaimed = isManual ? claimedMonths.length * entryAmount : 0;
 
       let monthsHtml = '';
       if (isManual && !isDisabled) {
@@ -2300,9 +2315,9 @@ function showCardConfigEditor(preselectedCardId = null) {
             <input type="checkbox" class="credit-toggle-checkbox" data-credit-name="${escapeHtml(cr.name)}" ${!isDisabled ? 'checked' : ''} title="Include this credit in ROI calculation">
             <div style="flex:1;">
               <div style="font-size:13px;font-weight:500;${isDisabled ? 'text-decoration:line-through;' : ''}">${escapeHtml(cr.name)}${isManual ? ' ⚡' : ''}</div>
-              <div style="font-size:11px;color:#78716c;">$${cr.amount}/yr${isManual ? ` (~$${monthlyAmount.toFixed(0)}/mo)` : ' — Auto-detected from transactions'}</div>
+              <div style="font-size:11px;color:#78716c;">$${cr.amount}/yr${isManual ? ` (~$${entryAmount.toFixed(0)} per redemption)` : ' — Auto-detected from transactions'}</div>
             </div>
-            ${isManual && !isDisabled ? `<span class="credit-claimed-display" data-monthly-amount="${monthlyAmount}" style="font-size:12px;color:#059669;font-weight:500;">$${totalClaimed.toFixed(0)} claimed</span>` : ''}
+            ${isManual && !isDisabled ? `<span class="credit-claimed-display" data-monthly-amount="${entryAmount}" style="font-size:12px;color:#059669;font-weight:500;">$${totalClaimed.toFixed(0)} claimed</span>` : ''}
           </div>
           ${isManual && !isDisabled ? `
             <div style="display:flex;flex-wrap:wrap;gap:4px;padding-top:8px;border-top:1px solid #f5f5f4;">
@@ -6294,7 +6309,7 @@ function renderView(view) {
           }
           const isDisabled = (state.disabledCredits[c.cardId] || []).includes(cr.name);
           if (!isDisabled && claimedMonths.length > 0) {
-            totalCredits += claimedMonths.length * (cr.amount / 12);
+            totalCredits += claimedMonths.length * perEntryAmount(cr);
           }
         }
       }
@@ -6461,8 +6476,7 @@ function renderView(view) {
         }
 
         if (claimedMonths.length > 0) {
-          const monthlyAmount = credit.amount / 12;
-          const totalClaimed = claimedMonths.length * monthlyAmount;
+          const totalClaimed = claimedMonths.length * perEntryAmount(credit);
           if (!creditsUsedByCard[cardId][creditName]) creditsUsedByCard[cardId][creditName] = 0;
           creditsUsedByCard[cardId][creditName] += totalClaimed;
           totalManualCredits += totalClaimed;
@@ -7081,7 +7095,7 @@ function renderView(view) {
             }
             const isDisabled = (state.disabledCredits[cardId] || []).includes(cr.name);
             if (!isDisabled && claimedMonths.length > 0) {
-              totalManualCredits += claimedMonths.length * (cr.amount / 12);
+              totalManualCredits += claimedMonths.length * perEntryAmount(cr);
             }
           }
         }

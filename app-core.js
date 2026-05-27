@@ -1314,6 +1314,7 @@ function calculateCardYearMetrics(cardId, startDate, endDate, allTransactions) {
 function perEntryAmount(credit) {
   const freq = credit.frequency || 'annual';
   if (freq === 'monthly')      return credit.amount / 12;
+  if (freq === 'none')         return credit.amount / 12; // set-it-and-forget-it: value accrues monthly
   if (freq === 'quarterly')    return credit.amount / 4;
   if (freq === 'semi-annual')  return credit.amount / 2;
   return credit.amount; // annual (or unknown)
@@ -7396,7 +7397,7 @@ function getCreditPeriodStatus(cardId, credit, year, periodIndex) {
   let periodAmount = 0;
   let monthsInPeriod = [];
 
-  if (freq === 'monthly') {
+  if (freq === 'monthly' || freq === 'none') {
     if (credit.monthlyAmounts) {
       const mo = credit.monthlyAmounts[periodIndex] !== undefined
         ? credit.monthlyAmounts[periodIndex]
@@ -7509,7 +7510,8 @@ function renderCreditCalendar() {
   seenIds.forEach(cardId => {
     const card = CARDS[cardId];
     if (!card || !card.credits || card.credits.length === 0) return;
-    if (!card.credits.some(cr => (cr.frequency || 'annual') !== 'none')) return;
+    // Include cards with any manual credit (including frequency:'none' set-it-and-forget-it)
+    if (!card.credits.some(cr => cr.manual)) return;
     walletCards.push({ cardId, card });
   });
   if (cs.enabledCards === null) {
@@ -7556,16 +7558,18 @@ function renderCreditCalendar() {
     return activeCards.map(({ cardId, card }) => {
       const trackable = card.credits.filter(cr => {
         const freq = cr.frequency || 'annual';
-        if (freq === 'none') return false;
         if ((state.disabledCredits[cardId] || []).indexOf(cr.name) >= 0) return false;
         if (freq === 'annual' && cr.resetBasis === 'anniversary') return false;
+        // 'none' (set-it-and-forget-it) appears every month like a monthly credit
+        if (freq === 'none') return cr.manual === true;
         return deadlineMonthsForFreq(freq).indexOf(m) >= 0;
       });
       if (trackable.length === 0) return null;
       const credits = trackable.map(cr => {
         const freq = cr.frequency || 'annual';
         let periodIndex, periodLabel;
-        if (freq === 'monthly') { periodIndex = m; periodLabel = 'monthly'; }
+        // 'none' behaves like monthly for calendar display purposes
+        if (freq === 'monthly' || freq === 'none') { periodIndex = m; periodLabel = 'monthly'; }
         else if (freq === 'quarterly') { periodIndex = Math.floor(m / 3); periodLabel = 'quarterly'; }
         else if (freq === 'semi-annual') { periodIndex = m < 6 ? 0 : 1; periodLabel = 'semi-annual'; }
         else { periodIndex = 0; periodLabel = 'annual'; }
@@ -7691,26 +7695,8 @@ function renderCreditCalendar() {
     </button>`;
   }).join('');
 
-  // Set-it-and-forget-it note: credits with frequency:'none'
-  const noneRows = [];
-  walletCards.forEach(({ cardId, card }) => {
-    const nones = (card.credits || []).filter(cr => (cr.frequency || 'annual') === 'none');
-    if (nones.length > 0) noneRows.push({ card, nones });
-  });
-  let noneNoteHtml = '';
-  if (noneRows.length > 0) {
-    const items = noneRows.map(({ card, nones }) =>
-      `<div style="margin-bottom:3px;"><strong>${escapeHtml(card.shortName || card.name)}:</strong> ${nones.map(cr => escapeHtml(cr.name)).join(', ')}</div>`
-    ).join('');
-    const tipText = "These credits are activated once and stay active — like a membership or enrollment. Unlike the credits above, they don’t need to be redeemed each month.";
-    noneNoteHtml = `<div style="margin-top:10px;border-top:1px solid #f0eeec;padding-top:10px;">
-      <div style="display:flex;align-items:flex-start;gap:5px;margin-bottom:5px;">
-        <span style="font-size:10px;color:#a8a29e;font-style:italic;line-height:1.5;">Set-it-and-forget-it benefits not shown here:</span>
-        <span class="cal-auto-circle" data-tooltip="${escapeHtml(tipText)}" style="display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;min-width:13px;border-radius:50%;border:1px solid #d1d5db;background:#f9fafb;font-size:9px;color:#9ca3af;cursor:default;margin-top:1px;">ⓘ</span>
-      </div>
-      <div style="font-size:10px;color:#a8a29e;line-height:1.6;">${items}</div>
-    </div>`;
-  }
+  // frequency:'none' credits now appear in the calendar like monthly credits
+  const noneNoteHtml = '';
 
   container.innerHTML = `
     <style>

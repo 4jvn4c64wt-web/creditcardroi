@@ -1,0 +1,2 @@
+# Enforce LF line endings in the repo regardless of OS or core.autocrlf setting
+* text=auto eol=lf

@@ -1878,8 +1878,21 @@ async function processTransactions(transactions) {
     // Detect if this is a payment or statement balance line (not a refund or statement credit)
     const upperMerchant = (txn.merchant + ' ' + txn.original).toUpperCase();
 
-    // First, check if this looks like a statement credit (should NOT be treated as payment)
-    const looksLikeStatementCredit = isCredit && (
+    // User-initiated rewards redemptions: the user cashing in earned points for a statement
+    // credit. This is NOT an issuer perk — it's the same money pool as the earned points
+    // already tracked via spend, so counting it as a credit would double-count.
+    // Note: 'REDEMPT' catches REDEMPTION/REDEMPTIONS; 'REDEEM' catches REDEEM/REDEEMED/REDEEMING.
+    // These are distinct substrings — REDEMPTION does not contain REDEEM.
+    const hasRedeemKeyword = upperMerchant.includes('REDEEM') || upperMerchant.includes('REDEMPT');
+    const isRewardsRedemption = isCredit && hasRedeemKeyword && (
+      upperMerchant.includes('REWARD') ||
+      upperMerchant.includes('CASH BACK') ||
+      upperMerchant.includes('CASHBACK')
+    );
+
+    // First, check if this looks like a statement credit (should NOT be treated as payment).
+    // Rewards redemptions are excluded here so they fall through to isPayment below.
+    const looksLikeStatementCredit = isCredit && !isRewardsRedemption && (
       (upperMerchant.includes('CREDIT') && !upperMerchant.includes('CREDIT CARD')) ||
       upperMerchant.includes('REWARD') ||
       upperMerchant.includes('REDEEM') ||
@@ -1888,6 +1901,7 @@ async function processTransactions(transactions) {
     );
 
     const isPayment = isCredit && !looksLikeStatementCredit && (
+      isRewardsRedemption ||
       upperMerchant.includes('AUTOMATIC PAYMENT') ||
       upperMerchant.includes('PAYMENT - THANK') ||
       upperMerchant.includes('ONLINE PAYMENT') ||
@@ -1954,8 +1968,8 @@ async function processTransactions(transactions) {
         // Annual fees: visible on transactions page but don't generate points
         multiplier = { rate: 0, reason: 'Annual membership fee' };
       } else if (isPayment) {
-        // Payments: don't count, gray styling
-        multiplier = { rate: 0, reason: 'Payment' };
+        // Payments and rewards redemptions: don't count, gray styling
+        multiplier = { rate: 0, reason: isRewardsRedemption ? 'Rewards redemption' : 'Payment' };
       } else if (isCredit) {
         creditMatch = detectCredit(txn.merchant, txn.original, cardId, txn.id, txn.date);
         if (creditMatch) {

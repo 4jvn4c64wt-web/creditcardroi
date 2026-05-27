@@ -1025,6 +1025,8 @@ All structured data must be implemented as JSON-LD embedded in the `<head>`, not
 
 **Content pages** (`insights/*.html`): use `Article` schema. Add `FAQ` schema wherever a page includes a question-and-answer section. Use `Review` schema if a page evaluates a specific card product. The `insights.html` index already uses `CollectionPage` JSON-LD — maintain that pattern.
 
+**Silent Entity-Mapping Requirement for GEO:** To help AI Overviews and search engines associate our custom calculations with the correct entities, **always** map the `Article` schema to the specific `CreditCard` or `FinancialProduct` entities being discussed. Nest `CreditCard` schema objects within the `about` or `mentions` arrays of the parent `Article` schema. Declare exact `brand`, `amount` (annual fee), and issuer specs matching the corresponding card definition file.
+
 ### Generative Engine Optimization (GEO) for 2026
 
 AI search engines (Google SGE, Perplexity, etc.) favor structured, synthesizable content. Apply this format to all insight articles:
@@ -1088,6 +1090,7 @@ All of the following must be present and unique to this page:
 Embed the following in the `<head>`, not inline in the body:
 
 - [ ] `Article` schema with `headline`, `author`, `datePublished`, `dateModified`, `image`, `publisher`
+- [ ] Map the article to specific credit card entities being analyzed by nesting `CreditCard` schemas inside the `about` or `mentions` array (declare correct `brand`, `amount` for annual fee, and issuer specs).
 - [ ] `FAQ` schema if the article includes any question-and-answer sections
 - [ ] `Review` schema if the article evaluates or recommends a specific card product
 - [ ] Validate all JSON-LD with Google's Rich Results Test (https://search.google.com/test/rich-results) before shipping

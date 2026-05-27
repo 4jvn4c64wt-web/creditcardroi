@@ -56,7 +56,11 @@
     /* Nav */
     .site-nav { padding: 16px 0; border-bottom: 1px solid #e7e5e4; }
     .site-nav .container { display: flex; align-items: center; justify-content: space-between; }
+    .nav-left { display: flex; align-items: center; gap: 24px; }
     .site-nav-brand { font-size: 15px; font-weight: 600; color: #1c1917; text-decoration: none; }
+    .nav-link-text { font-size: 14px; font-weight: 500; color: #57534e; text-decoration: none; transition: color 0.15s; }
+    .nav-link-text:hover { color: #1c1917; }
+    .nav-link-text.active { color: #1c1917; font-weight: 600; }
     .site-nav .btn { padding: 8px 18px; font-size: 14px; }
 
     /* Hero */
@@ -189,9 +193,10 @@
   <!-- Nav -->
   <nav class="site-nav">
     <div class="container">
-      <div style="display:flex;align-items:center;gap:24px;">
+      <div class="nav-left">
         <a href="index.html" class="site-nav-brand">Credit Card Value Tracker</a>
-        <a href="insights.html" style="font-size:14px;font-weight:500;color:#57534e;text-decoration:none;">Insights</a>
+        <a href="compare.html" class="nav-link-text">Compare Cards</a>
+        <a href="insights.html" class="nav-link-text">Insights</a>
       </div>
       <a href="app-pro.html" class="btn btn-primary" data-umami-event="Go to Tracker" target="_blank" rel="noopener noreferrer">Go to Tracker</a>
     </div>

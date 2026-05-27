@@ -1,0 +1,1864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- SEO Meta Tags for Google AI & Search Engines -->
+  <title>Amex Platinum vs. Chase Sapphire Reserve Comparison: The Definitive Math-Based ROI Guide</title>
+  <meta name="description" content="Use our interactive head-to-head comparison tool and private browser-based CSV parser to calculate the true mathematical winner between the Amex Platinum and Chase Sapphire Reserve based on your spending habits.">
+  <link rel="canonical" href="https://creditcardvaluetracker.com/amex-platinum-vs-chase-sapphire-reserve.html">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💳</text></svg>">
+  
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-main: #f7f6f3;
+      --text-main: #1c1917;
+      --text-muted: #6b7280;
+      --card-bg: #ffffff;
+      --border-color: #e7e5e4;
+      --amex-theme: #0076a5;
+      --amex-grad: linear-gradient(135deg, #cbd5e1, #94a3b8, #64748b);
+      --chase-theme: #104f55;
+      --chase-grad: linear-gradient(135deg, #1e3a8a, #1d4ed8, #0f172a);
+      --glass-bg: rgba(255, 255, 255, 0.7);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      line-height: 1.5;
+      padding: 0 0 40px 0;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+
+    /* Nav — matches index.html but adapted for 1200px container */
+    .site-nav { 
+      padding: 16px 0; 
+      border-bottom: 1px solid var(--border-color); 
+      background: #ffffff;
+      margin-bottom: 40px;
+      width: 100%;
+    }
+    .site-nav .nav-container { 
+      display: flex; 
+      align-items: center; 
+      justify-content: space-between; 
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+    .nav-left { display: flex; align-items: center; gap: 24px; }
+    .site-nav-brand { font-size: 15px; font-weight: 600; color: var(--text-main); text-decoration: none; }
+    .nav-link-text { font-size: 14px; font-weight: 500; color: var(--text-muted); text-decoration: none; transition: color 0.15s; }
+    .nav-link-text:hover { color: var(--text-main); }
+    .nav-link-text.active { color: var(--text-main); font-weight: 600; }
+    .nav-btn { display: inline-flex; align-items: center; padding: 8px 18px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; border: none; font-family: inherit; text-decoration: none; }
+    .nav-btn-primary { background: var(--text-main); color: #fff; }
+    .nav-btn-primary:hover { background: #292524; }
+
+    /* SEO Header Block */
+    .seo-header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+
+    .seo-header h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 38px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      margin-bottom: 12px;
+      background: linear-gradient(135deg, #1c1917, #44403c);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .seo-header h2 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 20px;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+    }
+
+    .seo-header p {
+      max-width: 800px;
+      margin: 0 auto;
+      font-size: 15px;
+      color: #4b5563;
+      line-height: 1.7;
+    }
+
+    .seo-badge {
+      display: inline-block;
+      background: #eff6ff;
+      color: #2563eb;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      margin-bottom: 16px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border: 1px solid #dbeafe;
+    }
+
+    /* Dashboard Grid */
+    .comparison-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      margin-bottom: 40px;
+    }
+
+    @media (max-width: 900px) {
+      .comparison-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .visual-card-slot {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 32px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.03);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .visual-card-slot:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 16px 40px rgba(0,0,0,0.06);
+    }
+
+    .card-canvas {
+      width: 100%;
+      height: 200px;
+      perspective: 1000px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .cc-mockup {
+      width: 320px;
+      height: 190px;
+      border-radius: 12px;
+      padding: 24px;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: 0 12px 24px rgba(0,0,0,0.15);
+      position: relative;
+      transform-style: preserve-3d;
+      transition: transform 0.1s ease;
+      cursor: pointer;
+    }
+
+    .cc-mockup::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 60%);
+      border-radius: 12px;
+      pointer-events: none;
+    }
+
+    .cc-mockup.amex {
+      background: var(--amex-grad);
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+
+    .cc-mockup.chase {
+      background: var(--chase-grad);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .cc-chip {
+      width: 36px;
+      height: 28px;
+      background: linear-gradient(135deg, #eab308, #ca8a04);
+      border-radius: 4px;
+      border: 1px solid rgba(0,0,0,0.15);
+    }
+
+    .cc-logo {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
+
+    .cc-number {
+      font-family: 'Fira Code', monospace;
+      font-size: 15px;
+      letter-spacing: 2px;
+      margin-top: 16px;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
+
+    .cc-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+
+    .cc-holder {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      opacity: 0.8;
+    }
+
+    /* ROI Panels */
+    .roi-panel {
+      margin-bottom: 24px;
+      padding: 20px;
+      border-radius: 12px;
+      background: var(--bg-main);
+      border: 1px solid var(--border-color);
+      text-align: center;
+    }
+
+    .roi-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 4px;
+    }
+
+    .roi-value {
+      font-family: 'Outfit', sans-serif;
+      font-size: 36px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .roi-value.positive {
+      color: #059669;
+    }
+
+    .roi-value.negative {
+      color: #dc2626;
+    }
+
+    .metrics-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+      margin-top: 12px;
+      border-top: 1px solid rgba(0,0,0,0.06);
+      padding-top: 12px;
+    }
+
+    .metric-item {
+      text-align: center;
+    }
+
+    .metric-lbl {
+      font-size: 9px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: 500;
+    }
+
+    .metric-val {
+      font-family: 'Fira Code', monospace;
+      font-size: 13px;
+      font-weight: 600;
+      margin-top: 2px;
+    }
+
+    /* Sliders Panel */
+    .sliders-panel {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 32px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.03);
+      margin-bottom: 40px;
+    }
+
+    .sliders-panel-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 22px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      letter-spacing: -0.01em;
+    }
+
+    .sliders-panel-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+    }
+
+    .slider-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px 40px;
+    }
+
+    @media (max-width: 768px) {
+      .slider-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .slider-container {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .slider-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .slider-label {
+      color: var(--text-main);
+    }
+
+    .slider-value {
+      font-family: 'Fira Code', monospace;
+      font-weight: 600;
+      color: #2563eb;
+    }
+
+    .slider-subnote {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .slider-input {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: #e7e5e4;
+      outline: none;
+      transition: background 0.15s;
+    }
+
+    .slider-input::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #1c1917;
+      cursor: pointer;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+      transition: transform 0.1s ease;
+    }
+
+    .slider-input::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+    }
+
+    /* Valuations Config Block */
+    .valuations-bar {
+      display: flex;
+      justify-content: center;
+      gap: 32px;
+      margin-bottom: 32px;
+      padding: 16px;
+      background: #f1f5f9;
+      border-radius: 12px;
+      border: 1px solid #e2e8f0;
+      flex-wrap: wrap;
+    }
+
+    .val-input-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .val-input-group label {
+      color: #334155;
+    }
+
+    .val-input-group input {
+      width: 60px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid #cbd5e1;
+      font-family: 'Fira Code', monospace;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+      background: #fff;
+    }
+
+    /* Perks Checklist (Organic Value Toggles) */
+    .perks-section {
+      margin-top: auto;
+      border-top: 1px solid var(--border-color);
+      padding-top: 20px;
+    }
+
+    .perks-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .checklist-controls-wrap {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .checklist-controls {
+      display: flex;
+      gap: 8px;
+      font-size: 11px;
+    }
+
+    .btn-link {
+      background: none;
+      border: none;
+      color: #2563eb;
+      cursor: pointer;
+      text-decoration: underline;
+      font-family: inherit;
+      font-size: inherit;
+    }
+
+    .btn-link:hover {
+      color: #1d4ed8;
+    }
+
+    .perks-sum {
+      font-family: 'Fira Code', monospace;
+      font-size: 11px;
+      color: #059669;
+      font-weight: 600;
+    }
+
+    .perks-list {
+      max-height: 200px;
+      overflow-y: auto;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 10px;
+      background: #fafaf9;
+    }
+
+    .perk-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 6px 4px;
+      font-size: 11px;
+      border-bottom: 1px solid rgba(0,0,0,0.03);
+      cursor: pointer;
+    }
+
+    .perk-item:last-child {
+      border-bottom: none;
+    }
+
+    .perk-item input {
+      margin-top: 2px;
+      cursor: pointer;
+    }
+
+    .perk-info {
+      flex: 1;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .perk-name {
+      color: #44403c;
+    }
+
+    .perk-amount {
+      font-family: 'Fira Code', monospace;
+      font-weight: 500;
+      color: #0369a1;
+      margin-left: 8px;
+    }
+
+    /* Phase 2: CSV Uploader Container */
+    .reality-check-panel {
+      background: var(--card-bg);
+      color: var(--text-main);
+      border-radius: 20px;
+      padding: 40px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.03);
+      margin-bottom: 40px;
+      border: 1px solid var(--border-color);
+      position: relative;
+    }
+
+    .rc-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+      color: var(--text-main);
+    }
+
+    .rc-copy {
+      font-size: 14px;
+      line-height: 1.6;
+      color: #4b5563;
+      margin-bottom: 24px;
+      max-width: 900px;
+    }
+
+    .dropzone {
+      border: 2px dashed #cbd5e1;
+      background: #fafaf9;
+      border-radius: 12px;
+      padding: 32px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+      display: block;
+      margin-bottom: 20px;
+    }
+
+    .dropzone:hover, .dropzone.dragover {
+      border-color: #94a3b8;
+      background: #f5f5f4;
+    }
+
+    .dropzone-txt {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-main);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .dropzone-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    #fileInput {
+      display: none;
+    }
+
+    /* Disclaimer Block */
+    .results-disclaimer {
+      background: #eff6ff;
+      border: 1px solid #dbeafe;
+      color: #1e40af;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 12px;
+      line-height: 1.5;
+      margin-bottom: 20px;
+    }
+
+    .results-disclaimer a {
+      color: #2563eb;
+      font-weight: 600;
+      text-decoration: underline;
+    }
+
+    .results-disclaimer a:hover {
+      color: #1d4ed8;
+    }
+
+    /* CSV Results Dashboard */
+    .results-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 24px;
+      margin-top: 24px;
+      color: var(--text-main);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+    }
+
+    .winner-banner {
+      background: #dcfce7;
+      color: #15803d;
+      border: 1px solid #bbf7d0;
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+      font-family: 'Outfit', sans-serif;
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 20px;
+    }
+
+    .results-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .results-table th {
+      text-align: left;
+      padding: 10px 8px;
+      border-bottom: 2px solid var(--border-color);
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-size: 11px;
+    }
+
+    .results-table td {
+      padding: 12px 8px;
+      border-bottom: 1px solid #f5f5f4;
+    }
+
+    .results-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .results-table td.bold {
+      font-weight: 600;
+    }
+
+    .results-table td.mono {
+      font-family: 'Fira Code', monospace;
+    }
+
+    /* Column Mapping Helper Form */
+    .mapping-dialog {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 20px;
+      color: var(--text-main);
+    }
+
+    .mapping-dialog-title {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    /* Phase 3: Tie Breakers */
+    .tiebreakers-panel {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 32px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.03);
+    }
+
+    .tb-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 22px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      letter-spacing: -0.01em;
+    }
+
+    .tb-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+    }
+
+    .tb-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 768px) {
+      .tb-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .tb-card {
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 20px;
+      background: var(--bg-main);
+    }
+
+    .tb-card-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .tb-card-desc {
+      font-size: 12px;
+      line-height: 1.6;
+      color: #4b5563;
+    }
+
+    .tb-bar-container {
+      margin-top: 16px;
+    }
+
+    .tb-bar-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      margin-bottom: 4px;
+    }
+
+    .tb-bar-outer {
+      background: #e7e5e4;
+      height: 8px;
+      border-radius: 4px;
+      overflow: hidden;
+      display: flex;
+    }
+
+    .tb-bar-fill {
+      height: 100%;
+    }
+
+    .tb-bar-fill.amex {
+      background: var(--amex-theme);
+    }
+
+    .tb-bar-fill.chase {
+      background: #2563eb;
+    }
+
+    .dynamic-tipping-block {
+      margin-top: 24px;
+      background: #fff8e1;
+      border: 1px solid #ffe082;
+      color: #b78103;
+      border-radius: 12px;
+      padding: 16px 20px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .dynamic-tipping-block strong {
+      color: #9e6400;
+    }
+    
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav class="site-nav">
+    <div class="nav-container">
+      <div class="nav-left">
+        <a href="index.html" class="site-nav-brand">Credit Card Value Tracker</a>
+        <a href="compare.html" class="nav-link-text active">Compare Cards</a>
+        <a href="insights.html" class="nav-link-text">Insights</a>
+      </div>
+      <a href="app-pro.html" class="nav-btn nav-btn-primary" data-umami-event="Go to Tracker" target="_blank" rel="noopener noreferrer">Go to Tracker</a>
+    </div>
+  </nav>
+
+  <div class="container">
+    
+    <!-- SEO Title Block (No Emojis) -->
+    <div class="seo-header">
+      <div class="seo-badge">Strategic Analysis</div>
+      <h1>Amex Platinum vs. Chase Sapphire Reserve</h1>
+      <h2>The Mathematical Break-Even & Spending ROI Calculator</h2>
+      <p>
+        Deciding between the two titans of premium travel rewards? Applying for the American Express Platinum Card ($895 annual fee) or the Chase Sapphire Reserve ($795 annual fee) can feel like an expensive guessing game. But their real-world value depends on your exact spending habits, your personal point valuations, and which credits you actually use. Use our interactive slider engine to simulate your spending and customize point values. Prefer to use your actual spending data? Drag and drop a CSV or JSON file of your transaction data below to see which card works better for you. The analysis runs completely privately inside your browser.
+      </p>
+    </div>
+
+    <!-- Valuations Settings Bar -->
+    <div class="valuations-bar">
+      <div class="val-input-group">
+        <label for="chasePointValue">Chase Point Value:</label>
+        <input type="number" id="chasePointValue" value="1.8" step="0.1" min="0.5" max="5.0">
+        <span>cents / pt</span>
+      </div>
+      <div class="val-input-group">
+        <label for="amexPointValue">Amex Point Value:</label>
+        <input type="number" id="amexPointValue" value="1.6" step="0.1" min="0.5" max="5.0">
+        <span>cents / pt</span>
+      </div>
+    </div>
+
+    <!-- Comparison Cards Grid -->
+    <div class="comparison-grid">
+      
+      <!-- Chase Sapphire Reserve slot -->
+      <div class="visual-card-slot" id="chaseSlot">
+        <div class="card-canvas">
+          <div class="cc-mockup chase" id="chaseCard3D">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;">
+              <div class="cc-chip"></div>
+              <div class="cc-logo" id="chaseNameLabel">Sapphire Reserve</div>
+            </div>
+            <div class="cc-number">•••• •••• •••• 9999</div>
+            <div class="cc-footer">
+              <div class="cc-holder">Chase Cardmember</div>
+              <div class="cc-logo">Visa Infinite</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ROI Visual Panel -->
+        <div class="roi-panel">
+          <div class="roi-label">Estimated Net ROI</div>
+          <div class="roi-value positive" id="chaseRoiDisplay">$0.00</div>
+          
+          <div class="metrics-row">
+            <div class="metric-item">
+              <div class="metric-lbl">Points Value</div>
+              <div class="metric-val" id="chasePointsVal">$0</div>
+            </div>
+            <div class="metric-item" style="border-left: 1px solid rgba(0,0,0,0.06); border-right: 1px solid rgba(0,0,0,0.06);">
+              <div class="metric-lbl">Credits Value</div>
+              <div class="metric-val" id="chaseCreditsVal">$0</div>
+            </div>
+            <div class="metric-item">
+              <div class="metric-lbl">Annual Fee</div>
+              <div class="metric-val" style="color: #b91c1c;" id="chaseFeeVal">$0</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chase Perks Checklist -->
+        <div class="perks-section">
+          <div class="checklist-controls-wrap">
+            <div class="perks-title">Organic Credit Checklist</div>
+            <div class="checklist-controls">
+              <button class="btn-link" onclick="toggleAllCredits('chase-sapphire-reserve', true)">Select All</button>
+              <span style="color: #d6d3d1;">|</span>
+              <button class="btn-link" onclick="toggleAllCredits('chase-sapphire-reserve', false)">Clear All</button>
+            </div>
+          </div>
+          <div class="checklist-controls-wrap" style="margin-bottom: 8px;">
+            <span style="font-size: 11px; color: var(--text-muted);">Toggle credits you organically use</span>
+            <span class="perks-sum" id="chaseCreditsSum">+$0.00</span>
+          </div>
+          <div class="perks-list" id="chasePerksContainer">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Amex Platinum slot -->
+      <div class="visual-card-slot" id="amexSlot">
+        <div class="card-canvas">
+          <div class="cc-mockup amex" id="amexCard3D">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;">
+              <div class="cc-chip"></div>
+              <div class="cc-logo" id="amexNameLabel">Amex Platinum</div>
+            </div>
+            <div class="cc-number">•••• •••••• •9999</div>
+            <div class="cc-footer">
+              <div class="cc-holder">Amex Cardmember</div>
+              <div class="cc-logo" style="font-size: 11px;">American Express</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ROI Visual Panel -->
+        <div class="roi-panel">
+          <div class="roi-label">Estimated Net ROI</div>
+          <div class="roi-value positive" id="amexRoiDisplay">$0.00</div>
+          
+          <div class="metrics-row">
+            <div class="metric-item">
+              <div class="metric-lbl">Points Value</div>
+              <div class="metric-val" id="amexPointsVal">$0</div>
+            </div>
+            <div class="metric-item" style="border-left: 1px solid rgba(0,0,0,0.06); border-right: 1px solid rgba(0,0,0,0.06);">
+              <div class="metric-lbl">Credits Value</div>
+              <div class="metric-val" id="amexCreditsVal">$0</div>
+            </div>
+            <div class="metric-item">
+              <div class="metric-lbl">Annual Fee</div>
+              <div class="metric-val" style="color: #b91c1c;" id="amexFeeVal">$0</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Amex Perks Checklist -->
+        <div class="perks-section">
+          <div class="checklist-controls-wrap">
+            <div class="perks-title">Organic Credit Checklist</div>
+            <div class="checklist-controls">
+              <button class="btn-link" onclick="toggleAllCredits('amex-platinum', true)">Select All</button>
+              <span style="color: #d6d3d1;">|</span>
+              <button class="btn-link" onclick="toggleAllCredits('amex-platinum', false)">Clear All</button>
+            </div>
+          </div>
+          <div class="checklist-controls-wrap" style="margin-bottom: 8px;">
+            <span style="font-size: 11px; color: var(--text-muted);">Toggle credits you organically use</span>
+            <span class="perks-sum" id="amexCreditsSum">+$0.00</span>
+          </div>
+          <div class="perks-list" id="amexPerksContainer">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Phase 1: Spending Estimation Sliders Grid -->
+    <div class="sliders-panel">
+      <div class="sliders-panel-title">Simulate Your Monthly Earning Potential</div>
+      <div class="sliders-panel-desc">Drag the sliders to adjust your estimated monthly spending in each category.</div>
+      
+      <div class="slider-grid" id="slidersContainer">
+        <!-- Dynamically generated sliders -->
+      </div>
+    </div>
+
+    <!-- Phase 2: CSV Uploader Container -->
+    <div class="reality-check-panel">
+      <div class="rc-title">Verify with Real Spend</div>
+      <div class="rc-copy">
+        Real spending is irregular and unpredictable. Drag and drop a CSV or JSON file of last year's transactions below. We will calculate which card wins for you completely privately inside your browser.
+        <div style="font-size: 12px; color: #6b7280; margin-top: 8px; font-weight: 500;">
+          1 month of transactions required for the analysis to run. At least 6 months of transactions recommended for accuracy.
+        </div>
+      </div>
+      
+      <div id="uploadErrorBanner" class="results-disclaimer hidden" style="background:#fef2f2; border:1px solid #fee2e2; color:#991b1b; margin-bottom: 20px;"></div>
+      
+      <label class="dropzone" id="dropzone">
+        <input type="file" id="fileInput" accept=".csv,.json">
+        <div class="dropzone-txt">Select or drop a credit card statement CSV or JSON file</div>
+        <div class="dropzone-sub">Works with standard transaction CSVs or JSON files exported from the Tracker.</div>
+      </label>
+
+      <!-- Disclaimer Block (Estimate Only prominent warning) -->
+      <div class="results-disclaimer">
+        <strong>Estimate Only:</strong> This sandboxed calculator uses automated keyword matching. In real life, transaction routing is highly customized. To set custom merchant mapping rules, reclassify individual transactions, import multi-year statement logs, and track your whole credit card portfolio, use the <a href="app-pro.html" target="_blank">Full Credit Card Value Tracker dashboard</a>.
+      </div>
+
+      <!-- CSV Column Mapping Dialog -->
+      <div class="mapping-dialog hidden" id="csvMappingContainer">
+        <!-- Structured Mapping Form -->
+      </div>
+
+      <!-- Real CSV Statement Results -->
+      <div class="results-card hidden" id="csvResultsPanel">
+        <div id="projectionWarningNote" class="results-disclaimer hidden" style="background: #fffbeb; border: 1px solid #fef3c7; color: #b45309; margin-bottom: 20px;"></div>
+        <div class="winner-banner" id="csvWinnerBanner">Chase Sapphire Reserve Wins!</div>
+        
+        <table class="results-table">
+          <thead>
+            <tr>
+              <th>ROI Metric (Actual Transactions)</th>
+              <th id="tblChaseCol">Chase Sapphire Reserve</th>
+              <th id="tblAmexCol">Amex Platinum</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="bold">Total Classified Spend</td>
+              <td class="mono" id="resChaseSpend">$0.00</td>
+              <td class="mono" id="resAmexSpend">$0.00</td>
+            </tr>
+            <tr>
+              <td class="bold">Points Earned</td>
+              <td id="resChasePoints">0 pts</td>
+              <td id="resAmexPoints">0 pts</td>
+            </tr>
+            <tr>
+              <td class="bold">Points Cash Valuation</td>
+              <td class="mono" id="resChasePointsValue">$0.00</td>
+              <td class="mono" id="resAmexPointsValue">$0.00</td>
+            </tr>
+            <tr>
+              <td class="bold">Statement Credits Used (Auto-Detected)</td>
+              <td class="mono" id="resChaseCredits">$0.00</td>
+              <td class="mono" id="resAmexCredits">$0.00</td>
+            </tr>
+            <tr>
+              <td class="bold">Annual Fee Assessed</td>
+              <td class="mono" style="color:#b91c1c;" id="resChaseFee">$0.00</td>
+              <td class="mono" style="color:#b91c1c;" id="resAmexFee">$0.00</td>
+            </tr>
+            <tr style="background: #fafaf9; font-size:14px;">
+              <td class="bold">Actual Net ROI Value</td>
+              <td class="bold mono" id="resChaseRoi">$0.00</td>
+              <td class="bold mono" id="resAmexRoi">$0.00</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Phase 3: Tie Breakers (Corrected CSR Rewards and Nuanced Perks comparison) -->
+    <div class="tiebreakers-panel">
+      <div class="tb-title">Tie Breakers</div>
+      <div class="tb-desc">Still unsure? consider the following tie breakers.</div>
+      
+      <div class="tb-grid">
+        
+        <!-- CSR travel credit flexibility -->
+        <div class="tb-card">
+          <div class="tb-card-title">Perk Value and Friction Comparison</div>
+          <div class="tb-card-desc">
+            The Chase Sapphire Reserve includes a highly flexible $300 Travel Credit that automatically offsets against broad daily commutes, flights, direct hotel stays, tolls, and parking. Its organic value is practically 100% on day one of travel.
+            <br><br>
+            Amex Platinum counters with a mathematically superior theoretical credit pool of nearly $3,000. However, these credits are highly fragmented: a $600 Hotel Credit restricted to FHR/HC prepaid portal bookings, a $200 Airline Incidental Credit that excludes actual airfares, and monthly/quarterly distributions (Uber Cash, Resy, Digital Entertainment). Capturing Amex's value requires conforming your spending habits to rigid, non-accumulating monthly and quarterly silos, whereas Chase's offsets are friction-free.
+          </div>
+        </div>
+
+        <!-- Earning break-evens -->
+        <div class="tb-card">
+          <div class="tb-card-title">Earning Threshold Break-Even</div>
+          <div class="tb-card-desc">
+            Under Chase's active card rules, the Sapphire Reserve has discontinued bonuses on generic travel (tolls, parking, subways, and car rentals now yield a baseline 1x). Multipliers are strictly focused on direct flights (4x), direct hotels (4x), Chase Travel portal bookings (8x), and dining (3x).
+            <br><br>
+            Amex Platinum remains highly specialized: it earns 5x on flights (booked directly or via portal) and 5x on prepaid hotels booked through Amex Travel. Direct hotel bookings earn only 1x.
+            <br><br>
+            The decision often boils down to whether you prefer "frictionless" points on dining and hotel stays (Chase) vs. maximizing high-spend airfare or portal-booking rewards (Amex).
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Load dependencies (register into window.CardTracker) -->
+  <script src="merchants.js"></script>
+  <script src="classification.js"></script>
+  <script src="csv-parser.js"></script>
+  <script src="cards/amex-platinum.js"></script>
+  <script src="cards/chase-sapphire-reserve.js"></script>
+
+  <!-- Sandbox Controller Logic -->
+  <script>
+    // Initialize sandboxed state
+    window.state = {
+      merchantRules: {},
+      confirmedTransactions: {},
+      merchantCache: {},
+      creditOverrides: {},
+      disabledCredits: {},
+      detectedAnnualFees: {},
+      cardMappings: {},
+      columnMappings: {},
+      pendingCSVData: null
+    };
+
+    // Bind shortcuts used in internal modules
+    window.CARDS = window.CardTracker.cards;
+    window.KNOWN_MERCHANTS = window.CardTracker.merchants;
+
+    // Define simple string normalizer and HTML escape helpers
+    function normalize(str) {
+      return (str || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+    }
+    function escapeHtml(str) {
+      return (str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+    function extractLast4(account) {
+      const match = (account || '').match(/\(?\.{0,3}(\d{4})\)?\s*$/);
+      return match ? match[1] : null;
+    }
+    // Mocks for standard app storage calls
+    function safeLocalStorageSet() {}
+    function generateSourceFormatHash() { return 'sandbox_format'; }
+    function generateTransactionId() { return Math.random().toString(36).substring(2, 11); }
+    function shouldSkipByAccountType() { return false; }
+
+    // Spending categories - Templates of active multiplier categories
+    const spendingCategories = [
+      { id: 'dining', name: 'Dining & Restaurants', desc: 'Restaurants, cafes, bars, and delivery (CSR: 3x, Amex: 1x)', defaultSpend: 500, maxSpend: 3000 },
+      { id: 'flights-direct', name: 'Flights (Direct)', desc: 'Flights booked directly with airlines (CSR: 4x, Amex: 5x)', defaultSpend: 200, maxSpend: 2000 },
+      { id: 'hotels-direct', name: 'Hotels (Direct)', desc: 'Hotels booked directly with hotels (CSR: 4x, Amex: 1x)', defaultSpend: 150, maxSpend: 2000 },
+      { id: 'portal-travel', name: 'Portal Travel (Amex/Chase)', desc: 'Bookings via Chase Travel (CSR: 8x) / Amex Travel (Amex: 5x flights & prepaid hotels)', defaultSpend: 100, maxSpend: 2000 },
+      { id: 'lyft', name: 'Lyft', desc: 'Ridesharing with Lyft. CSR 5x multiplier is valid until Sept. 30, 2027.', defaultSpend: 50, maxSpend: 500 },
+      { id: 'other', name: 'Everything Else', desc: 'Shopping, utilities, and general uncategorized spend (CSR: 1x, Amex: 1x)', defaultSpend: 1000, maxSpend: 5000 }
+    ];
+
+    const amexId = 'amex-platinum';
+    const chaseId = 'chase-sapphire-reserve';
+
+    const currentSpends = {};
+    const checkedPerks = {
+      [chaseId]: new Set(),
+      [amexId]: new Set()
+    };
+
+    const amexCard = window.CardTracker.cards[amexId];
+    const chaseCard = window.CardTracker.cards[chaseId];
+
+    // Local getMultiplier implementation (replicating app-core.js pluggable hooks)
+    function getMultiplier(cardId, category, txnDate = null, merchantDesc = '') {
+      const card = window.CardTracker.cards[cardId];
+      if (!card) return { rate: 1, reason: 'Unknown card' };
+
+      // Execute actual card definition's pluggable hook
+      if (typeof card.getMultiplier === 'function') {
+        const ctx = {
+          CATEGORY_HIERARCHY: window.CardTracker.classification.CATEGORY_HIERARCHY,
+          getEffectiveCategory: window.CardTracker.classification.getEffectiveCategory
+        };
+        const result = card.getMultiplier(category, txnDate, merchantDesc, ctx);
+        if (result != null) return result;
+      }
+
+      // Roll up categories using the standard classification hierarchy
+      const cardCategory = window.CardTracker.classification.getEffectiveCategory(category, cardId);
+      const mult = card.multipliers[cardCategory];
+      return { rate: mult || card.baseRate || 1, reason: mult ? `${mult}x ${cardCategory}` : '1x base' };
+    }
+
+    // Dynamic Card Credit Detection matching app-core.js keywords
+    function detectCredit(merchant, originalStatement, cardId) {
+      const card = window.CardTracker.cards[cardId];
+      if (!card || !card.credits) return null;
+
+      const upper = ((merchant || '') + ' ' + (originalStatement || '')).toUpperCase();
+      const excludeKeywords = ['PAYMENT', 'THANK YOU', 'AUTOMATIC PAYMENT', 'CREDIT CARD PAYMENT', 'TRANSFER',
+                               'LAST STATEMENT BAL', 'STATEMENT BALANCE', 'PREVIOUS BALANCE'];
+      if (excludeKeywords.some(kw => upper.includes(kw))) return null;
+
+      const hasCredit = upper.includes('CREDIT') && !upper.includes('CREDIT CARD');
+      for (const credit of card.credits) {
+        if (credit.manual || !credit.keywords || credit.keywords.length === 0) continue;
+        for (const kw of credit.keywords) {
+          if (upper.includes(kw)) {
+            if (!hasCredit) continue;
+            return credit.name;
+          }
+        }
+      }
+      return null;
+    }
+
+    // Toggle All Credits helper
+    window.toggleAllCredits = function(cardId, checkAll) {
+      const card = window.CardTracker.cards[cardId];
+      if (!card || !card.credits) return;
+
+      const checkboxes = document.querySelectorAll(`input[data-card="${cardId}"]`);
+      checkboxes.forEach(cb => {
+        cb.checked = checkAll;
+        const name = cb.dataset.name;
+        if (checkAll) {
+          checkedPerks[cardId].add(name);
+        } else {
+          checkedPerks[cardId].delete(name);
+        }
+      });
+      calculateROI();
+    };
+
+    // Populate Dynamic Checklist UI
+    function buildChecklists() {
+      // Amex Checklist
+      const amexContainer = document.getElementById('amexPerksContainer');
+      amexContainer.innerHTML = '';
+      amexCard.credits.forEach((credit) => {
+        const isEnded = credit.endDate && new Date() > new Date(credit.endDate);
+        if (isEnded) return;
+
+        // Default value: mark auto-detected or monthly distributions as claimed by default
+        const defaultValue = !credit.manual;
+        if (defaultValue) checkedPerks[amexId].add(credit.name);
+
+        const freqStr = (credit.frequency && credit.frequency.toLowerCase() !== 'none') ? ' (' + credit.frequency + ')' : '';
+
+        const div = document.createElement('label');
+        div.className = 'perk-item';
+        div.innerHTML = `
+          <input type="checkbox" data-card="${amexId}" data-name="${credit.name}" data-amount="${credit.amount}" ${defaultValue ? 'checked' : ''}>
+          <div class="perk-info">
+            <span class="perk-name">${credit.name}${freqStr}</span>
+            <span class="perk-amount">+$${credit.amount.toFixed(0)}</span>
+          </div>
+        `;
+        amexContainer.appendChild(div);
+      });
+
+      // Chase Checklist
+      const chaseContainer = document.getElementById('chasePerksContainer');
+      chaseContainer.innerHTML = '';
+      chaseCard.credits.forEach((credit) => {
+        const defaultValue = credit.name === 'Travel Credit' || !credit.manual;
+        if (defaultValue) checkedPerks[chaseId].add(credit.name);
+
+        const freqStr = (credit.frequency && credit.frequency.toLowerCase() !== 'none') ? ' (' + credit.frequency + ')' : '';
+
+        const div = document.createElement('label');
+        div.className = 'perk-item';
+        div.innerHTML = `
+          <input type="checkbox" data-card="${chaseId}" data-name="${credit.name}" data-amount="${credit.amount}" ${defaultValue ? 'checked' : ''}>
+          <div class="perk-info">
+            <span class="perk-name">${credit.name}${freqStr}</span>
+            <span class="perk-amount">+$${credit.amount.toFixed(0)}</span>
+          </div>
+        `;
+        chaseContainer.appendChild(div);
+      });
+
+      // Attach checkmark event listeners
+      document.querySelectorAll('.perks-list input').forEach(input => {
+        input.addEventListener('change', (e) => {
+          const cardId = e.target.dataset.card;
+          const name = e.target.dataset.name;
+          if (e.target.checked) {
+            checkedPerks[cardId].add(name);
+          } else {
+            checkedPerks[cardId].delete(name);
+          }
+          calculateROI();
+        });
+      });
+    }
+
+    // Build Earning Sliders
+    function buildSliders() {
+      const container = document.getElementById('slidersContainer');
+      container.innerHTML = '';
+      spendingCategories.forEach(cat => {
+        currentSpends[cat.id] = cat.defaultSpend;
+        const div = document.createElement('div');
+        div.className = 'slider-container';
+        div.innerHTML = `
+          <div class="slider-header">
+            <span class="slider-label"><strong>${cat.name}</strong></span>
+            <span style="color: #2563eb; font-weight: 600; font-family: 'Fira Code', monospace; display: flex; align-items: center;">
+              $
+              <input type="number" class="slider-value-input" id="input_${cat.id}" value="${cat.defaultSpend}" min="0" style="font-family: 'Fira Code', monospace; font-weight: 600; color: #2563eb; border: none; background: transparent; text-align: right; width: 60px; font-size: 14px; outline: none; border-bottom: 1px dashed #cbd5e1; padding: 0; margin-left: 2px;">
+            </span>
+          </div>
+          <div class="slider-subnote">${cat.desc}</div>
+          <input type="range" class="slider-input slider-calc" id="slide_${cat.id}" min="0" max="${cat.maxSpend}" step="50" value="${cat.defaultSpend}">
+        `;
+        container.appendChild(div);
+      });
+
+      // Bind slider input events
+      document.querySelectorAll('.slider-calc').forEach(slider => {
+        slider.addEventListener('input', (e) => {
+          const catId = e.target.id.replace('slide_', '');
+          const val = parseFloat(e.target.value) || 0;
+          currentSpends[catId] = val;
+          document.getElementById('input_' + catId).value = val;
+          calculateROI();
+        });
+      });
+
+      // Bind text input events for manual editing
+      document.querySelectorAll('.slider-value-input').forEach(input => {
+        input.addEventListener('input', (e) => {
+          const catId = e.target.id.replace('input_', '');
+          const val = parseFloat(e.target.value) || 0;
+          currentSpends[catId] = val;
+          
+          const slider = document.getElementById('slide_' + catId);
+          if (slider) {
+            const max = parseFloat(slider.max);
+            slider.value = Math.min(val, max);
+          }
+          calculateROI();
+        });
+      });
+    }
+
+    // Mathematical ROI Calculation Engine (Phase 1 Sliders Math)
+    function calculateROI() {
+      const chaseValuation = parseFloat(document.getElementById('chasePointValue').value || 1.8) / 100;
+      const amexValuation = parseFloat(document.getElementById('amexPointValue').value || 1.6) / 100;
+
+      const chaseFee = chaseCard.annualFee;
+      const amexFee = amexCard.annualFee;
+
+      // 1. Chase Earning Calculations
+      let chasePointsAnnual = 0;
+      let chaseSpendAnnual = 0;
+      for (const [catId, monthlySpend] of Object.entries(currentSpends)) {
+        const annualSpend = monthlySpend * 12;
+        chaseSpendAnnual += annualSpend;
+
+        let calcCategory = catId;
+        let merchantStr = '';
+        if (catId === 'portal-travel') {
+          calcCategory = 'chase-travel';
+        }
+        
+        const mult = getMultiplier(chaseId, calcCategory, null, merchantStr).rate;
+        chasePointsAnnual += annualSpend * mult;
+      }
+      const chasePointsValue = chasePointsAnnual * chaseValuation;
+
+      // 2. Amex Earning Calculations
+      let amexPointsAnnual = 0;
+      let amexSpendAnnual = 0;
+      for (const [catId, monthlySpend] of Object.entries(currentSpends)) {
+        const annualSpend = monthlySpend * 12;
+        amexSpendAnnual += annualSpend;
+
+        let calcCategory = catId;
+        let merchantStr = '';
+        if (catId === 'portal-travel') {
+          calcCategory = 'amex-travel';
+          merchantStr = 'amextravel prepaid hotel';
+        } else if (catId === 'flights-direct') {
+          calcCategory = 'flights-direct';
+        }
+
+        const mult = getMultiplier(amexId, calcCategory, null, merchantStr).rate;
+        amexPointsAnnual += annualSpend * mult;
+      }
+      const amexPointsValue = amexPointsAnnual * amexValuation;
+
+      // 3. Sum Checked perks
+      let chaseCreditsTotal = 0;
+      chaseCard.credits.forEach(credit => {
+        if (checkedPerks[chaseId].has(credit.name)) {
+          chaseCreditsTotal += credit.amount;
+        }
+      });
+      document.getElementById('chaseCreditsSum').textContent = '+$' + chaseCreditsTotal.toFixed(0);
+
+      let amexCreditsTotal = 0;
+      amexCard.credits.forEach(credit => {
+        if (checkedPerks[amexId].has(credit.name)) {
+          amexCreditsTotal += credit.amount;
+        }
+      });
+      document.getElementById('amexCreditsSum').textContent = '+$' + amexCreditsTotal.toFixed(0);
+
+      // 4. Net ROI Outcomes
+      const chaseNetROI = chasePointsValue + chaseCreditsTotal - chaseFee;
+      const amexNetROI = amexPointsValue + amexCreditsTotal - amexFee;
+
+      // Update Panel Elements
+      document.getElementById('chaseRoiDisplay').textContent = (chaseNetROI >= 0 ? '+$' : '-$') + Math.abs(chaseNetROI).toFixed(2);
+      document.getElementById('chaseRoiDisplay').className = 'roi-value ' + (chaseNetROI >= 0 ? 'positive' : 'negative');
+      document.getElementById('chasePointsVal').textContent = '$' + Math.abs(chasePointsValue).toFixed(0);
+      document.getElementById('chaseCreditsVal').textContent = '$' + chaseCreditsTotal.toFixed(0);
+      document.getElementById('chaseFeeVal').textContent = '-$' + chaseFee.toFixed(0);
+
+      document.getElementById('amexRoiDisplay').textContent = (amexNetROI >= 0 ? '+$' : '-$') + Math.abs(amexNetROI).toFixed(2);
+      document.getElementById('amexRoiDisplay').className = 'roi-value ' + (amexNetROI >= 0 ? 'positive' : 'negative');
+      document.getElementById('amexPointsVal').textContent = '$' + Math.abs(amexPointsValue).toFixed(0);
+      document.getElementById('amexCreditsVal').textContent = '$' + amexCreditsTotal.toFixed(0);
+      document.getElementById('amexFeeVal').textContent = '-$' + amexFee.toFixed(0);
+
+      // Sync real spend statement results dynamically if loaded
+      if (window.state.parsedTransactions) {
+        executeCalculationsOnParsedTransactions(window.state.parsedTransactions, false);
+      }
+    }
+
+    // Phase 2: Drag & Drop Listener for CSV and JSON
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.classList.add('dragover');
+    });
+
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.classList.remove('dragover');
+    });
+
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        handleFile(files[0]);
+      }
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        handleFile(e.target.files[0]);
+      }
+    });
+
+    function handleFile(file) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const text = e.target.result;
+        if (file.name.toLowerCase().endsWith('.json')) {
+          handleJSONFile(text);
+        } else {
+          try {
+            processCSVStatement(text);
+          } catch (err) {
+            console.error(err);
+            alert('Error parsing CSV file. Please make sure it is a valid transaction statement export.');
+          }
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function handleJSONFile(jsonText) {
+      try {
+        const parsed = JSON.parse(jsonText);
+        let rawTxns = [];
+        
+        if (parsed.processedTransactions && Array.isArray(parsed.processedTransactions)) {
+          rawTxns = parsed.processedTransactions;
+        } else if (parsed.transactions && Array.isArray(parsed.transactions)) {
+          rawTxns = parsed.transactions;
+        } else if (Array.isArray(parsed)) {
+          rawTxns = parsed;
+        } else {
+          alert('Could not find any transaction list in the uploaded JSON.');
+          return;
+        }
+        
+        const parsedTxns = [];
+        rawTxns.forEach(t => {
+          const merchant = t.merchant || t.description || t.payee || '';
+          const original = t.original || t.originalDescription || '';
+          const amount = parseFloat(t.amount) || 0;
+          const date = t.date || '';
+          const subcategory = t.subcategory || t.subCategory || '';
+          const category = t.category || '';
+          
+          const combinedText = normalize(merchant) + ' ' + normalize(original);
+          const skipPatterns = window.CardTracker.classification.SPECIFIC_CATEGORY_KEYWORDS['skip'] || [];
+          let isSkip = false;
+          for (const pattern of skipPatterns) {
+            if (combinedText.includes(pattern)) {
+              isSkip = true;
+              break;
+            }
+          }
+          if (isSkip) return;
+          
+          parsedTxns.push({
+            date,
+            merchant,
+            category,
+            subcategory,
+            original,
+            amount
+          });
+        });
+        
+        const nonZero = parsedTxns.filter(t => t.amount !== 0);
+        if (nonZero.length > 0) {
+          const positiveCount = nonZero.filter(t => t.amount > 0).length;
+          if (positiveCount / nonZero.length > 0.6) {
+            parsedTxns.forEach(t => t.amount = t.amount * -1);
+          }
+        }
+        
+        executeCalculationsOnParsedTransactions(parsedTxns, true);
+      } catch (err) {
+        console.error(err);
+        alert('Error parsing JSON file. Please make sure it is a valid Tracker export JSON.');
+      }
+    }
+
+    // Column Mapping dynamic detection for dropped statements
+    function processCSVStatement(csvText) {
+      const parser = window.CardTracker.csvParser;
+      const lines = parser.splitCSVLines(csvText);
+      if (lines.length < 1) {
+        alert('CSV statement is empty.');
+        return;
+      }
+
+      const firstRowFields = parser.parseCSVLine(lines[0]);
+      const isHeaderless = parser.isDataRow(firstRowFields);
+      
+      let headers;
+      if (isHeaderless) {
+        headers = firstRowFields.map((_, i) => `Column ${i + 1}`);
+      } else {
+        headers = firstRowFields;
+      }
+
+      const previewRows = lines.slice(1, 6).map(l => parser.parseCSVLine(l));
+      const detected = parser.detectCSVFormat(headers, previewRows);
+      const mapping = detected.mapping;
+
+      const required = ['date', 'merchant', 'amount'];
+      const missing = required.filter(f => !mapping[f]);
+
+      if (missing.length > 0) {
+        showInlineMappingDialog(headers, previewRows, mapping, csvText);
+      } else {
+        executeCalculationsOnMappedCSV(mapping, headers, lines, isHeaderless, csvText);
+      }
+    }
+
+    // Render streamlined mapping dropdowns when auto-detect falls short
+    function showInlineMappingDialog(headers, previewRows, mapping, csvText) {
+      const container = document.getElementById('csvMappingContainer');
+      container.classList.remove('hidden');
+      
+      let tableHtml = `
+        <div class="mapping-dialog-title">Select CSV Column Mapping</div>
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">We couldn't fully map your columns automatically. Please tell us which column matches which field:</p>
+        <table style="width:100%;font-size:12px;margin-bottom:12px;">
+          <thead>
+            <tr>
+              ${headers.map((h, idx) => `
+                <th style="padding:6px;border-bottom:1px solid #cbd5e1;text-align:left;">
+                  <select class="map-sel" data-index="${idx}" style="font-size:11px;padding:4px;">
+                    <option value="">— Skip —</option>
+                    <option value="date" ${h.toLowerCase().includes('date') ? 'selected' : ''}>Date</option>
+                    <option value="merchant" ${h.toLowerCase().includes('desc') || h.toLowerCase().includes('merchant') || h.toLowerCase().includes('payee') ? 'selected' : ''}>Merchant</option>
+                    <option value="amount" ${h.toLowerCase().includes('amount') || h.toLowerCase().includes('charge') || h.toLowerCase().includes('debit') ? 'selected' : ''}>Amount</option>
+                    <option value="category" ${h.toLowerCase().includes('cat') ? 'selected' : ''}>Category</option>
+                  </select>
+                  <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">"${escapeHtml(h)}"</div>
+                </th>
+              `).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              ${headers.map((_, i) => `
+                <td style="padding:6px;border-bottom:1px solid #e2e8f0;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                  ${previewRows[0] && previewRows[0][i] ? escapeHtml(previewRows[0][i]) : ''}
+                </td>
+              `).join('')}
+            </tr>
+          </tbody>
+        </table>
+        <button id="btnConfirmMapping" style="padding:8px 16px;background:#1c1917;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">Process Statement</button>
+      `;
+
+      container.innerHTML = tableHtml;
+
+      document.getElementById('btnConfirmMapping').addEventListener('click', () => {
+        const selectElements = container.querySelectorAll('.map-sel');
+        const customMapping = {};
+        selectElements.forEach(sel => {
+          const val = sel.value;
+          const idx = parseInt(sel.dataset.index);
+          if (val) {
+            customMapping[val] = headers[idx];
+          }
+        });
+
+        if (!customMapping.date || !customMapping.merchant || !customMapping.amount) {
+          alert('Please select mapping for Date, Merchant, and Amount.');
+          return;
+        }
+
+        container.classList.add('hidden');
+        const parser = window.CardTracker.csvParser;
+        const lines = parser.splitCSVLines(csvText);
+        const isHeaderless = parser.isDataRow(lines[0].split(','));
+        executeCalculationsOnMappedCSV(customMapping, headers, lines, isHeaderless, csvText);
+      });
+    }
+
+    // Execute Point rollups, statement credit matches, and Net ROI comparison
+    function executeCalculationsOnMappedCSV(mapping, headers, lines, isHeaderless, csvText) {
+      const parser = window.CardTracker.csvParser;
+      
+      const colIndices = {};
+      headers.forEach((h, idx) => {
+        const normH = h.toLowerCase().trim();
+        for (const [field, mappedHeader] of Object.entries(mapping)) {
+          if (mappedHeader && normH === mappedHeader.toLowerCase().trim()) {
+            colIndices[field] = idx;
+          }
+        }
+      });
+
+      const dataRows = isHeaderless ? lines : lines.slice(1);
+      const parsedTxns = [];
+
+      dataRows.forEach(line => {
+        if (!line.trim()) return;
+        const fields = parser.parseCSVLine(line);
+
+        const date = fields[colIndices.date] || '';
+        const merchant = fields[colIndices.merchant] || '';
+        const category = colIndices.category !== undefined ? (fields[colIndices.category] || '') : '';
+        const original = colIndices.original !== undefined ? (fields[colIndices.original] || '') : '';
+        const amount = parseFloat((fields[colIndices.amount] || '0').replace(/[$,]/g, '')) || 0;
+
+        const combinedText = normalize(merchant) + ' ' + normalize(original);
+        const skipPatterns = window.CardTracker.classification.SPECIFIC_CATEGORY_KEYWORDS['skip'] || [];
+        let isSkip = false;
+        for (const pattern of skipPatterns) {
+          if (combinedText.includes(pattern)) {
+            isSkip = true;
+            break;
+          }
+        }
+        if (isSkip) return;
+
+        parsedTxns.push({ date, merchant, category, original, amount });
+      });
+
+      const nonZero = parsedTxns.filter(t => t.amount !== 0);
+      if (nonZero.length > 0) {
+        const positiveCount = nonZero.filter(t => t.amount > 0).length;
+        if (positiveCount / nonZero.length > 0.6) {
+          parsedTxns.forEach(t => t.amount = t.amount * -1);
+        }
+      }
+
+      executeCalculationsOnParsedTransactions(parsedTxns, true);
+    }
+
+    function executeCalculationsOnParsedTransactions(parsedTxns, shouldScroll = true) {
+      // Save parsed transactions to state so we can re-evaluate on any input updates!
+      window.state.parsedTransactions = parsedTxns;
+
+      // Hide / reset banners
+      document.getElementById('uploadErrorBanner').classList.add('hidden');
+      document.getElementById('uploadErrorBanner').textContent = '';
+
+      const dates = parsedTxns.map(t => new Date(t.date)).filter(d => !isNaN(d.getTime()));
+      let daysSpan = 0;
+      if (dates.length > 1) {
+        const minDate = Math.min.apply(null, dates);
+        const maxDate = Math.max.apply(null, dates);
+        daysSpan = Math.round((maxDate - minDate) / (1000 * 60 * 60 * 24));
+      }
+
+      if (daysSpan < 30) {
+        document.getElementById('uploadErrorBanner').innerHTML = `<strong>Analysis Cannot Run:</strong> The uploaded transactions only span <strong>${daysSpan} days</strong>. We require at least <strong>30 days</strong> of statement data to project annual spending. Please upload a statement file covering a longer duration.`;
+        document.getElementById('uploadErrorBanner').classList.remove('hidden');
+        document.getElementById('csvResultsPanel').classList.add('hidden');
+        return;
+      }
+
+      const annualizationFactor = 365 / daysSpan;
+
+      const projNote = document.getElementById('projectionWarningNote');
+      projNote.classList.add('hidden');
+      if (daysSpan < 180) {
+        projNote.innerHTML = `<strong>Annualized Projection:</strong> We detected <strong>${daysSpan} days</strong> of transaction data and have projected these earnings to a full 365-day year. <strong>We recommend uploading at least 6 months (180 days)</strong> of history for a more stable and accurate projection.`;
+        projNote.classList.remove('hidden');
+      } else if (daysSpan < 365) {
+        projNote.innerHTML = `<strong>Annualized Projection:</strong> We detected <strong>${daysSpan} days</strong> of transaction data and have projected these earnings to a full 365-day year. Strong historical coverage.`;
+        projNote.classList.remove('hidden');
+      } else {
+        projNote.innerHTML = `<strong>Annualized Average:</strong> We detected <strong>${daysSpan} days</strong> of transaction data and have scaled the average to a standard 12-month year. Excellent spending history coverage.`;
+        projNote.classList.remove('hidden');
+      }
+
+      const chaseValuation = parseFloat(document.getElementById('chasePointValue').value || 1.8) / 100;
+      const amexValuation = parseFloat(document.getElementById('amexPointValue').value || 1.6) / 100;
+
+      let chaseTotalSpend = 0;
+      let amexTotalSpend = 0;
+
+      let chasePoints = 0;
+      let amexPoints = 0;
+
+      const chaseDetectedCredits = new Set();
+      let chaseCreditsAmt = 0;
+
+      const amexDetectedCredits = new Set();
+      let amexCreditsAmt = 0;
+
+      parsedTxns.forEach(txn => {
+        const isCredit = txn.amount > 0;
+        const absAmount = Math.abs(txn.amount);
+
+        // Chase Sapphire Reserve Analysis
+        if (!isCredit) {
+          chaseTotalSpend += absAmount;
+          let sub = txn.subcategory;
+          if (!sub || sub === 'other') {
+            const cls = window.CardTracker.classification.classifyMerchant(txn.merchant, txn.category, chaseId, txn.original);
+            sub = cls.subcategory || 'other';
+          }
+          const cardCategory = window.CardTracker.classification.getEffectiveCategory(sub, chaseId);
+          const mult = getMultiplier(chaseId, cardCategory, txn.date, txn.merchant).rate;
+          chasePoints += absAmount * mult;
+        } else {
+          const creditName = detectCredit(txn.merchant, txn.original, chaseId);
+          if (creditName && creditName !== 'Statement Credit' && creditName !== 'Rewards Redemption') {
+            const creditObj = chaseCard.credits.find(c => c.name === creditName);
+            if (creditObj && !chaseDetectedCredits.has(creditName)) {
+              chaseCreditsAmt += creditObj.amount;
+              chaseDetectedCredits.add(creditName);
+            }
+          }
+        }
+
+        // Amex Platinum Analysis
+        if (!isCredit) {
+          amexTotalSpend += absAmount;
+          let sub = txn.subcategory;
+          if (!sub || sub === 'other') {
+            const cls = window.CardTracker.classification.classifyMerchant(txn.merchant, txn.category, amexId, txn.original);
+            sub = cls.subcategory || 'other';
+          }
+          const cardCategory = window.CardTracker.classification.getEffectiveCategory(sub, amexId);
+          
+          let merchantStr = txn.merchant;
+          if (sub === 'amex-travel') {
+            merchantStr = 'amextravel prepaid hotel';
+          }
+          const mult = getMultiplier(amexId, cardCategory, txn.date, merchantStr).rate;
+          amexPoints += absAmount * mult;
+        } else {
+          const creditName = detectCredit(txn.merchant, txn.original, amexId);
+          if (creditName && creditName !== 'Statement Credit' && creditName !== 'Rewards Redemption') {
+            const creditObj = amexCard.credits.find(c => c.name === creditName);
+            if (creditObj && !amexDetectedCredits.has(creditName)) {
+              amexCreditsAmt += creditObj.amount;
+              amexDetectedCredits.add(creditName);
+            }
+          }
+        }
+      });
+
+      // Annualize points and spend averages dynamically!
+      chaseTotalSpend = chaseTotalSpend * annualizationFactor;
+      amexTotalSpend = amexTotalSpend * annualizationFactor;
+      chasePoints = chasePoints * annualizationFactor;
+      amexPoints = amexPoints * annualizationFactor;
+
+      const chaseFee = chaseCard.annualFee;
+      const amexFee = amexCard.annualFee;
+
+      const chasePointsValue = chasePoints * chaseValuation;
+      const amexPointsValue = amexPoints * amexValuation;
+
+      const chaseROI = chasePointsValue + chaseCreditsAmt - chaseFee;
+      const amexROI = amexPointsValue + amexCreditsAmt - amexFee;
+
+      document.getElementById('csvResultsPanel').classList.remove('hidden');
+
+      document.getElementById('resChaseSpend').textContent = '$' + chaseTotalSpend.toFixed(2);
+      document.getElementById('resAmexSpend').textContent = '$' + amexTotalSpend.toFixed(2);
+
+      document.getElementById('resChasePoints').textContent = Math.round(chasePoints).toLocaleString() + ' pts';
+      document.getElementById('resAmexPoints').textContent = Math.round(amexPoints).toLocaleString() + ' pts';
+
+      document.getElementById('resChasePointsValue').textContent = '$' + chasePointsValue.toFixed(2);
+      document.getElementById('resAmexPointsValue').textContent = '$' + amexPointsValue.toFixed(2);
+
+      document.getElementById('resChaseCredits').textContent = '$' + chaseCreditsAmt.toFixed(2);
+      document.getElementById('resAmexCredits').textContent = '$' + amexCreditsAmt.toFixed(2);
+
+      document.getElementById('resChaseFee').textContent = '-$' + chaseFee.toFixed(2);
+      document.getElementById('resAmexFee').textContent = '-$' + amexFee.toFixed(2);
+
+      document.getElementById('resChaseRoi').textContent = (chaseROI >= 0 ? '+$' : '-$') + Math.abs(chaseROI).toFixed(2);
+      document.getElementById('resChaseRoi').className = 'bold mono ' + (chaseROI >= 0 ? 'positive' : 'negative');
+
+      document.getElementById('resAmexRoi').textContent = (amexROI >= 0 ? '+$' : '-$') + Math.abs(amexROI).toFixed(2);
+      document.getElementById('resAmexRoi').className = 'bold mono ' + (amexROI >= 0 ? 'positive' : 'negative');
+
+      const banner = document.getElementById('csvWinnerBanner');
+      if (chaseROI > amexROI) {
+        const diff = chaseROI - amexROI;
+        banner.textContent = `Based on your real spend, Chase Sapphire Reserve wins by $${diff.toFixed(2)} !`;
+        banner.style.background = '#dcfce7';
+        banner.style.color = '#15803d';
+        banner.style.borderColor = '#bbf7d0';
+      } else {
+        const diff = amexROI - chaseROI;
+        banner.textContent = `Based on your real spend, Amex Platinum wins by $${diff.toFixed(2)} !`;
+        banner.style.background = '#eff6ff';
+        banner.style.color = '#1e40af';
+        banner.style.borderColor = '#bfdbfe';
+      }
+
+      if (shouldScroll) {
+        document.getElementById('csvResultsPanel').scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+
+    // 3D Card Hover Effect
+    function initCardParallax(cardId) {
+      const cardEl = document.getElementById(cardId);
+      const parent = cardEl.parentElement;
+
+      parent.addEventListener('mousemove', (e) => {
+        const rect = parent.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        const xc = rect.width / 2;
+        const yc = rect.height / 2;
+        const tiltX = (yc - y) / 10;
+        const tiltY = (x - xc) / 10;
+
+        cardEl.style.transform = `rotateX(${tiltX}deg) rotateY(${tiltY}deg) scale(1.05)`;
+      });
+
+      parent.addEventListener('mouseleave', () => {
+        cardEl.style.transform = 'rotateX(0deg) rotateY(0deg) scale(1)';
+      });
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('chaseNameLabel').textContent = chaseCard.shortName || chaseCard.name;
+      document.getElementById('amexNameLabel').textContent = amexCard.shortName || amexCard.name;
+
+      buildChecklists();
+      buildSliders();
+      calculateROI();
+
+      document.getElementById('chasePointValue').addEventListener('input', calculateROI);
+      document.getElementById('amexPointValue').addEventListener('input', calculateROI);
+
+      initCardParallax('chaseCard3D');
+      initCardParallax('amexCard3D');
+    });
+  </script>
+</body>
+</html>

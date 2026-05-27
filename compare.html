@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Explore head-to-head credit card comparisons grounded in real-world spending math, custom valuations, and private browser-based data analysis. Find the true mathematical winner.">
+  <link rel="canonical" href="https://creditcardvaluetracker.com/compare.html">
+  <title>Compare Credit Cards: True Mathematical ROI Directory — Credit Card Value Tracker</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💳</text></svg>">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-main: #fafaf9;
+      --text-main: #1c1917;
+      --text-muted: #57534e;
+      --card-bg: #ffffff;
+      --border-color: #e7e5e4;
+      --border-hover: #d6d3d1;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
+      --shadow-md: 0 4px 20px rgba(0,0,0,0.04);
+      --accent-green: #059669;
+      
+      /* Card gradients */
+      --amex-grad: linear-gradient(135deg, #cbd5e1, #94a3b8, #64748b);
+      --chase-grad: linear-gradient(135deg, #1e3a8a, #1d4ed8, #0f172a);
+      --gold-grad: linear-gradient(135deg, #f59e0b, #d97706, #78350f);
+      --preferred-grad: linear-gradient(135deg, #3b82f6, #1d4ed8, #1e3a8a);
+      --c1-grad: linear-gradient(135deg, #0d9488, #0f766e, #115e59);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      line-height: 1.6;
+      padding-bottom: 64px;
+    }
+
+    /* Layout */
+    .container {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Nav — matches other pages */
+    .site-nav {
+      background: #ffffff;
+      padding: 16px 0;
+      border-bottom: 1px solid var(--border-color);
+      width: 100%;
+    }
+    .site-nav .nav-container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+    .site-nav-brand {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-main);
+      text-decoration: none;
+    }
+    .nav-link-text {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+    .nav-link-text:hover {
+      color: var(--text-main);
+    }
+    .nav-link-text.active {
+      color: var(--text-main);
+      font-weight: 600;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      padding: 8px 18px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      border: none;
+      font-family: inherit;
+      text-decoration: none;
+    }
+    .btn-primary {
+      background: var(--text-main);
+      color: #fff;
+    }
+    .btn-primary:hover {
+      background: #292524;
+    }
+
+    /* Hero Block */
+    .hero {
+      text-align: center;
+      padding: 64px 0 48px;
+    }
+    .hero h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 40px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, #1c1917 40%, #57534e);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .hero p {
+      font-size: 17px;
+      color: var(--text-muted);
+      max-width: 720px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+
+    /* Bento Grid Layout */
+    .bento-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      margin-bottom: 64px;
+    }
+
+    /* Base Card Style */
+    .bento-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 32px;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      text-decoration: none;
+      color: inherit;
+      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), 
+                  box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1), 
+                  border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .bento-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-md);
+      border-color: var(--border-hover);
+    }
+
+    /* Grid Spans */
+    .span-2 {
+      grid-column: span 2;
+    }
+
+    /* Card Contents */
+    .card-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .badge {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 3px 10px;
+      border-radius: 9999px;
+      border: 1px solid transparent;
+    }
+
+    .badge-primary {
+      background: #eff6ff;
+      color: #2563eb;
+      border-color: #dbeafe;
+    }
+
+    .badge-success {
+      background: #ecfdf5;
+      color: #059669;
+      border-color: #d1fae5;
+    }
+
+    .badge-warning {
+      background: #fffbeb;
+      color: #b45309;
+      border-color: #fef3c7;
+    }
+
+    .badge-neutral {
+      background: #f5f5f4;
+      color: #57534e;
+      border-color: #e7e5e4;
+    }
+
+    .card-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 10px;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .card-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+
+    /* Interactive Elements inside bento cards */
+    .visual-wrapper {
+      margin-bottom: 24px;
+      background: #fdfdfd;
+      border: 1px solid rgba(0,0,0,0.03);
+      border-radius: 12px;
+      padding: 24px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+    }
+
+    /* Small credit cards visuals inside cards */
+    .mini-card-container {
+      display: flex;
+      gap: 12px;
+      width: 100%;
+      justify-content: center;
+    }
+
+    .mini-card {
+      width: 140px;
+      height: 84px;
+      border-radius: 6px;
+      padding: 10px;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      position: relative;
+    }
+
+    .mini-card::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 60%);
+      border-radius: 6px;
+    }
+
+    .mini-card.amex-plat { background: var(--amex-grad); }
+    .mini-card.chase-csr { background: var(--chase-grad); }
+    .mini-card.amex-gold { background: var(--gold-grad); }
+    .mini-card.chase-csp { background: var(--preferred-grad); }
+    
+    .mini-card-logo {
+      font-size: 8px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .mini-card-chip {
+      width: 14px;
+      height: 10px;
+      background: #ca8a04;
+      border-radius: 2px;
+    }
+    .mini-card-network {
+      font-size: 8px;
+      text-align: right;
+    }
+
+    /* Uploader Visual */
+    .mini-uploader {
+      width: 100%;
+      border: 2px dashed var(--border-color);
+      border-radius: 8px;
+      padding: 16px;
+      text-align: center;
+      background: var(--bg-main);
+      transition: background-color 0.15s;
+    }
+    .mini-uploader-icon {
+      font-size: 20px;
+      margin-bottom: 4px;
+    }
+    .mini-uploader-text {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-main);
+    }
+    .mini-uploader-sub {
+      font-size: 9px;
+      color: #78716c;
+    }
+
+    /* Placeholder visuals */
+    .mini-card.placeholder-card {
+      background: transparent;
+      border: 1px dashed var(--border-color);
+      box-shadow: none;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .card-action {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-main);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: transform 0.15s;
+      margin-top: auto;
+    }
+
+    .bento-card:hover .card-action {
+      transform: translateX(4px);
+    }
+
+    /* Interactive Vote Box */
+    .vote-box {
+      width: 100%;
+    }
+    .vote-btn {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid var(--border-color);
+      background: var(--card-bg);
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-main);
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .vote-btn:hover {
+      background: var(--bg-main);
+      border-color: var(--border-hover);
+    }
+    .vote-btn.voted {
+      background: #ecfdf5;
+      color: #059669;
+      border-color: #a7f3d0;
+      cursor: default;
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border-color);
+      padding: 32px 0;
+      text-align: center;
+      margin-top: 48px;
+    }
+    .footer-note {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.7;
+      max-width: 520px;
+      margin: 0 auto;
+    }
+
+    /* Responsive */
+    @media (max-width: 900px) {
+      .bento-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 640px) {
+      .hero {
+        padding: 48px 0 32px;
+      }
+      .hero h1 {
+        font-size: 30px;
+      }
+      .hero p {
+        font-size: 15px;
+      }
+      .bento-grid {
+        grid-template-columns: 1fr;
+        gap: 20px;
+      }
+      .span-2 {
+        grid-column: span 1;
+      }
+      .bento-card {
+        padding: 24px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav class="site-nav">
+    <div class="nav-container">
+      <div class="nav-left">
+        <a href="index.html" class="site-nav-brand">Credit Card Value Tracker</a>
+        <a href="compare.html" class="nav-link-text active">Compare Cards</a>
+        <a href="insights.html" class="nav-link-text">Insights</a>
+      </div>
+      <a href="app-pro.html" class="btn btn-primary" data-umami-event="Go to Tracker" target="_blank" rel="noopener noreferrer">Go to Tracker</a>
+    </div>
+  </nav>
+
+  <main class="container">
+    
+    <!-- Hero Block -->
+    <header class="hero">
+      <h1>Compare Credit Cards: True Mathematical ROI Directory</h1>
+      <p>
+        Skip the generic credit card recommendations and influencer marketing hype. Explore head-to-head card comparisons grounded in real-world spending math, custom valuations, and completely private browser-based data analysis.
+      </p>
+    </header>
+
+    <!-- Bento Grid -->
+    <section class="bento-grid">
+      
+      <!-- Box 1: Amex Platinum vs Chase CSR (Flagship showdown - spans 2 cols) -->
+      <a href="amex-platinum-vs-chase-sapphire-reserve.html" class="bento-card span-2">
+        <div>
+          <div class="card-meta">
+            <span class="badge badge-success">Interactive Tool</span>
+            <span class="badge badge-neutral">Premium</span>
+          </div>
+          <h2 class="card-title">Amex Platinum vs. Chase Sapphire Reserve</h2>
+          <p class="card-desc">
+            The ultimate showdown between the two titans of premium travel rewards. Use our interactive slider engine to simulate your spending categories and customize your point valuations. Settle the organic fee credit debate once and for all.
+          </p>
+          
+          <div class="visual-wrapper">
+            <div class="mini-card-container">
+              <div class="mini-card amex-plat">
+                <div class="mini-card-logo">Platinum</div>
+                <div class="mini-card-chip"></div>
+                <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+                  <span style="font-size:6px; opacity:0.8;">AMEX</span>
+                  <span class="mini-card-network" style="font-size:6px; font-weight:600;">AMEX</span>
+                </div>
+              </div>
+              <div class="mini-card chase-csr">
+                <div class="mini-card-logo">Sapphire Reserve</div>
+                <div class="mini-card-chip"></div>
+                <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+                  <span style="font-size:6px; opacity:0.8;">CHASE</span>
+                  <span class="mini-card-network" style="font-size:6px; font-weight:600;">VISA INFINITE</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="card-action">
+          Open Calculator & Compare
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M6 12L10 8L6 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+      </a>
+
+      <!-- Box 2: Amex Gold vs Chase Sapphire Preferred (Mid-tier comparison - spans 1 col) -->
+      <div class="bento-card" style="cursor: default;">
+        <div>
+          <div class="card-meta">
+            <span class="badge badge-warning">Planned Tool</span>
+            <span class="badge badge-neutral">Mid-tier</span>
+          </div>
+          <h2 class="card-title">Amex Gold vs. Chase Sapphire Preferred</h2>
+          <p class="card-desc">
+            Which everyday champion yields a higher mathematical ROI on dining and groceries? We are planning a bespoke interactive slider and organic checklist simulator for this matchup.
+          </p>
+          
+          <div class="visual-wrapper">
+            <div class="mini-card-container">
+              <div class="mini-card amex-gold">
+                <div class="mini-card-logo">Gold</div>
+                <div class="mini-card-chip"></div>
+                <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+                  <span style="font-size:6px; opacity:0.8;">AMEX</span>
+                  <span class="mini-card-network" style="font-size:6px; font-weight:600;">AMEX</span>
+                </div>
+              </div>
+              <div class="mini-card chase-csp">
+                <div class="mini-card-logo">Sapphire Preferred</div>
+                <div class="mini-card-chip"></div>
+                <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+                  <span style="font-size:6px; opacity:0.8;">CHASE</span>
+                  <span class="mini-card-network" style="font-size:6px; font-weight:600;">VISA SIGNATURE</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="vote-box">
+          <button id="voteBtnGold" class="vote-btn" onclick="registerGoldVote()">
+            <span>🗳️</span> Vote for this calculator
+          </button>
+        </div>
+      </div>
+
+      <!-- Box 3: Private Spend Verification (Utility feature - spans 2 cols on row 2) -->
+      <a href="amex-platinum-vs-chase-sapphire-reserve.html#uploader" class="bento-card span-2">
+        <div>
+          <div class="card-meta">
+            <span class="badge badge-success">Browser Utility</span>
+            <span class="badge badge-neutral">Privacy-First</span>
+          </div>
+          <h2 class="card-title">Private Spend Verification</h2>
+          <p class="card-desc">
+            Real spending is irregular and unpredictable. Drag and drop a CSV or JSON file of your transaction history. We will calculate exactly which credit card wins for you, 100% privately inside your browser. No data is ever transmitted or uploaded.
+          </p>
+          
+          <div class="visual-wrapper">
+            <div class="mini-uploader">
+              <div class="mini-uploader-icon">📥</div>
+              <div class="mini-uploader-text">Drag & drop your statement file here</div>
+              <div class="mini-uploader-sub">Accepts CSV or JSON from common card issuers</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card-action">
+          Try Spend Verification
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M6 12L10 8L6 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+      </a>
+
+      <!-- Box 4: Venture X vs Chase Sapphire Reserve (Planned Tool - spans 1 col) -->
+      <div class="bento-card" style="cursor: default;">
+        <div>
+          <div class="card-meta">
+            <span class="badge badge-warning">Planned Tool</span>
+            <span class="badge badge-neutral">Premium</span>
+          </div>
+          <h2 class="card-title">Venture X vs. Sapphire Reserve</h2>
+          <p class="card-desc">
+            Capital One's popular disruptor goes head-to-head against the Sapphire Reserve. Which card delivers superior organic value? Vote to prioritize building this interactive calculator.
+          </p>
+          
+          <div class="visual-wrapper">
+            <div class="mini-card-container">
+              <div class="mini-card placeholder-card">
+                <span style="font-size: 10px; font-weight: 500;">Venture X</span>
+              </div>
+              <div class="mini-card placeholder-card">
+                <span style="font-size: 10px; font-weight: 500;">CSR</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="vote-box">
+          <button id="voteBtn" class="vote-btn" onclick="registerVote()">
+            <span>🗳️</span> Vote for this calculator
+          </button>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <p class="footer-note">
+        Antigravity Credit Card Value Tracker. Calculations are for illustrative purposes. Always verify terms, annual fees, and credit requirements with card issuers directly.
+      </p>
+    </div>
+  </footer>
+
+  <!-- Micro-interactions Script -->
+  <script>
+    function registerGoldVote() {
+      const btn = document.getElementById('voteBtnGold');
+      if (btn.classList.contains('voted')) return;
+      
+      btn.classList.add('voted');
+      btn.innerHTML = '<span>✅</span> Calculator Upvoted!';
+      localStorage.setItem('voted_gold_csp', 'true');
+    }
+
+    function registerVote() {
+      const btn = document.getElementById('voteBtn');
+      if (btn.classList.contains('voted')) return;
+      
+      btn.classList.add('voted');
+      btn.innerHTML = '<span>✅</span> Calculator Upvoted!';
+      localStorage.setItem('voted_venture_csr', 'true');
+    }
+
+    // Restore state on load
+    document.addEventListener('DOMContentLoaded', () => {
+      if (localStorage.getItem('voted_gold_csp') === 'true') {
+        const btn = document.getElementById('voteBtnGold');
+        if (btn) {
+          btn.classList.add('voted');
+          btn.innerHTML = '<span>✅</span> Calculator Upvoted!';
+        }
+      }
+      if (localStorage.getItem('voted_venture_csr') === 'true') {
+        const btn = document.getElementById('voteBtn');
+        if (btn) {
+          btn.classList.add('voted');
+          btn.innerHTML = '<span>✅</span> Calculator Upvoted!';
+        }
+      }
+    });
+  </script>
+
+</body>
+</html>

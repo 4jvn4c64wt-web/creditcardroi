@@ -19,6 +19,7 @@ This document is the single source of context for anyone (human or AI) making ch
 - Change the data flow or processing pipeline (update Section 4)
 - Add special-case logic in a card's `getMultiplier()` hook for a new card (update Section 6)
 - Introduce a new pattern that will be repeated in the future (add a Playbook in Section 14)
+- Add or remove an analytics event (update the event inventory in Section 19.4 in the same edit)
 - Change how an existing system works (update the relevant section)
 
 ### Don't bother updating for:
@@ -56,6 +57,7 @@ Edit this file directly. Update the "Last updated" date at the top. Keep entries
 16. [Design Principles](#16-design-principles)
 17. [SEO & Optimization Mandate](#17-seo--optimization-mandate)
 18. [Playbook H: Publishing a New Insights Article](#18-playbook-h-publishing-a-new-insights-article)
+19. [Analytics & Event Tracking (Umami)](#19-analytics--event-tracking-umami)
 
 ---
 
@@ -1122,6 +1124,7 @@ Run through this after all other steps are complete:
 
 - [ ] Title tag, meta description, and OG tags are unique (not copied from another page)
 - [ ] JSON-LD validates without errors
+- [ ] Umami Analytics tracking script injected right before the closing `</body>` tag (ID: `00612bf4-1142-4343-8b98-2339353027be`)
 - [ ] All card-specific numbers match `cards/*.js` definitions
 - [ ] At least two existing pages now link to this article
 - [ ] `sitemap.xml` includes the new URL
@@ -1129,6 +1132,70 @@ Run through this after all other steps are complete:
 - [ ] Author bio is present and specific
 
 If any box above cannot be checked, the article is not ready to ship.
+
+---
+
+## 19. Analytics & Event Tracking (Umami)
+
+Analytics run on [Umami](https://umami.is) — privacy-friendly, no cookies, passive. Two distinct mechanisms, both documented here so a session adding a page or an interaction can stay consistent instead of grepping the codebase to find out what already exists.
+
+### 19.1 The page-load script — every public page gets it
+
+Every public-facing HTML page must include this exact snippet immediately before `</body>`:
+
+```html
+<!-- Umami Analytics -->
+<script defer src="https://cloud.umami.is/script.js" data-website-id="00612bf4-1142-4343-8b98-2339353027be"></script>
+```
+
+This is not just for articles. New comparison pages, new tool pages, new landing pages — all of them. A page without this script is invisible to analytics, and nothing else will catch the omission. Currently present on all 10 pages: `index.html`, `app.html`, `app-pro.html`, `demo.html`, `compare.html`, `insights.html`, the comparison page(s), and each `insights/*.html`.
+
+The `data-website-id` is the same on every page. Do not generate a new one per page.
+
+### 19.2 Declarative event tracking — `data-umami-event` on links/buttons
+
+For a click on a link or button, add a `data-umami-event="<Event Name>"` attribute to the element. No JS required — the Umami script picks it up.
+
+**The naming convention is load-bearing.** Umami groups events by the exact string. `"Go to Tracker"` and `"Go To Tracker"` are two different events and fragment the data. Before coining a new name, check the inventory in 19.4 and reuse the existing string if the action is the same.
+
+Canonical CTA strings currently in use:
+
+| Event string | Used on |
+|---|---|
+| `Go to Tracker` | Every "Go to Tracker" / "Try it free" / "Launch Tracker" CTA that routes to `app-pro.html`, across all pages |
+| `See a Demo` | The demo CTAs on `index.html` that route to `demo.html` |
+
+**Rule:** any new CTA that routes to the tracker uses `data-umami-event="Go to Tracker"` — even if the visible button text differs ("Try it free", "Launch Tracker" all map to the same event). The event measures intent (going to the tracker), not button copy.
+
+### 19.3 Programmatic event tracking — `umami.track()` in JS
+
+For interactions that aren't a simple link click (a calculation completing, a file being processed), call `umami.track()` from JS. **Always guard it** so the app still works if the script is blocked:
+
+```js
+if (typeof umami !== 'undefined') umami.track('Event Name', { optionalProp: value });
+```
+
+The guard is mandatory. An unguarded call throws if an ad blocker drops the Umami script, which would break the surrounding handler.
+
+### 19.4 Event inventory — the registry to extend
+
+These are the only programmatic events that currently exist. When you add a new `umami.track()` call, **append it to this table in the same edit** (the same-response maintenance rule applies). When you add or remove a tracked event, this table is the source of truth a future session relies on to avoid duplicate names.
+
+| Event name | Props | Fires when | Location (`app-core.js`) |
+|---|---|---|---|
+| `Card Scenario Calculated` | — | The Card Scenarios "Calculate" button is clicked | `cardscenariosCalculate` click handler (~L5864) |
+| `View Tab` | `{ tab }` — one of `Summary`, `All Transactions`, `Card Scenarios`, `Credit Calendar` | A main tab is switched to, in `renderView()` | ~L6214 |
+| `File Upload` | — | A CSV/JSON file is accepted in `handleFile()` | ~L8824 |
+| `Export Data` | `{ format: 'CSV' }` | The Export CSV button is clicked | `exportCSV` click handler (~L9563) |
+| `Export Data` | `{ format: 'JSON' }` | The Export JSON button is clicked | `exportJSON` click handler (~L9569) |
+
+Line numbers are approximate — they drift as `app-core.js` changes. Grep for `umami.track` to find the current locations; the event names are the stable identifiers.
+
+### 19.5 Where to put each kind of tracking
+
+- **A new page** → add the 19.1 script snippet before `</body>`.
+- **A new CTA link/button** → add `data-umami-event` (19.2), reusing an existing string from the table if the action matches.
+- **A new non-click interaction worth measuring** → guarded `umami.track()` (19.3), and append the event to the 19.4 inventory in the same edit.
 
 ---
 

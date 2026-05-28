@@ -9839,8 +9839,8 @@ async function initCore() {
 
 // Assemble feedback email dynamically to prevent scraping
 function initFeedbackEmail() {
-  var u = 'creditcardvaluetracker';
-  var d = 'gmail';
+  var u = 'hello';
+  var d = 'creditcardvaluetracker';
   var t = 'com';
   var addr = u + '\u0040' + d + '.' + t;
   var el = document.getElementById('feedbackEmail');

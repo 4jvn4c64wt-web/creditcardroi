@@ -9066,6 +9066,7 @@ function detectCrossSourceOverlap(newTransactions, savedTransactions) {
 // Called after user confirms column mapping
 async function processAfterColumnMapping() {
   showLoading(true, 'Parsing CSV...');
+  await new Promise(r => setTimeout(r, 50));
 
   const newTransactions = applyColumnMappingAndParse();
 
@@ -9106,6 +9107,7 @@ async function processAfterColumnMapping() {
       return;
     }
     showLoading(true, 'Merging transactions...');
+    await new Promise(r => setTimeout(r, 50));
   }
 
   // Merge with existing transactions (dedupe by ID)
@@ -9197,6 +9199,7 @@ async function runProcessing(isNewUpload = false) {
   if (state.transactions.length === 0) return;
   
   showLoading(true, 'Processing transactions...');
+  await new Promise(r => setTimeout(r, 50));
   try {
     const results = await processTransactions(state.transactions);
     showLoading(false);
@@ -9681,6 +9684,7 @@ async function initCore() {
 
     // Show a loading screen while processing so users don't see a blank page
     showLoading(true, 'Loading your transactions — everything stays on your device.');
+    await new Promise(r => setTimeout(r, 50));
 
     // Always process and show Summary, even if some cards unmapped
     // User can click Card Mapping to map them
@@ -9780,6 +9784,7 @@ async function initCore() {
     // Reprocess transactions without navigating away from config page
     if (state.transactions.length > 0) {
       showLoading(true, 'Processing transactions...');
+      await new Promise(r => setTimeout(r, 50));
       try {
         const results = await processTransactions(state.transactions);
         showLoading(false);

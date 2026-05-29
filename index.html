@@ -1,17 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cloud.umami.is; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://cloud.umami.is; form-action 'none'; frame-ancestors 'self'; base-uri 'self';">
-  <meta name="description" content="Upload your credit card transactions to see the actual rewards you earn per card — and whether each annual fee is worth it. Privacy-first: your data never leaves your browser.">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cloud.umami.is; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://cloud.umami.is; form-action 'none'; frame-ancestors 'self'; base-uri 'self';">
+  <meta name="description"
+    content="Upload your credit card transactions to see the actual rewards you earn per card — and whether each annual fee is worth it. Privacy-first: your data never leaves your browser.">
   <link rel="canonical" href="https://creditcardvaluetracker.com/">
   <title>Credit Card Value Tracker — Know Which Cards Are Worth Keeping</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💳</text></svg>">
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💳</text></svg>">
 
   <!-- Open Graph -->
   <meta property="og:title" content="Credit Card Value Tracker — Know Which Cards Are Worth Keeping">
-  <meta property="og:description" content="Upload your credit card transactions to see the actual rewards you earn per card — and whether each annual fee is worth it. Privacy-first: your data never leaves your browser.">
+  <meta property="og:description"
+    content="Upload your credit card transactions to see the actual rewards you earn per card — and whether each annual fee is worth it. Privacy-first: your data never leaves your browser.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://creditcardvaluetracker.com/">
   <meta property="og:site_name" content="Credit Card Value Tracker">
@@ -22,7 +27,8 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Credit Card Value Tracker — Know Which Cards Are Worth Keeping">
-  <meta name="twitter:description" content="Upload your credit card transactions to see the actual rewards you earn per card — and whether each annual fee is worth it. Privacy-first: your data never leaves your browser.">
+  <meta name="twitter:description"
+    content="Upload your credit card transactions to see the actual rewards you earn per card — and whether each annual fee is worth it. Privacy-first: your data never leaves your browser.">
   <meta name="twitter:image" content="https://creditcardvaluetracker.com/og-image.png">
 
   <!-- JSON-LD Structured Data -->
@@ -101,150 +107,673 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'IBM Plex Sans', -apple-system, sans-serif; background: #fafaf9; color: #1c1917; line-height: 1.6; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'IBM Plex Sans', -apple-system, sans-serif;
+      background: #fafaf9;
+      color: #1c1917;
+      line-height: 1.6;
+    }
 
     /* Layout */
-    .container { max-width: 860px; margin: 0 auto; padding: 0 24px; }
-    section { padding: 64px 0; }
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    section {
+      padding: 64px 0;
+    }
 
     /* Nav */
-    .site-nav { padding: 16px 0; border-bottom: 1px solid #e7e5e4; }
-    .site-nav .container { display: flex; align-items: center; justify-content: space-between; }
-    .nav-left { display: flex; align-items: center; gap: 24px; }
-    .site-nav-brand { font-size: 15px; font-weight: 600; color: #1c1917; text-decoration: none; }
-    .nav-link-text { font-size: 14px; font-weight: 500; color: #57534e; text-decoration: none; transition: color 0.15s; }
-    .nav-link-text:hover { color: #1c1917; }
-    .nav-link-text.active { color: #1c1917; font-weight: 600; }
-    .site-nav .btn { padding: 8px 18px; font-size: 14px; }
+    .site-nav {
+      padding: 16px 0;
+      border-bottom: 1px solid #e7e5e4;
+    }
+
+    .site-nav .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+
+    .site-nav-brand {
+      font-size: 15px;
+      font-weight: 600;
+      color: #1c1917;
+      text-decoration: none;
+    }
+
+    .nav-link-text {
+      font-size: 14px;
+      font-weight: 500;
+      color: #57534e;
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+
+    .nav-link-text:hover {
+      color: #1c1917;
+    }
+
+    .nav-link-text.active {
+      color: #1c1917;
+      font-weight: 600;
+    }
+
+    .site-nav .btn {
+      padding: 8px 18px;
+      font-size: 14px;
+    }
 
     /* Hero */
-    .hero { padding: 80px 0 64px; text-align: center; }
-    .hero h1 { font-size: 44px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.15; margin-bottom: 20px; }
-    .hero .subtitle { font-size: 18px; color: #57534e; max-width: 560px; margin: 0 auto 36px; line-height: 1.6; }
-    .cta-group { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
-    .btn { display: inline-flex; align-items: center; padding: 14px 28px; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.15s; border: none; font-family: inherit; text-decoration: none; }
-    .btn-primary { background: #1c1917; color: #fff; }
-    .btn-primary:hover { background: #292524; }
-    .btn-secondary { background: #fff; color: #1c1917; border: 1px solid #d6d3d1; }
-    .btn-secondary:hover { background: #f5f5f4; }
-    .cta-note { font-size: 13px; color: #78716c; margin-top: 16px; }
+    .hero {
+      padding: 80px 0 64px;
+      text-align: center;
+    }
+
+    .hero h1 {
+      font-size: 44px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      margin-bottom: 20px;
+    }
+
+    .hero .subtitle {
+      font-size: 18px;
+      color: #57534e;
+      max-width: 560px;
+      margin: 0 auto 36px;
+      line-height: 1.6;
+    }
+
+    .cta-group {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      padding: 14px 28px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      border: none;
+      font-family: inherit;
+      text-decoration: none;
+    }
+
+    .btn-primary {
+      background: #1c1917;
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: #292524;
+    }
+
+    .btn-secondary {
+      background: #fff;
+      color: #1c1917;
+      border: 1px solid #d6d3d1;
+    }
+
+    .btn-secondary:hover {
+      background: #f5f5f4;
+    }
+
+    .cta-note {
+      font-size: 13px;
+      color: #78716c;
+      margin-top: 16px;
+    }
 
     /* How it works */
-    .section-title { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; text-align: center; margin-bottom: 12px; }
-    .section-subtitle { font-size: 15px; color: #78716c; text-align: center; margin-bottom: 48px; max-width: 520px; margin-left: auto; margin-right: auto; }
+    .section-title {
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      text-align: center;
+      margin-bottom: 12px;
+    }
 
-    .steps { display: grid; grid-template-columns: 1fr; gap: 48px; }
-    .step { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
-    .step:nth-child(even) .step-text { order: 2; }
-    .step:nth-child(even) .step-visual { order: 1; }
-    .step-number { font-size: 13px; font-weight: 600; color: #059669; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
-    .step-title { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 10px; }
-    .step-desc { font-size: 15px; color: #57534e; line-height: 1.7; }
+    .section-subtitle {
+      font-size: 15px;
+      color: #78716c;
+      text-align: center;
+      margin-bottom: 48px;
+      max-width: 520px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 48px;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 40px;
+      align-items: center;
+    }
+
+    .step:nth-child(even) .step-text {
+      order: 2;
+    }
+
+    .step:nth-child(even) .step-visual {
+      order: 1;
+    }
+
+    .step-number {
+      font-size: 13px;
+      font-weight: 600;
+      color: #059669;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+    }
+
+    .step-title {
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      margin-bottom: 10px;
+    }
+
+    .step-desc {
+      font-size: 15px;
+      color: #57534e;
+      line-height: 1.7;
+    }
 
     /* App mockup visuals */
-    .mockup { background: #fff; border: 1px solid #e7e5e4; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); overflow: hidden; font-size: 12px; }
-    .mockup-header { background: #fafaf9; border-bottom: 1px solid #e7e5e4; padding: 10px 14px; display: flex; align-items: center; gap: 8px; }
-    .mockup-dot { width: 8px; height: 8px; border-radius: 50%; }
-    .mockup-dot-r { background: #fca5a5; }
-    .mockup-dot-y { background: #fde68a; }
-    .mockup-dot-g { background: #86efac; }
-    .mockup-body { padding: 16px; }
+    .mockup {
+      background: #fff;
+      border: 1px solid #e7e5e4;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      overflow: hidden;
+      font-size: 12px;
+    }
+
+    .mockup-header {
+      background: #fafaf9;
+      border-bottom: 1px solid #e7e5e4;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .mockup-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .mockup-dot-r {
+      background: #fca5a5;
+    }
+
+    .mockup-dot-y {
+      background: #fde68a;
+    }
+
+    .mockup-dot-g {
+      background: #86efac;
+    }
+
+    .mockup-body {
+      padding: 16px;
+    }
 
     /* Upload mockup */
-    .mock-upload { border: 2px dashed #d6d3d1; border-radius: 8px; padding: 24px; text-align: center; background: #fafaf9; }
-    .mock-upload-icon { font-size: 28px; margin-bottom: 6px; }
-    .mock-upload-text { font-weight: 500; font-size: 13px; }
-    .mock-upload-sub { font-size: 11px; color: #78716c; margin-top: 2px; }
+    .mock-upload {
+      border: 2px dashed #d6d3d1;
+      border-radius: 8px;
+      padding: 24px;
+      text-align: center;
+      background: #fafaf9;
+    }
+
+    .mock-upload-icon {
+      font-size: 28px;
+      margin-bottom: 6px;
+    }
+
+    .mock-upload-text {
+      font-weight: 500;
+      font-size: 13px;
+    }
+
+    .mock-upload-sub {
+      font-size: 11px;
+      color: #78716c;
+      margin-top: 2px;
+    }
 
     /* Metrics mockup */
-    .mock-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: #e7e5e4; border: 1px solid #e7e5e4; border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
-    .mock-metric { background: #fff; padding: 12px 8px; text-align: center; }
-    .mock-metric-val { font-family: 'IBM Plex Mono', monospace; font-weight: 700; font-size: 16px; }
-    .mock-metric-val.pos { color: #059669; }
-    .mock-metric-val.neg { color: #dc2626; }
-    .mock-metric-label { font-size: 9px; color: #78716c; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+    .mock-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      background: #e7e5e4;
+      border: 1px solid #e7e5e4;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+
+    .mock-metric {
+      background: #fff;
+      padding: 12px 8px;
+      text-align: center;
+    }
+
+    .mock-metric-val {
+      font-family: 'IBM Plex Mono', monospace;
+      font-weight: 700;
+      font-size: 16px;
+    }
+
+    .mock-metric-val.pos {
+      color: #059669;
+    }
+
+    .mock-metric-val.neg {
+      color: #dc2626;
+    }
+
+    .mock-metric-label {
+      font-size: 9px;
+      color: #78716c;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-top: 2px;
+    }
 
     /* Table mockup */
-    .mock-table { width: 100%; border-collapse: collapse; font-size: 11px; }
-    .mock-table th { text-align: left; padding: 6px 8px; border-bottom: 2px solid #e7e5e4; font-weight: 600; color: #57534e; font-size: 9px; text-transform: uppercase; }
-    .mock-table td { padding: 6px 8px; border-bottom: 1px solid #f5f5f4; }
-    .mock-table .mono { font-family: 'IBM Plex Mono', monospace; }
-    .mock-badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 9px; font-weight: 500; }
-    .mock-badge-green { background: #dcfce7; color: #166534; }
-    .mock-badge-yellow { background: #fef9c3; color: #854d0e; }
+    .mock-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+
+    .mock-table th {
+      text-align: left;
+      padding: 6px 8px;
+      border-bottom: 2px solid #e7e5e4;
+      font-weight: 600;
+      color: #57534e;
+      font-size: 9px;
+      text-transform: uppercase;
+    }
+
+    .mock-table td {
+      padding: 6px 8px;
+      border-bottom: 1px solid #f5f5f4;
+    }
+
+    .mock-table .mono {
+      font-family: 'IBM Plex Mono', monospace;
+    }
+
+    .mock-badge {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 9px;
+      font-weight: 500;
+    }
+
+    .mock-badge-green {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .mock-badge-yellow {
+      background: #fef9c3;
+      color: #854d0e;
+    }
 
     /* Card mapping mockup */
-    .mock-card-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #f5f5f4; }
-    .mock-card-row:last-child { border-bottom: none; }
-    .mock-last4 { font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 13px; min-width: 50px; }
-    .mock-arrow { color: #a8a29e; }
-    .mock-card-name { font-size: 12px; font-weight: 500; }
-    .mock-select { background: #f5f5f4; border: 1px solid #d6d3d1; border-radius: 4px; padding: 3px 8px; font-size: 11px; color: #57534e; }
+    .mock-card-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px solid #f5f5f4;
+    }
+
+    .mock-card-row:last-child {
+      border-bottom: none;
+    }
+
+    .mock-last4 {
+      font-family: 'IBM Plex Mono', monospace;
+      font-weight: 600;
+      font-size: 13px;
+      min-width: 50px;
+    }
+
+    .mock-arrow {
+      color: #a8a29e;
+    }
+
+    .mock-card-name {
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .mock-select {
+      background: #f5f5f4;
+      border: 1px solid #d6d3d1;
+      border-radius: 4px;
+      padding: 3px 8px;
+      font-size: 11px;
+      color: #57534e;
+    }
 
     /* Cards supported */
-    .cards-section { background: #fff; border-top: 1px solid #e7e5e4; border-bottom: 1px solid #e7e5e4; }
-    .card-logos { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
-    .card-chip { display: inline-block; background: #f5f5f4; border: 1px solid #e7e5e4; border-radius: 6px; padding: 6px 14px; font-size: 13px; font-weight: 500; color: #57534e; }
+    .cards-section {
+      background: #fff;
+      border-top: 1px solid #e7e5e4;
+      border-bottom: 1px solid #e7e5e4;
+    }
+
+    .card-logos {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+    }
+
+    .card-chip {
+      display: inline-block;
+      background: #f5f5f4;
+      border: 1px solid #e7e5e4;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #57534e;
+    }
 
     /* FAQ accordion */
-    .faq-section { padding: 64px 0; border-top: 1px solid #e7e5e4; }
-    .faq-list { max-width: 640px; margin: 0 auto; }
-    .faq-item { border-bottom: 1px solid #e7e5e4; }
-    .faq-item:first-child { border-top: 1px solid #e7e5e4; }
-    .faq-more .faq-item:first-child { border-top: none; }
-    .faq-toggle { display: block; margin: 24px auto 0; padding: 10px 24px; background: none; border: 1px solid #d6d3d1; border-radius: 8px; font-size: 14px; font-weight: 500; color: #57534e; cursor: pointer; transition: border-color 0.15s, color 0.15s; }
-    .faq-toggle:hover { border-color: #1c1917; color: #1c1917; }
-    .faq-q { font-size: 16px; font-weight: 600; padding: 20px 32px 20px 0; cursor: pointer; position: relative; list-style: none; }
-    .faq-q::-webkit-details-marker { display: none; }
-    .faq-q::after { content: "+"; position: absolute; right: 0; top: 20px; font-size: 20px; font-weight: 400; color: #a8a29e; transition: transform 0.2s; }
-    details[open] .faq-q::after { content: "−"; }
-    .faq-a { font-size: 15px; color: #57534e; line-height: 1.7; padding: 0 0 20px; }
+    .faq-section {
+      padding: 64px 0;
+      border-top: 1px solid #e7e5e4;
+    }
+
+    .faq-list {
+      max-width: 640px;
+      margin: 0 auto;
+    }
+
+    .faq-item {
+      border-bottom: 1px solid #e7e5e4;
+    }
+
+    .faq-item:first-child {
+      border-top: 1px solid #e7e5e4;
+    }
+
+    .faq-more .faq-item:first-child {
+      border-top: none;
+    }
+
+    .faq-toggle {
+      display: block;
+      margin: 24px auto 0;
+      padding: 10px 24px;
+      background: none;
+      border: 1px solid #d6d3d1;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #57534e;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .faq-toggle:hover {
+      border-color: #1c1917;
+      color: #1c1917;
+    }
+
+    .faq-q {
+      font-size: 16px;
+      font-weight: 600;
+      padding: 20px 32px 20px 0;
+      cursor: pointer;
+      position: relative;
+      list-style: none;
+    }
+
+    .faq-q::-webkit-details-marker {
+      display: none;
+    }
+
+    .faq-q::after {
+      content: "+";
+      position: absolute;
+      right: 0;
+      top: 20px;
+      font-size: 20px;
+      font-weight: 400;
+      color: #a8a29e;
+      transition: transform 0.2s;
+    }
+
+    details[open] .faq-q::after {
+      content: "−";
+    }
+
+    .faq-a {
+      font-size: 15px;
+      color: #57534e;
+      line-height: 1.7;
+      padding: 0 0 20px;
+    }
 
     /* Problem section */
-    .problem-section { padding: 0 0 48px; }
-    .problem-box { max-width: 640px; margin: 0 auto; text-align: center; font-size: 17px; color: #57534e; line-height: 1.7; }
+    .problem-section {
+      padding: 0 0 48px;
+    }
+
+    .problem-box {
+      max-width: 640px;
+      margin: 0 auto;
+      text-align: center;
+      font-size: 17px;
+      color: #57534e;
+      line-height: 1.7;
+    }
 
     /* What We Do + Local-First side-by-side */
-    .value-privacy-section { padding: 64px 0; border-top: 1px solid #e7e5e4; }
-    .value-privacy-section .container { max-width: 960px; }
-    .value-privacy-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: stretch; }
-    .value-privacy-card { background: #fff; border: 1px solid #e7e5e4; border-radius: 12px; padding: 32px 28px; }
-    .vp-title { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 16px; }
-    .value-list { list-style: none; padding: 0; margin: 0; }
-    .value-list li { font-size: 15px; padding: 8px 0 8px 24px; position: relative; color: #44403c; line-height: 1.6; }
-    .value-list li::before { content: "✓"; position: absolute; left: 0; color: #059669; font-weight: 600; }
-    .local-first-box { background: #f5f5f4; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-    .local-first-icon { font-size: 32px; margin-bottom: 12px; }
-    .local-first-box p { font-size: 15px; color: #57534e; line-height: 1.7; }
+    .value-privacy-section {
+      padding: 64px 0;
+      border-top: 1px solid #e7e5e4;
+    }
+
+    .value-privacy-section .container {
+      max-width: 960px;
+    }
+
+    .value-privacy-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      align-items: stretch;
+    }
+
+    .value-privacy-card {
+      background: #fff;
+      border: 1px solid #e7e5e4;
+      border-radius: 12px;
+      padding: 32px 28px;
+    }
+
+    .vp-title {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      margin-bottom: 16px;
+    }
+
+    .value-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .value-list li {
+      font-size: 15px;
+      padding: 8px 0 8px 24px;
+      position: relative;
+      color: #44403c;
+      line-height: 1.6;
+    }
+
+    .value-list li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      color: #059669;
+      font-weight: 600;
+    }
+
+    .local-first-box {
+      background: #f5f5f4;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .local-first-icon {
+      font-size: 32px;
+      margin-bottom: 12px;
+    }
+
+    .local-first-box p {
+      font-size: 15px;
+      color: #57534e;
+      line-height: 1.7;
+    }
 
     /* Bottom CTA */
-    .bottom-cta { text-align: center; padding: 64px 0 48px; }
-    .bottom-cta h2 { font-size: 32px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 12px; }
-    .bottom-cta p { font-size: 16px; color: #57534e; margin-bottom: 32px; }
+    .bottom-cta {
+      text-align: center;
+      padding: 64px 0 48px;
+    }
+
+    .bottom-cta h2 {
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+    }
+
+    .bottom-cta p {
+      font-size: 16px;
+      color: #57534e;
+      margin-bottom: 32px;
+    }
 
     /* Footer */
-    footer { border-top: 1px solid #e7e5e4; padding: 32px 0; text-align: center; }
-    .footer-note { font-size: 14px; color: #78716c; line-height: 1.7; max-width: 520px; margin: 0 auto; }
+    footer {
+      border-top: 1px solid #e7e5e4;
+      padding: 32px 0;
+      text-align: center;
+    }
+
+    .footer-note {
+      font-size: 14px;
+      color: #78716c;
+      line-height: 1.7;
+      max-width: 520px;
+      margin: 0 auto;
+    }
 
     /* Responsive */
     @media (max-width: 700px) {
-      .hero { padding: 48px 0 40px; }
-      .hero h1 { font-size: 32px; }
-      .hero .subtitle { font-size: 16px; }
-      .step { grid-template-columns: 1fr; gap: 20px; }
-      .step:nth-child(even) .step-text { order: 1; }
-      .step:nth-child(even) .step-visual { order: 2; }
-      .mock-metrics { grid-template-columns: repeat(3, 1fr); }
-      .section-title { font-size: 24px; }
-      .value-privacy-grid { grid-template-columns: 1fr; }
-      .bottom-cta h2 { font-size: 26px; }
-      .btn { padding: 12px 22px; font-size: 15px; }
+      .hero {
+        padding: 48px 0 40px;
+      }
+
+      .hero h1 {
+        font-size: 32px;
+      }
+
+      .hero .subtitle {
+        font-size: 16px;
+      }
+
+      .step {
+        grid-template-columns: 1fr;
+        gap: 20px;
+      }
+
+      .step:nth-child(even) .step-text {
+        order: 1;
+      }
+
+      .step:nth-child(even) .step-visual {
+        order: 2;
+      }
+
+      .mock-metrics {
+        grid-template-columns: repeat(3, 1fr);
+      }
+
+      .section-title {
+        font-size: 24px;
+      }
+
+      .value-privacy-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .bottom-cta h2 {
+        font-size: 26px;
+      }
+
+      .btn {
+        padding: 12px 22px;
+        font-size: 15px;
+      }
     }
   </style>
 </head>
+
 <body>
 
   <!-- Nav -->
@@ -255,327 +784,357 @@
         <a href="compare.html" class="nav-link-text">Compare Cards</a>
         <a href="insights.html" class="nav-link-text">Insights</a>
       </div>
-      <a href="app-pro.html" class="btn btn-primary" data-umami-event="Go to Tracker" target="_blank" rel="noopener noreferrer">Go to Tracker</a>
+      <a href="app-pro.html" class="btn btn-primary" data-umami-event="Go to Tracker" target="_blank"
+        rel="noopener noreferrer">Go to Tracker</a>
     </div>
   </nav>
 
   <main>
 
-  <!-- Hero -->
-  <section class="hero">
-    <div class="container">
-      <h1>Know which cards are worth keeping</h1>
-      <p class="subtitle">Upload your transactions. See what you actually earned. Make smarter annual fee decisions.</p>
-      <div class="cta-group">
-        <a href="app-pro.html" class="btn btn-primary" data-umami-event="Go to Tracker" target="_blank" rel="noopener noreferrer">Try it free</a>
-        <a href="demo.html" class="btn btn-secondary" data-umami-event="See a Demo">See a Demo</a>
+    <!-- Hero -->
+    <section class="hero">
+      <div class="container">
+        <h1>Know which cards are worth keeping</h1>
+        <p class="subtitle">Upload your transactions. See what you actually earned. Make smarter annual fee decisions.
+        </p>
+        <div class="cta-group">
+          <a href="app-pro.html" class="btn btn-primary" data-umami-event="Go to Tracker" target="_blank"
+            rel="noopener noreferrer">Try it free</a>
+          <a href="demo.html" class="btn btn-secondary" data-umami-event="See a Demo">See a Demo</a>
+        </div>
+        <p class="cta-note">No signup. No data upload. Everything runs in your browser.</p>
       </div>
-      <p class="cta-note">No signup. No data upload. Everything runs in your browser.</p>
-    </div>
-  </section>
+    </section>
 
-  <!-- The Problem -->
-  <section class="problem-section">
-    <div class="container">
-      <div class="problem-box">
-        <p>Premium cards promise big rewards, but annual fees add up fast. Between unused credits and missed bonus categories, the math gets fuzzy. We calculate exactly what you earned versus what you paid, so you can make renewal decisions with confidence.</p>
+    <!-- The Problem -->
+    <section class="problem-section">
+      <div class="container">
+        <div class="problem-box">
+          <p>Premium cards promise big rewards, but annual fees add up fast. Between unused credits and missed bonus
+            categories, the math gets fuzzy. We calculate exactly what you earned versus what you paid, so you can make
+            renewal decisions with confidence.</p>
+        </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- How It Works -->
-  <section id="how-it-works">
-    <div class="container">
-      <h2 class="section-title">How It Works</h2>
+    <!-- How It Works -->
+    <section id="how-it-works">
+      <div class="container">
+        <h2 class="section-title">How It Works</h2>
 
-      <div class="steps">
+        <div class="steps">
 
-        <!-- Step 1: Upload -->
-        <div class="step">
-          <div class="step-text">
-            <div class="step-number">Step 1</div>
-            <div class="step-title">Upload your transactions</div>
-            <p class="step-desc">Export a CSV from any bank, credit card issuer, or financial tool and drop it into the tracker.</p>
-          </div>
-          <div class="step-visual">
-            <div class="mockup">
-              <div class="mockup-header">
-                <div class="mockup-dot mockup-dot-r"></div>
-                <div class="mockup-dot mockup-dot-y"></div>
-                <div class="mockup-dot mockup-dot-g"></div>
-              </div>
-              <div class="mockup-body">
-                <div class="mock-upload">
-                  <div class="mock-upload-icon">📄</div>
-                  <div class="mock-upload-text">Drop your file here</div>
-                  <div class="mock-upload-sub">CSV from your bank or financial tool</div>
+          <!-- Step 1: Upload -->
+          <div class="step">
+            <div class="step-text">
+              <div class="step-number">Step 1</div>
+              <div class="step-title">Upload your transactions</div>
+              <p class="step-desc">Export a CSV from any bank, credit card issuer, or financial tool and drop it into
+                the tracker.</p>
+            </div>
+            <div class="step-visual">
+              <div class="mockup">
+                <div class="mockup-header">
+                  <div class="mockup-dot mockup-dot-r"></div>
+                  <div class="mockup-dot mockup-dot-y"></div>
+                  <div class="mockup-dot mockup-dot-g"></div>
+                </div>
+                <div class="mockup-body">
+                  <div class="mock-upload">
+                    <div class="mock-upload-icon">📄</div>
+                    <div class="mock-upload-text">Drop your file here</div>
+                    <div class="mock-upload-sub">CSV from your bank or financial tool</div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- Step 2: Calculate -->
-        <div class="step">
-          <div class="step-text">
-            <div class="step-number">Step 2</div>
-            <div class="step-title">We calculate your net value</div>
-            <p class="step-desc">The tracker categorizes every transaction, applies the correct multipliers, tallies statement credits you used, and subtracts your annual fee.</p>
-          </div>
-          <div class="step-visual">
-            <div class="mockup">
-              <div class="mockup-header">
-                <div class="mockup-dot mockup-dot-r"></div>
-                <div class="mockup-dot mockup-dot-y"></div>
-                <div class="mockup-dot mockup-dot-g"></div>
-              </div>
-              <div class="mockup-body">
-                <div class="mock-card-row">
-                  <div class="mock-last4">4821</div>
-                  <div class="mock-arrow">&rarr;</div>
-                  <div class="mock-card-name">Chase Sapphire Reserve</div>
+          <!-- Step 2: Calculate -->
+          <div class="step">
+            <div class="step-text">
+              <div class="step-number">Step 2</div>
+              <div class="step-title">We calculate your net value</div>
+              <p class="step-desc">The tracker categorizes every transaction, applies the correct multipliers, tallies
+                statement credits you used, and subtracts your annual fee.</p>
+            </div>
+            <div class="step-visual">
+              <div class="mockup">
+                <div class="mockup-header">
+                  <div class="mockup-dot mockup-dot-r"></div>
+                  <div class="mockup-dot mockup-dot-y"></div>
+                  <div class="mockup-dot mockup-dot-g"></div>
                 </div>
-                <div class="mock-card-row">
-                  <div class="mock-last4">7733</div>
-                  <div class="mock-arrow">&rarr;</div>
-                  <div class="mock-card-name">Amex Gold</div>
-                </div>
-                <div class="mock-card-row">
-                  <div class="mock-last4">1092</div>
-                  <div class="mock-arrow">&rarr;</div>
-                  <div class="mock-select">Select a card...</div>
+                <div class="mockup-body">
+                  <div class="mock-card-row">
+                    <div class="mock-last4">4821</div>
+                    <div class="mock-arrow">&rarr;</div>
+                    <div class="mock-card-name">Chase Sapphire Reserve</div>
+                  </div>
+                  <div class="mock-card-row">
+                    <div class="mock-last4">7733</div>
+                    <div class="mock-arrow">&rarr;</div>
+                    <div class="mock-card-name">Amex Gold</div>
+                  </div>
+                  <div class="mock-card-row">
+                    <div class="mock-last4">1092</div>
+                    <div class="mock-arrow">&rarr;</div>
+                    <div class="mock-select">Select a card...</div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- Step 3: See Results -->
-        <div class="step">
-          <div class="step-text">
-            <div class="step-number">Step 3</div>
-            <div class="step-title">See which cards earned their keep</div>
-            <p class="step-desc">Get a clear breakdown per card: rewards earned, credits used, annual fee paid, and net value. Every number links back to the transactions behind it.</p>
-          </div>
-          <div class="step-visual">
-            <div class="mockup">
-              <div class="mockup-header">
-                <div class="mockup-dot mockup-dot-r"></div>
-                <div class="mockup-dot mockup-dot-y"></div>
-                <div class="mockup-dot mockup-dot-g"></div>
-              </div>
-              <div class="mockup-body">
-                <div class="mock-metrics">
-                  <div class="mock-metric">
-                    <div class="mock-metric-val">$42,681</div>
-                    <div class="mock-metric-label">Total Spend</div>
-                  </div>
-                  <div class="mock-metric">
-                    <div class="mock-metric-val pos">$1,847</div>
-                    <div class="mock-metric-label">Points Value</div>
-                  </div>
-                  <div class="mock-metric">
-                    <div class="mock-metric-val pos">$624</div>
-                    <div class="mock-metric-label">Net Value</div>
-                  </div>
+          <!-- Step 3: See Results -->
+          <div class="step">
+            <div class="step-text">
+              <div class="step-number">Step 3</div>
+              <div class="step-title">See which cards earned their keep</div>
+              <p class="step-desc">Get a clear breakdown per card: rewards earned, credits used, annual fee paid, and
+                net value. Every number links back to the transactions behind it.</p>
+            </div>
+            <div class="step-visual">
+              <div class="mockup">
+                <div class="mockup-header">
+                  <div class="mockup-dot mockup-dot-r"></div>
+                  <div class="mockup-dot mockup-dot-y"></div>
+                  <div class="mockup-dot mockup-dot-g"></div>
                 </div>
-                <table class="mock-table">
-                  <tr>
-                    <th>Card</th>
-                    <th>Spend</th>
-                    <th>Points</th>
-                    <th>Net</th>
-                  </tr>
-                  <tr>
-                    <td>Chase Sapphire Reserve</td>
-                    <td class="mono">$18,240</td>
-                    <td><span class="mock-badge mock-badge-green">52,190 pts</span></td>
-                    <td class="mono" style="color:#059669;font-weight:600;">+$312</td>
-                  </tr>
-                  <tr>
-                    <td>Amex Gold</td>
-                    <td class="mono">$14,800</td>
-                    <td><span class="mock-badge mock-badge-green">41,600 pts</span></td>
-                    <td class="mono" style="color:#059669;font-weight:600;">+$507</td>
-                  </tr>
-                  <tr>
-                    <td>Chase Freedom Flex</td>
-                    <td class="mono">$9,641</td>
-                    <td><span class="mock-badge mock-badge-yellow">14,320 pts</span></td>
-                    <td class="mono" style="color:#059669;font-weight:600;">+$243</td>
-                  </tr>
-                </table>
+                <div class="mockup-body">
+                  <div class="mock-metrics">
+                    <div class="mock-metric">
+                      <div class="mock-metric-val">$42,681</div>
+                      <div class="mock-metric-label">Total Spend</div>
+                    </div>
+                    <div class="mock-metric">
+                      <div class="mock-metric-val pos">$1,847</div>
+                      <div class="mock-metric-label">Points Value</div>
+                    </div>
+                    <div class="mock-metric">
+                      <div class="mock-metric-val pos">$624</div>
+                      <div class="mock-metric-label">Net Value</div>
+                    </div>
+                  </div>
+                  <table class="mock-table">
+                    <tr>
+                      <th>Card</th>
+                      <th>Spend</th>
+                      <th>Points</th>
+                      <th>Net</th>
+                    </tr>
+                    <tr>
+                      <td>Chase Sapphire Reserve</td>
+                      <td class="mono">$18,240</td>
+                      <td><span class="mock-badge mock-badge-green">52,190 pts</span></td>
+                      <td class="mono" style="color:#059669;font-weight:600;">+$312</td>
+                    </tr>
+                    <tr>
+                      <td>Amex Gold</td>
+                      <td class="mono">$14,800</td>
+                      <td><span class="mock-badge mock-badge-green">41,600 pts</span></td>
+                      <td class="mono" style="color:#059669;font-weight:600;">+$507</td>
+                    </tr>
+                    <tr>
+                      <td>Chase Freedom Flex</td>
+                      <td class="mono">$9,641</td>
+                      <td><span class="mock-badge mock-badge-yellow">14,320 pts</span></td>
+                      <td class="mono" style="color:#059669;font-weight:600;">+$243</td>
+                    </tr>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-
-      </div>
-    </div>
-  </section>
-
-  <!-- What We Do + Why Local-First -->
-  <section class="value-privacy-section">
-    <div class="container">
-      <div class="value-privacy-grid">
-        <div class="value-privacy-card">
-          <h2 class="vp-title">What We Do</h2>
-          <ul class="value-list">
-            <li>Analyze past transaction data to show how much value you got from each card</li>
-            <li>Calculate actual rewards earned based on your real spending patterns</li>
-            <li>Factor in statement credits you used and annual fees you paid</li>
-            <li>Show net value per card with full transaction-level explanations</li>
-            <li>Work entirely in your browser. Your data never leaves your device.</li>
-          </ul>
-        </div>
-        <div class="value-privacy-card local-first-box">
-          <div class="local-first-icon">🔒</div>
-          <h2 class="vp-title">Your transactions never leave your device.</h2>
-          <p>No account signup. No cloud storage. No Plaid connection. Just drop in a CSV, get your answer, and you're done. Use it once a year at renewal time, or track consistently with Pro. Your choice.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Supported Cards -->
-  <section class="cards-section">
-    <div class="container" style="padding-top:48px;padding-bottom:48px;">
-      <h2 class="section-title">Accurate Multipliers for the Most Popular Rewards Cards</h2>
-      <p class="section-subtitle">Multipliers, credits, and quarterly categories built in — ready to go.</p>
-      <div class="card-logos">
-        <span class="card-chip">Chase Sapphire Reserve</span>
-        <span class="card-chip">Chase Sapphire Preferred</span>
-        <span class="card-chip">Chase Freedom Flex</span>
-        <span class="card-chip">Chase Freedom Unlimited</span>
-        <span class="card-chip">American Express Platinum</span>
-        <span class="card-chip">American Express Gold</span>
-        <span class="card-chip">Capital One Venture X</span>
-        <span class="card-chip">Capital One Venture Rewards</span>
-        <span class="card-chip">Bilt Blue</span>
-        <span class="card-chip">Bilt Obsidian</span>
-        <span class="card-chip">Bilt Palladium</span>
-        <span class="card-chip">Amazon Prime Rewards Visa</span>
-        <span class="card-chip">U.S. Bank Cash+</span>
-      </div>
-    </div>
-  </section>
-
-  <!-- FAQ -->
-  <section class="faq-section">
-    <div class="container">
-      <h2 class="section-title">Frequently Asked Questions</h2>
-      <div class="faq-list">
-        <!-- Primary questions (always visible) -->
-        <details class="faq-item">
-          <summary class="faq-q">Where can I suggest new features or cards?</summary>
-          <div class="faq-a">Send your ideas to <span id="faqFeatureEmail" style="color:#2563eb;cursor:pointer;text-decoration:underline;"></span>. Whether it's a card you want supported, a feature you'd find useful, or anything else, your feedback shapes what gets built next.</div>
-        </details>
-        <details class="faq-item">
-          <summary class="faq-q">Is my data safe?</summary>
-          <div class="faq-a">Your data never leaves your browser - no servers or uploads. Everything runs locally.</div>
-        </details>
-        <details class="faq-item">
-          <summary class="faq-q">What banks work with this?</summary>
-          <div class="faq-a">Any bank or budgeting app that lets you export a CSV. The tracker auto-detects the format.</div>
-        </details>
-        <details class="faq-item">
-          <summary class="faq-q">How is this different from real-time card optimization tools?</summary>
-          <div class="faq-a">Those tools help you maximize future purchases by suggesting which card to use at checkout or auto-applying offers. We analyze past transaction data to tell you how much value you got from each card and whether the annual fee was worth it.</div>
-        </details>
-        <details class="faq-item">
-          <summary class="faq-q">Do I need to use this regularly?</summary>
-          <div class="faq-a">No. Many people use it just once or twice a year at renewal time. You're also welcome to review your card performance more frequently. You can easily see which credits you haven't used yet.</div>
-        </details>
-        <details class="faq-item">
-          <summary class="faq-q">Can I use this for cards you don't support yet?</summary>
-          <div class="faq-a">Not yet, but new cards are added regularly. Reach out to <span id="faqCardEmail" style="color:#2563eb;cursor:pointer;text-decoration:underline;"></span> and let us know which card you'd like to see next.</div>
-        </details>
-
-        <!-- More questions (hidden by default) -->
-        <div id="faqMore" class="faq-more" style="display:none;">
-          <details class="faq-item">
-            <summary class="faq-q">Do you have a privacy policy?</summary>
-            <div class="faq-a">We do not collect your transaction data. Everything runs locally in your browser.</div>
-          </details>
-          <details class="faq-item">
-            <summary class="faq-q">How accurate is the categorization?</summary>
-            <div class="faq-a">The tracker uses a rule-based engine with hundreds of known merchants. When it doesn't recognize a merchant, it looks at other details embedded in the transaction to classify it. If it's still unsure, it defaults safely and flags it for your review. Users are also able to add their own merchant rules to improve accuracy over time.</div>
-          </details>
-          <details class="faq-item">
-            <summary class="faq-q">Can I map more than one card number to a single card?</summary>
-            <div class="faq-a">Yes. This is useful if your card was lost, stolen, or reissued with a new number. You can map multiple card numbers to the same rewards card so all transactions count toward that card's totals.</div>
-          </details>
-          <details class="faq-item">
-            <summary class="faq-q">Can I use this on my phone?</summary>
-            <div class="faq-a">Yes. It runs in any modern browser, including mobile.</div>
-          </details>
-          <details class="faq-item">
-            <summary class="faq-q">What happens if I clear my browser?</summary>
-            <div class="faq-a">Because the tracker stores everything in your browser's local storage, your data will be cleared too. Export a JSON backup before clearing your browser and upload it instead of a CSV next time you boot up the tracker. The backup file will restore all your data and preferences.</div>
-          </details>
 
         </div>
-
-        <button id="faqToggle" class="faq-toggle" onclick="var m=document.getElementById('faqMore');var b=this;if(m.style.display==='none'){m.style.display='block';b.textContent='Show fewer questions';}else{m.style.display='none';b.textContent='Show more questions';}">Show more questions</button>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- Bottom CTA -->
-  <section class="bottom-cta">
-    <div class="container">
-      <h2>Stop guessing. Start tracking.</h2>
-      <p>Find out which cards are actually earning their annual fee.</p>
-      <div class="cta-group">
-        <a href="app-pro.html" class="btn btn-primary" data-umami-event="Go to Tracker" target="_blank" rel="noopener noreferrer">Try it free</a>
-        <a href="demo.html" class="btn btn-secondary" data-umami-event="See a Demo">See a Demo</a>
+    <!-- What We Do + Why Local-First -->
+    <section class="value-privacy-section">
+      <div class="container">
+        <div class="value-privacy-grid">
+          <div class="value-privacy-card">
+            <h2 class="vp-title">What We Do</h2>
+            <ul class="value-list">
+              <li>Analyze past transaction data to show how much value you got from each card</li>
+              <li>Calculate actual rewards earned based on your real spending patterns</li>
+              <li>Factor in statement credits you used and annual fees you paid</li>
+              <li>Show net value per card with full transaction-level explanations</li>
+              <li>Work entirely in your browser. Your data never leaves your device.</li>
+            </ul>
+          </div>
+          <div class="value-privacy-card local-first-box">
+            <div class="local-first-icon">🔒</div>
+            <h2 class="vp-title">Your transactions never leave your device.</h2>
+            <p>No account signup. No cloud storage. No Plaid connection. Just drop in a CSV, get your answer, and you're
+              done. Use it once a year at renewal time, or consistently track your returns. Your choice.</p>
+          </div>
+        </div>
       </div>
-    </div>
-  </section>
+    </section>
+
+    <!-- Supported Cards -->
+    <section class="cards-section">
+      <div class="container" style="padding-top:48px;padding-bottom:48px;">
+        <h2 class="section-title">Accurate Multipliers for the Most Popular Rewards Cards</h2>
+        <p class="section-subtitle">Multipliers, credits, and quarterly categories built in — ready to go.</p>
+        <div class="card-logos">
+          <span class="card-chip">Chase Sapphire Reserve</span>
+          <span class="card-chip">Chase Sapphire Preferred</span>
+          <span class="card-chip">Chase Freedom Flex</span>
+          <span class="card-chip">Chase Freedom Unlimited</span>
+          <span class="card-chip">American Express Platinum</span>
+          <span class="card-chip">American Express Gold</span>
+          <span class="card-chip">Capital One Venture X</span>
+          <span class="card-chip">Capital One Venture Rewards</span>
+          <span class="card-chip">Bilt Blue</span>
+          <span class="card-chip">Bilt Obsidian</span>
+          <span class="card-chip">Bilt Palladium</span>
+          <span class="card-chip">Amazon Prime Rewards Visa</span>
+          <span class="card-chip">U.S. Bank Cash+</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="faq-section">
+      <div class="container">
+        <h2 class="section-title">Frequently Asked Questions</h2>
+        <div class="faq-list">
+          <!-- Primary questions (always visible) -->
+          <details class="faq-item">
+            <summary class="faq-q">Where can I suggest new features or cards?</summary>
+            <div class="faq-a">Send your ideas to <span id="faqFeatureEmail"
+                style="color:#2563eb;cursor:pointer;text-decoration:underline;"></span>. Whether it's a card you want
+              supported, a feature you'd find useful, or anything else, your feedback shapes what gets built next.</div>
+          </details>
+          <details class="faq-item">
+            <summary class="faq-q">Is my data safe?</summary>
+            <div class="faq-a">Your data never leaves your browser - no servers or uploads. Everything runs locally.
+            </div>
+          </details>
+          <details class="faq-item">
+            <summary class="faq-q">What banks work with this?</summary>
+            <div class="faq-a">Any bank or budgeting app that lets you export a CSV. The tracker auto-detects the
+              format.</div>
+          </details>
+          <details class="faq-item">
+            <summary class="faq-q">How is this different from real-time card optimization tools?</summary>
+            <div class="faq-a">Those tools help you maximize future purchases by suggesting which card to use at
+              checkout or auto-applying offers. We analyze past transaction data to tell you how much value you got from
+              each card and whether the annual fee was worth it.</div>
+          </details>
+          <details class="faq-item">
+            <summary class="faq-q">Do I need to use this regularly?</summary>
+            <div class="faq-a">No. Many people use it just once or twice a year at renewal time. You're also welcome to
+              review your card performance more frequently. You can easily see which credits you haven't used yet.</div>
+          </details>
+          <details class="faq-item">
+            <summary class="faq-q">Can I use this for cards you don't support yet?</summary>
+            <div class="faq-a">Not yet, but new cards are added regularly. Reach out to <span id="faqCardEmail"
+                style="color:#2563eb;cursor:pointer;text-decoration:underline;"></span> and let us know which card you'd
+              like to see next.</div>
+          </details>
+
+          <!-- More questions (hidden by default) -->
+          <div id="faqMore" class="faq-more" style="display:none;">
+            <details class="faq-item">
+              <summary class="faq-q">Do you have a privacy policy?</summary>
+              <div class="faq-a">We do not collect your transaction data. Everything runs locally in your browser.</div>
+            </details>
+            <details class="faq-item">
+              <summary class="faq-q">How accurate is the categorization?</summary>
+              <div class="faq-a">The tracker uses a rule-based engine with hundreds of known merchants. When it doesn't
+                recognize a merchant, it looks at other details embedded in the transaction to classify it. If it's
+                still unsure, it defaults safely and flags it for your review. Users are also able to add their own
+                merchant rules to improve accuracy over time.</div>
+            </details>
+            <details class="faq-item">
+              <summary class="faq-q">Can I map more than one card number to a single card?</summary>
+              <div class="faq-a">Yes. This is useful if your card was lost, stolen, or reissued with a new number. You
+                can map multiple card numbers to the same rewards card so all transactions count toward that card's
+                totals.</div>
+            </details>
+            <details class="faq-item">
+              <summary class="faq-q">Can I use this on my phone?</summary>
+              <div class="faq-a">Yes. It runs in any modern browser, including mobile.</div>
+            </details>
+            <details class="faq-item">
+              <summary class="faq-q">What happens if I clear my browser?</summary>
+              <div class="faq-a">Because the tracker stores everything in your browser's local storage, your data will
+                be cleared too. Export a JSON backup before clearing your browser and upload it instead of a CSV next
+                time you boot up the tracker. The backup file will restore all your data and preferences.</div>
+            </details>
+
+          </div>
+
+          <button id="faqToggle" class="faq-toggle"
+            onclick="var m=document.getElementById('faqMore');var b=this;if(m.style.display==='none'){m.style.display='block';b.textContent='Show fewer questions';}else{m.style.display='none';b.textContent='Show more questions';}">Show
+            more questions</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Bottom CTA -->
+    <section class="bottom-cta">
+      <div class="container">
+        <h2>Stop guessing. Start tracking.</h2>
+        <p>Find out which cards are actually earning their annual fee.</p>
+        <div class="cta-group">
+          <a href="app-pro.html" class="btn btn-primary" data-umami-event="Go to Tracker" target="_blank"
+            rel="noopener noreferrer">Try it free</a>
+          <a href="demo.html" class="btn btn-secondary" data-umami-event="See a Demo">See a Demo</a>
+        </div>
+      </div>
+    </section>
 
   </main>
 
   <!-- Footer -->
   <footer>
     <div class="container">
-      <p class="footer-note"><span id="footerEmail" style="color:#2563eb;cursor:pointer;text-decoration:underline;"></span></p>
+      <p class="footer-note"><span id="footerEmail"
+          style="color:#2563eb;cursor:pointer;text-decoration:underline;"></span></p>
     </div>
   </footer>
 
-<script>
-(function() {
-  var u = 'hello';
-  var d = 'creditcardvaluetracker';
-  var t = 'com';
-  var addr = u + '\u0040' + d + '.' + t;
+  <script>
+    (function () {
+      var u = 'hello';
+      var d = 'creditcardvaluetracker';
+      var t = 'com';
+      var addr = u + '\u0040' + d + '.' + t;
 
-  var el = document.getElementById('faqFeatureEmail');
-  if (el) {
-    el.textContent = addr;
-    el.onclick = function() {
-      window.location.href = 'mai' + 'lto:' + addr + '?subject=' + encodeURIComponent('Feature Request — Credit Card Value Tracker');
-    };
-  }
+      var el = document.getElementById('faqFeatureEmail');
+      if (el) {
+        el.textContent = addr;
+        el.onclick = function () {
+          window.location.href = 'mai' + 'lto:' + addr + '?subject=' + encodeURIComponent('Feature Request — Credit Card Value Tracker');
+        };
+      }
 
-  var el2 = document.getElementById('faqCardEmail');
-  if (el2) {
-    el2.textContent = addr;
-    el2.onclick = function() {
-      window.location.href = 'mai' + 'lto:' + addr + '?subject=' + encodeURIComponent('Card Request — Credit Card Value Tracker');
-    };
-  }
+      var el2 = document.getElementById('faqCardEmail');
+      if (el2) {
+        el2.textContent = addr;
+        el2.onclick = function () {
+          window.location.href = 'mai' + 'lto:' + addr + '?subject=' + encodeURIComponent('Card Request — Credit Card Value Tracker');
+        };
+      }
 
-  var el3 = document.getElementById('footerEmail');
-  if (el3) {
-    el3.textContent = addr;
-    el3.onclick = function() {
-      window.location.href = 'mai' + 'lto:' + addr;
-    };
-  }
-})();
-</script>
+      var el3 = document.getElementById('footerEmail');
+      if (el3) {
+        el3.textContent = addr;
+        el3.onclick = function () {
+          window.location.href = 'mai' + 'lto:' + addr;
+        };
+      }
+    })();
+  </script>
 
   <!-- Umami Analytics -->
   <script defer src="https://cloud.umami.is/script.js" data-website-id="00612bf4-1142-4343-8b98-2339353027be"></script>
 </body>
+
 </html>

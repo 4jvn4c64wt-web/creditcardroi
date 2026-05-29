@@ -7,7 +7,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cloud.umami.is; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.gumroad.com https://cloud.umami.is; form-action 'none'; frame-ancestors 'self'; base-uri 'self';">
   <title>Credit Card Value Tracker</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💳</text></svg>">
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'DM Sans', 'IBM Plex Sans', -apple-system, sans-serif; background: #f7f6f3; color: #1c1917; min-height: 100vh; line-height: 1.5; }
@@ -189,11 +189,12 @@
     /* Tour/Wizard Styles */
     .tour-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9998; pointer-events: none; }
     .tour-overlay-bg { display: none; }
-    .tour-spotlight { position: fixed; border-radius: 8px; pointer-events: none; transition: all 0.3s ease; background: transparent; box-shadow: 0 0 0 9999px rgba(0,0,0,0.35), 0 0 0 4px rgba(59, 130, 246, 0.6); z-index: 10001; }
+    .tour-spotlight { position: fixed; border-radius: 8px; pointer-events: none; transition: all 0.3s ease; background: transparent; box-shadow: 0 0 0 9999px rgba(0,0,0,0.4), 0 0 0 4px #F59E0B; z-index: 10001; }
     .tour-spotlight-clickable { pointer-events: auto !important; cursor: pointer; }
     .tour-spotlight-clickable::after { content: '👆 Click here'; position: absolute; bottom: -28px; left: 50%; transform: translateX(-50%); background: #fbbf24; color: #1c1917; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; white-space: nowrap; animation: bounce 1s infinite; z-index: 10005; }
     @keyframes bounce { 0%, 100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(-4px); } }
-    .tour-tooltip { position: fixed; background: #ffffff; border-radius: 12px; padding: 20px; max-width: 360px; min-width: 280px; box-shadow: 0 20px 60px rgba(0,0,0,0.4); z-index: 10003; pointer-events: auto; }
+    .tour-tooltip { position: fixed; background: #FFFFFF; border: 1px solid #E8E5E2; border-radius: 16px; padding: 24px; max-width: 360px; min-width: 280px; box-shadow: 0 24px 60px rgba(28,25,23,0.12), 0 6px 18px rgba(28,25,23,0.05); z-index: 10003; pointer-events: auto; font-family: 'Outfit', sans-serif; opacity: 0; transform: scale(0.95) translateY(10px); transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+    .tour-tooltip.visible { opacity: 1; transform: scale(1) translateY(0); }
     .tour-tooltip-arrow { position: absolute; width: 12px; height: 12px; background: #fff; transform: rotate(45deg); }
     .tour-tooltip-arrow.top { top: -6px; left: 50%; margin-left: -6px; }
     .tour-tooltip-arrow.bottom { bottom: -6px; left: 50%; margin-left: -6px; }
@@ -208,8 +209,10 @@
     .tour-skip:hover { color: #dc2626; text-decoration: underline; }
     .tour-next { background: #1c1917; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; }
     .tour-next:hover { background: #292524; }
-    .tour-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10004; }
-    .tour-modal-content { background: #ffffff; border-radius: 16px; padding: 32px; max-width: 480px; width: 90%; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.1); }
+    .tour-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10004; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+    .tour-modal.visible { opacity: 1; pointer-events: auto; }
+    .tour-modal-content { background: #FFFFFF; border-radius: 16px; padding: 40px 32px; max-width: 480px; width: 90%; text-align: center; box-shadow: 0 24px 60px rgba(28,25,23,0.12), 0 0 0 1px #E8E5E2; font-family: 'Outfit', sans-serif; transform: scale(0.95); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+    .tour-modal.visible .tour-modal-content { transform: scale(1); }
     .tour-modal-icon { font-size: 48px; margin-bottom: 16px; }
     .tour-modal-title { font-size: 24px; font-weight: 600; margin-bottom: 12px; }
     .tour-modal-text { font-size: 15px; color: #57534e; line-height: 1.6; margin-bottom: 24px; }
@@ -335,35 +338,56 @@
     </div>
 
     <!-- Upload Section (only shown when no transactions) -->
-    <div id="uploadSection" class="card">
-      <label class="upload-zone" id="uploadZone">
-        <input type="file" id="fileInput" accept=".csv,.json">
-        <div style="font-size:40px;margin-bottom:12px;">📄</div>
-        <div style="font-size:16px;font-weight:500;margin-bottom:4px;">Drop your file here</div>
-        <div style="font-size:13px;color:#78716c;">CSV transactions or JSON backup • click to browse</div>
-      </label>
-      <div style="margin-top:16px;padding:16px;background:#f5f5f4;border-radius:8px;">
-        <div style="font-size:14px;font-weight:500;margin-bottom:8px;">How it works:</div>
-        <div style="font-size:13px;color:#57534e;line-height:1.6;">
-          <div style="margin-bottom:4px;">1️⃣ <strong>Upload</strong> — Import a CSV from Chase, Amex, Bilt, Monarch, or any other source</div>
-          <div style="margin-bottom:4px;">2️⃣ <strong>Map Cards</strong> — Tell us which rewards card each account is</div>
-          <div style="margin-bottom:4px;">3️⃣ <strong>See Results</strong> — View points earned, credits used, and net value per card</div>
-          <div style="margin-top:8px;padding-top:8px;border-top:1px solid #e7e5e4;color:#78716c;">
-            💾 <strong>Restoring a backup?</strong> Drop your JSON file to restore all transactions and settings.
+    <div id="uploadSection" class="card" style="background:#FFFFFF; border:1px solid #E8E5E2; border-radius:16px; padding:48px 32px;">
+        <div style="display:flex;flex-direction:column;gap:16px;align-items:center;">
+          <div style="text-align:center;">
+            <h2 style="font-family:'Outfit', sans-serif; font-size: 32px; font-weight:600; margin:0 0 12px; color:#1C1917;">Upload Your Transactions</h2>
+            <p style="font-size: 16px; color: #57534E; margin:0 0 32px; max-width:540px;">Import a CSV from Chase, Amex, Bilt, Monarch, or any other source to see your true card value.</p>
           </div>
+          
+          <label class="dropzone" id="uploadZone" style="width:100%; max-width:600px; border: 2px dashed #D8D3CD; border-radius: 16px; background: #F4F1EC; padding: 48px 24px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap: 16px; cursor:pointer; transition:all 0.2s ease;">
+            <input type="file" id="fileInput" accept=".csv,.json" style="display:none;">
+            <div class="docicon" style="width:48px; height:60px; border-radius:6px; border:1.5px solid #78716C; position:relative; background:#FFFFFF;">
+              <div style="position:absolute; top:-1px; right:-1px; width:16px; height:16px; background:#F4F1EC; border-left:1.5px solid #78716C; border-bottom:1.5px solid #78716C;"></div>
+              <div style="position:absolute; left:0; right:0; bottom:8px; text-align:center; font-family:monospace; font-size:11px; font-weight:600; color:#78716C;">CSV</div>
+            </div>
+            <div>
+              <div style="font-size:18px; font-weight:600; color:#1C1917; margin-bottom:4px;">Drop your file here</div>
+              <div style="font-size:14px; color:#78716C;">CSV transactions or JSON backup — click to browse</div>
+            </div>
+          </label>
         </div>
       </div>
-    </div>
 
     <!-- Column Mapping Section -->
-    <div id="columnMappingSection" class="card hidden">
-      <h2 class="card-title">Map Your CSV Columns</h2>
-      <p style="font-size:13px;color:#78716c;margin-bottom:8px;">Tell us which columns contain which data. We've tried to auto-detect, but please verify.</p>
-      <p style="font-size:12px;color:#059669;margin-bottom:8px;">💡 <strong>Tip:</strong> The more columns you map, the more accurate your point calculations will be. Category and Original Statement help identify merchants correctly.</p>
-      <p style="font-size:12px;color:#1e40af;margin-bottom:8px;">📅 <strong>Date Column:</strong> For bank/card issuer CSVs with both "Post Date" and "Transaction Date", we auto-select <strong>Post Date</strong> because points are earned when the transaction posts, not when it's made.</p>
-      <p style="font-size:12px;color:#7c3aed;margin-bottom:16px;">🏦 <strong>Account Type:</strong> If your CSV has an "Account Type" or "Account Name" column (e.g., Rocket Money), map it to filter out non-credit card transactions (Checking, Savings, etc.) automatically.</p>
-      
-      <div id="csvPreview" style="overflow-x:auto;margin-bottom:16px;border:1px solid #e7e5e4;border-radius:8px;">
+    <div id="columnMappingSection" class="card hidden" style="background:#FFFFFF; border:1px solid #E8E5E2; border-radius:16px; padding:32px;">
+        <h2 style="font-family:'Outfit', sans-serif; font-size: 28px; font-weight:600; margin:0 0 12px; color:#1C1917;">Map Your Columns</h2>
+        <p style="font-size:16px; color:#57534E; margin:0 0 32px; max-width:600px;">Tell us which columns contain which data. We've tried to auto-detect, but please verify before continuing.</p>
+        
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:16px; margin-bottom:32px;">
+          <div style="background:#F4F1EC; border:1px solid #E8E5E2; border-radius:12px; padding:20px;">
+            <div style="font-size:14px; font-weight:600; color:#1C1917; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+              <div style="width:8px; height:8px; border-radius:50%; background:#F59E0B;"></div> Accuracy matters
+            </div>
+            <div style="font-size:14px; color:#57534E; line-height:1.5;">The more columns you map, the more accurate your calculations will be. <strong>Category</strong> and <strong>Original Statement</strong> help identify merchants correctly.</div>
+          </div>
+          
+          <div style="background:#F4F1EC; border:1px solid #E8E5E2; border-radius:12px; padding:20px;">
+            <div style="font-size:14px; font-weight:600; color:#1C1917; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+              <div style="width:8px; height:8px; border-radius:50%; background:#15803D;"></div> Select Post Date
+            </div>
+            <div style="font-size:14px; color:#57534E; line-height:1.5;">If your CSV has both "Post Date" and "Transaction Date", we auto-select <strong>Post Date</strong>. Points are earned when the transaction posts.</div>
+          </div>
+          
+          <div style="background:#F4F1EC; border:1px solid #E8E5E2; border-radius:12px; padding:20px;">
+            <div style="font-size:14px; font-weight:600; color:#1C1917; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+              <div style="width:8px; height:8px; border-radius:50%; background:#E65F2B;"></div> Account Type
+            </div>
+            <div style="font-size:14px; color:#57534E; line-height:1.5;">Map your "Account Type" column (e.g., in Rocket Money) to automatically filter out Checking and Savings non-credit transactions.</div>
+          </div>
+        </div>
+
+        <div id="csvPreview"  style="overflow-x:auto;margin-bottom:16px;border:1px solid #e7e5e4;border-radius:8px;">
         <!-- Preview table will be inserted here -->
       </div>
       
@@ -409,17 +433,21 @@
         <h2 class="card-title">Card Mapping</h2>
 
         <!-- Contextual guidance banner -->
-        <div id="guidanceMappingSection" class="guidance-banner" style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1px solid #93c5fd;border-radius:8px;padding:16px;margin-bottom:16px;">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
-            <div>
-              <div style="font-weight:600;margin-bottom:8px;color:#1e40af;">🎯 Match your accounts to rewards cards</div>
-              <div style="font-size:13px;color:#1e3a8a;line-height:1.5;">
+        <div id="guidanceMappingSection" class="guidance-banner" style="background:#FFFFFF; border:1px solid #E8E5E2; border-radius:16px; padding:24px; margin-bottom:24px; position:relative;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px;">
+            <div style="flex:1;">
+              <h3 style="font-family:'Outfit', sans-serif; font-size:18px; font-weight:600; color:#1C1917; margin:0 0 12px; display:flex; align-items:center; gap:8px;">
+                <span style="width:8px; height:8px; border-radius:50%; background:#15803D;"></span>
+                Match accounts to rewards cards
+              </h3>
+              <p style="font-size:15px; color:#57534E; line-height:1.6; margin:0 0 16px; max-width:640px;">
                 Each account from your CSV is shown by its last 4 digits. Select which credit card it belongs to so we can apply the correct earning rates.
-                <br><br>
-                <strong>Tip:</strong> Use "Skip" for checking/savings accounts or cards you don't want to track. You can also map multiple card numbers to the same card (useful after card replacement due to fraud or expiration).
+              </p>
+              <div style="background:#F4F1EC; border-radius:10px; padding:16px; font-size:14px; color:#57534E; line-height:1.5; border-left:4px solid #F59E0B; max-width:680px;">
+                <strong>Tip:</strong> Use "Skip" for checking/savings accounts or cards you don't want to track. You can map multiple card numbers to the same card (e.g., after card replacement due to expiration or fraud).
               </div>
             </div>
-            <button id="dismissMappingGuidance" style="background:none;border:none;color:#1e40af;cursor:pointer;font-size:18px;padding:0;line-height:1;">&times;</button>
+            <button id="dismissMappingGuidance" style="background:#F4F1EC; border:1px solid #E8E5E2; border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; color:#78716C; cursor:pointer; font-size:16px; line-height:1; transition:all 0.15s; margin-top:-4px;" title="Dismiss guidance">&times;</button>
           </div>
         </div>
 

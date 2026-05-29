@@ -633,6 +633,20 @@ window.CardTracker.classification.classifyTravel = function(normalizedText, card
  * References normalize(), state, KNOWN_MERCHANTS from global scope (available at call time)
  */
 window.CardTracker.classification.classifyMerchant = function(merchant, csvCategory, cardId, originalStatement) {
+  const result = window.CardTracker.classification._classifyMerchantInternal(merchant, csvCategory, cardId, originalStatement);
+  
+  // Bilt Palladium override: only 'rent' matters. Everything else is 'other' with high confidence.
+  if (cardId === 'bilt-palladium' && result.subcategory !== 'rent' && result.subcategory !== 'skip') {
+    result.subcategory = 'other';
+    // Set confidence to override threshold so user is not prompted to review
+    result.confidence = window.CardTracker.classification.CONFIDENCE_ADJUSTMENTS.KNOWN_MERCHANT_OVERRIDE;
+    result.reason = (result.reason ? result.reason + '; ' : '') + 'Bilt Palladium override to other';
+  }
+  
+  return result;
+};
+
+window.CardTracker.classification._classifyMerchantInternal = function(merchant, csvCategory, cardId, originalStatement) {
   if (cardId === undefined) cardId = null;
   if (originalStatement === undefined) originalStatement = null;
 

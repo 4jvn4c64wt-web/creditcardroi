@@ -720,7 +720,6 @@ function showTourSpotlight(step, retryCount = 0) {
 
   // Set content first
   document.getElementById('tourTooltipTitle').textContent = step.title.replace(/\s*[\u{1F300}-\u{1F9FF}]/gu, '');
-  // step.content is hardcoded in TOUR_STEPS — never put user-supplied data here
   document.getElementById('tourTooltipContent').innerHTML = step.content;
 
   const stepNum = getDisplayStepNumber(state.tourStep);

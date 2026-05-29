@@ -189,28 +189,39 @@ window.CardTracker.merchants = {
   // Note: 'trusted traveler' kept separate for credit detection matching
   'trusted traveler': 'travel',
 
-  // Streaming & Subscriptions (ultra-safe, confidence: 100)
+  // Streaming — true audio/video/music only (ultra-safe, confidence: 100)
+  // Tightened to match what card streaming bonuses (e.g. CSP 3x) actually reward.
   'netflix': 'streaming', 'spotify': 'streaming', 'hulu': 'streaming',
   'disney+': 'streaming', 'disney plus': 'streaming',
-  'hbo': 'streaming', 'hbo max': 'streaming',
-  'apple music': 'streaming', 'apple tv': 'streaming', 'apple one': 'streaming',
+  'hbo': 'streaming', 'hbo max': 'streaming', 'helpmaxcom': 'streaming',
+  'apple music': 'streaming', 'apple tv': 'streaming',
   'amazon prime video': 'streaming', 'prime video': 'streaming',
   'paramount': 'streaming', 'paramount+': 'streaming', 'paramount plus': 'streaming',
-  'peacock': 'streaming', 'youtube premium': 'streaming',
+  'peacock': 'streaming', 'youtube premium': 'streaming', 'youtube tv': 'streaming',
   'pandora': 'streaming', 'tidal': 'streaming', 'deezer': 'streaming',
-  // Additional streaming services
-  'max ': 'streaming', 'audible': 'streaming', 'kindle unlimited': 'streaming',
-  'espn+': 'streaming', 'discovery+': 'streaming', 'sirius': 'streaming',
-  'crunchyroll': 'streaming', 'fubo': 'streaming', 'sling tv': 'streaming', 'sling': 'streaming', 'youtube tv': 'streaming',
+  'max ': 'streaming', 'espn+': 'streaming', 'discovery+': 'streaming',
+  'sirius': 'streaming', 'crunchyroll': 'streaming', 'fubo': 'streaming',
+  'sling tv': 'streaming', 'sling': 'streaming',
   'showtime': 'streaming', 'sho ': 'streaming', 'vudu': 'streaming',
-  'xfinity stream': 'streaming', 'spectrum': 'streaming', 'optimum': 'streaming',
-  'headspace': 'streaming', 'calm': 'streaming', 'duolingo': 'streaming', 'masterclass': 'streaming',
-  'skillshare': 'streaming', 'brilliant': 'streaming', 'nytimes': 'streaming', 'wsj': 'streaming',
-  // Additional streaming/subscriptions
-  'applecom': 'streaming', 'google one': 'streaming', 'helpmaxcom': 'streaming',
-  'microsoftpc': 'streaming', 'noom': 'streaming', 'origin financial': 'streaming',
-  'ouraring': 'streaming', 'pointme': 'streaming', 'steamgames': 'streaming', 'wl steam': 'streaming',
-  'stitch fix': 'streaming',
+
+  // Cable & Internet providers (broadband/cable bills) — rolls up to utilities
+  'spectrum': 'cable-internet', 'optimum': 'cable-internet', 'xfinity stream': 'cable-internet',
+
+  // Subscriptions — recurring digital services that are NOT streaming.
+  // Rolls up to 'other' → base rate on every card (no card has a subscription bonus).
+  'applecom': 'subscription', 'apple one': 'subscription',
+  'google one': 'subscription', 'microsoftpc': 'subscription',
+  'audible': 'subscription', 'kindle unlimited': 'subscription',
+  'nytimes': 'subscription', 'wsj': 'subscription',
+  'headspace': 'subscription', 'calm': 'subscription', 'noom': 'subscription', 'ouraring': 'subscription',
+  'duolingo': 'subscription', 'masterclass': 'subscription', 'skillshare': 'subscription', 'brilliant': 'subscription',
+  'origin financial': 'subscription', 'pointme': 'subscription',
+
+  // Gaming storefronts (digital game purchases, MCC 5816) — rolls up to entertainment
+  'xbox': 'gaming', 'steamgames': 'gaming', 'wl steam': 'gaming',
+
+  // Stitch Fix codes as apparel — clothing → shopping
+  'stitch fix': 'clothing',
 
   // Wine & Liquor stores (often miscategorized as Travel by banks)
   // Note: 'spirits' alone is too broad (matches 'Holy Spirit Church'), use specific patterns

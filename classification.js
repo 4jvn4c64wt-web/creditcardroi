@@ -71,6 +71,7 @@ window.CardTracker.classification.CATEGORY_HIERARCHY = {
   'water': 'utilities',
   'internet': 'utilities',
   'cable': 'utilities',
+  'cable-internet': 'utilities',
   'phone': 'utilities',
   'cell-phone': 'utilities',
 
@@ -102,6 +103,7 @@ window.CardTracker.classification.CATEGORY_HIERARCHY = {
   'education': 'other',
   'charity': 'other',
   'government-services': 'other',
+  'subscription': 'other',
 
   // Parent categories (null = top-level, no further rollup)
   'dining': null,
@@ -310,7 +312,7 @@ window.CardTracker.classification.CSV_TO_SUBCATEGORY = {
   'drug store': 'drugstore',
   'fitness': 'fitness',
   'gym': 'fitness',
-  'subscriptions': 'streaming',
+  'subscriptions': 'subscription',
   'streaming': 'streaming',
   'rent': 'rent',
   'mortgage': 'rent',

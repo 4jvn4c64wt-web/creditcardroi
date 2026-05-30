@@ -265,7 +265,17 @@ const TOUR_STEPS = [
     id: 'manage-nav',
     target: '#manageBtn',
     title: 'Manage Your Data ⚙️',
-    content: 'The <strong>Manage</strong> menu is your hub. <strong>Crucial:</strong> If you hold a Bilt card (to track rent) or cards with user-selected categories (like US Bank Cash+ or Bank of America Custom Cash), you <em>must</em> configure these under <strong>Card Config</strong> to reflect their true points and ROI accurately!',
+    content: 'The <strong>Manage</strong> button is your hub for configuration. Here you can edit Point Valuations, toggle manual Statement Credits, re-map your cards, and export or reset your data.',
+    position: 'bottom',
+    clickRequired: false
+  },
+  {
+    type: 'spotlight',
+    phase: 'transactions-tour',
+    id: 'card-config-warning',
+    target: '#manageBtn',
+    title: 'Crucial Card Setup ⚙️',
+    content: '<strong>Important:</strong> If you hold a Bilt card (to track rent) or cards with user-selected categories (like US Bank Cash+ or Bank of America Custom Cash), you <em>must</em> configure these under <strong>Card Config</strong> to get an accurate ROI calculation!',
     position: 'bottom',
     clickRequired: false
   },

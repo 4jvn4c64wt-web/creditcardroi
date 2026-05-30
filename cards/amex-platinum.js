@@ -14,7 +14,7 @@ window.CardTracker.cards['amex-platinum'] = {
     { name: 'Lululemon', amount: 300, keywords: ['LULULEMON'], manual: false, frequency: 'quarterly' },
     { name: 'Digital Entertainment', amount: 300, keywords: ['DIGITAL ENTERTAINMENT', 'ENTERTAINMENT CREDIT'], manual: false, frequency: 'monthly' },
     { name: 'Airline Incidental', amount: 200, keywords: ['AIRLINE FEE', 'AIRLINE CREDIT'], manual: false, frequency: 'annual' },
-    { name: 'Uber One Credit', amount: 96, keywords: ['UBER ONE', 'PLATINUM UBER ONE'], manual: false, frequency: 'none' },
+    { name: 'Uber One Credit', amount: 120, keywords: ['UBER ONE', 'PLATINUM UBER ONE'], manual: false, frequency: 'none' },
     { name: 'Uber Cash', amount: 200, keywords: [], manual: true, frequency: 'monthly', monthlyAmounts: { default: 15, 11: 35 } },
     { name: 'CLEAR+', amount: 209, keywords: ['CLEAR', 'CLEARME', 'CLEAR PLUS', 'AMEX CLEAR'], manual: false, frequency: 'none' },
     // Saks credit discontinued: removed for new cardholders Mar 26 2026; existing cardholders lose it after Jun 30 2026.

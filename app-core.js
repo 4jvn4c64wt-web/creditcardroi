@@ -3298,7 +3298,7 @@ function calculateSwapValue(removeCardId, addCardId, year) {
   // === Component 1: Removed card spending redistribution ===
   // Include credits/refunds so they OFFSET charges in the same subcategory bucket.
   // Excluding them entirely (as we used to) made gross spend look higher than net spend —
-  // e.g. a $96 Uber charge with a $96 Uber One credit would have showed $96 of transit
+  // e.g. a $120 Uber charge with a $120 Uber One credit would have showed $120 of transit
   // spend when the net is $0. We still exclude payments and annual fees, which aren't
   // category-attributable spend.
   const removeTxns = state.results.processed.filter(t =>
@@ -3532,8 +3532,8 @@ function calculateSwapValue(removeCardId, addCardId, year) {
 
   // === Component 2: Additional shifts to new card from existing cards ===
   // Excludes removed card transactions (handled in Component 1). Includes credits/refunds
-  // so they OFFSET charges in the same subcategory bucket (e.g. a $96 Uber charge with
-  // a $96 Uber One credit = $0 net transit, not $96).
+  // so they OFFSET charges in the same subcategory bucket (e.g. a $120 Uber charge with
+  // a $120 Uber One credit = $0 net transit, not $120).
   const addTxns = state.results.processed.filter(t =>
     !t.isPayment && !t.isAnnualFee && t.cardId && t.cardId !== 'skip' &&
     t.cardId !== addCardId && t.cardId !== removeCardId && CARDS[t.cardId] &&

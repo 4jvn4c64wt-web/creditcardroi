@@ -6960,6 +6960,9 @@ function renderView(view) {
     document.getElementById('creditModal').addEventListener('click', (e) => {
       if (e.target === document.getElementById('creditModal')) {
         document.getElementById('creditModal').classList.add('hidden');
+        if (typeof window.onCategoryModalClose === 'function') {
+          window.onCategoryModalClose();
+        }
       }
     });
     
@@ -8477,6 +8480,9 @@ function showCreditModal(txnId, cardId) {
 }
 
 function showCategoryModal(txnId, merchant, currentCategory, cardId) {
+  if (typeof window.onCategoryModalOpen === 'function') {
+    window.onCategoryModalOpen();
+  }
   const modal = document.getElementById('creditModal');
   const content = document.getElementById('creditModalContent');
   const norm = normalize(merchant).substring(0, 50);
@@ -8603,11 +8609,17 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
     modal.classList.add('hidden');
     showSavedToast();
     await runProcessing();
+    if (typeof window.onCategoryModalClose === 'function') {
+      window.onCategoryModalClose();
+    }
     renderView('transactions');
   });
   
   document.getElementById('cancelCategoryChange').addEventListener('click', () => {
     modal.classList.add('hidden');
+    if (typeof window.onCategoryModalClose === 'function') {
+      window.onCategoryModalClose();
+    }
   });
   
   if (hasRule) {
@@ -8634,6 +8646,9 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
       }
       modal.classList.add('hidden');
       await runProcessing();
+      if (typeof window.onCategoryModalClose === 'function') {
+        window.onCategoryModalClose();
+      }
       renderView('transactions');
     });
   }
@@ -8659,6 +8674,9 @@ function showCategoryModal(txnId, merchant, currentCategory, cardId) {
       safeLocalStorageSet('ccTracker_confirmedTxns', state.confirmedTransactions);
       modal.classList.add('hidden');
       await runProcessing();
+      if (typeof window.onCategoryModalClose === 'function') {
+        window.onCategoryModalClose();
+      }
       renderView('transactions');
     });
   }

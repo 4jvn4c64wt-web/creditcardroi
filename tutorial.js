@@ -252,10 +252,20 @@ const TOUR_STEPS = [
   {
     type: 'spotlight',
     phase: 'transactions-tour',
+    id: 'reclassify-modal',
+    target: '#creditModal .loading-modal',
+    title: 'Reclassify & Create Rules 🛠️',
+    content: 'Change the category here, or create a rule to automatically categorize all future transactions from this merchant. Point valuations and Net Value will update in real-time!',
+    position: 'right',
+    clickRequired: false
+  },
+  {
+    type: 'spotlight',
+    phase: 'transactions-tour',
     id: 'manage-nav',
     target: '#manageBtn',
-    title: 'Manage Your Data',
-    content: 'The <strong>Manage</strong> button is your hub for configuration. Here you can edit Point Valuations, toggle manual Statement Credits, re-map your cards, and export or reset your data.',
+    title: 'Manage Your Data ⚙️',
+    content: 'The <strong>Manage</strong> menu is your hub. <strong>Crucial:</strong> If you hold a Bilt card (to track rent) or cards with rotating categories (like Chase Freedom Flex), you <em>must</em> configure these under <strong>Card Config</strong> to reflect their true points and ROI accurately!',
     position: 'bottom',
     clickRequired: false
   },
@@ -313,10 +323,20 @@ function startTour(isManualRestart = false) {
 
 // Render current tour step
 function renderTourStep() {
-  const step = TOUR_STEPS[state.tourStep];
+  let step = TOUR_STEPS[state.tourStep];
   if (!step) {
     endTour();
     return;
+  }
+
+  // Skip the reclassify modal step if the category modal is not currently open
+  if (step.id === 'reclassify-modal') {
+    const modal = document.getElementById('creditModal');
+    if (!modal || modal.classList.contains('hidden')) {
+      state.tourStep++;
+      renderTourStep();
+      return;
+    }
   }
 
   // Save progress
@@ -678,6 +698,32 @@ function continueTourAfterMapping() {
 }
 
 
+// Category Modal window hooks for Tour responsiveness
+window.onCategoryModalOpen = function() {
+  if (state.tourActive && TOUR_STEPS[state.tourStep]?.id === 'recategorize') {
+    // Hide the current spotlight overlay first to prevent jarring transitions
+    document.getElementById('tourOverlay').classList.add('hidden');
+    // Advance to the modal step
+    state.tourStep = TOUR_STEPS.findIndex(s => s.id === 'reclassify-modal');
+    // Render the modal step after a short delay so the modal has time to animate open
+    setTimeout(() => {
+      renderTourStep();
+    }, 400);
+  }
+};
+
+window.onCategoryModalClose = function() {
+  if (state.tourActive && TOUR_STEPS[state.tourStep]?.id === 'reclassify-modal') {
+    document.getElementById('tourOverlay').classList.add('hidden');
+    // Advance to the manage-nav step
+    state.tourStep = TOUR_STEPS.findIndex(s => s.id === 'manage-nav');
+    setTimeout(() => {
+      renderTourStep();
+    }, 300);
+  }
+};
+
+
 // =============================================================================
 // TUTORIAL INITIALIZATION
 // =============================================================================
@@ -700,6 +746,13 @@ function initTutorial() {
   // Tour event listeners
   document.getElementById('tourSkip').addEventListener('click', showSkipConfirmation);
   document.getElementById('tourNext').addEventListener('click', () => {
+    // If leaving reclassify-modal, close the modal
+    if (state.tourActive && TOUR_STEPS[state.tourStep]?.id === 'reclassify-modal') {
+      const modal = document.getElementById('creditModal');
+      if (modal && !modal.classList.contains('hidden')) {
+        modal.classList.add('hidden');
+      }
+    }
     state.tourStep++;
     renderTourStep();
   });

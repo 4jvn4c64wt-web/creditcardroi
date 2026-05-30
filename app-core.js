@@ -893,7 +893,21 @@ function mapToCardCategory(genericCategory, cardId, txnDate = null) {
   };
   
   // Try to find a match from the mappings
-  const possibilities = mappings[genericCategory] || [genericCategory, 'other'];
+  let possibilities = mappings[genericCategory];
+
+  // If no explicit mapping, walk up the hierarchy to find a mapped parent
+  if (!possibilities && typeof CATEGORY_HIERARCHY !== 'undefined') {
+    let parent = CATEGORY_HIERARCHY[genericCategory];
+    while (parent && !mappings[parent]) {
+      parent = CATEGORY_HIERARCHY[parent];
+    }
+    if (parent && mappings[parent]) {
+      possibilities = mappings[parent];
+    }
+  }
+
+  possibilities = possibilities || [genericCategory, 'other'];
+
   for (const cat of possibilities) {
     if (validCategories.includes(cat)) {
       return cat;

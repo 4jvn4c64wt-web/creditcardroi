@@ -634,7 +634,7 @@ function handleSpotlightClick(step) {
     setTimeout(() => {
       state.tourStep++;
       renderTourStep();
-    }, 1200);
+    }, 200);
   }
 }
 

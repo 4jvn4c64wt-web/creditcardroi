@@ -990,7 +990,7 @@ These are non-negotiable and should guide every decision:
 
 **Sitemaps & Crawlability:** `sitemap.xml` must be segmented by content type (tools, articles) and include only canonical URLs returning a 200 status code. Keep `<lastmod>` dates accurate — Google, Bing, and AI crawlers treat them as freshness signals.
 
-**Error Resolution:** Before shipping any change, check for 4xx errors and 3xx redirect chains. Crawlers must not hit dead ends. The existing `robots.txt` and `sitemap.xml` (covering `index.html`, `insights.html`, and individual insight articles) should be extended whenever new indexable pages are added.
+**Error Resolution:** Before shipping any change, check for 4xx errors and 3xx redirect chains. Crawlers must not hit dead ends. The existing `robots.txt` and `sitemap.xml` (covering `index.html`, `insights.html`, and individual insight articles) should be extended whenever new indexable pages are added. Run `grep -rEn 'href="(\.\.\/)?index\.html"' --include="*.html" .` and confirm it returns nothing — this is enforced automatically by the `SEO Lint` GitHub Actions workflow.
 
 **Indexability:** Confirm that no core pages carry accidental `noindex` tags or have resources blocked in `robots.txt`. Maintain a logical category-to-subpage structure (e.g., `insights/` as parent, individual articles as children).
 
@@ -1018,6 +1018,8 @@ Every public-facing page must have a unique `<title>` and `<meta name="descripti
 **Open Graph & Twitter Card tags:** Every public page must include `og:title`, `og:description`, `og:image`, `og:url`, `og:type`, and `twitter:card`. Use the same title/description as the meta tags unless there's a reason to diverge (e.g., a shorter title for social display). The `og:image` should be a 1200×630px branded card or a relevant screenshot. If no image asset exists, ask before publishing.
 
 **Canonical URLs:** Every page must include `<link rel="canonical" href="...">` pointing to itself (the canonical version). This prevents duplicate content issues if the same page is accessible at multiple URLs.
+
+**Internal links must also use the canonical form of each URL** — the `<link rel="canonical">` tag is only a hint to Google; internal links that disagree with it send a conflicting signal and can suppress indexing. The most common mistake on this site: linking to `index.html` or `../index.html` when the canonical home page URL is `https://creditcardvaluetracker.com/`. On static hosts (Cloudflare Pages, Netlify, etc.) both `/` and `/index.html` return HTTP 200 with no redirect, so Google can treat them as separate duplicate pages. **Always use `href="/"` for the home page in every nav link and body-text link. Never use `href="index.html"` or `href="../index.html"`.** The `SEO Lint` CI workflow enforces this automatically and will block any PR that reintroduces the pattern.
 
 ### Schema Markup (Structured Data)
 
@@ -1056,7 +1058,7 @@ Credit card content falls under Google's YMYL (Your Money or Your Life) guidelin
 
 **Navigation & CTAs:** Limit primary navigation to 5–7 items. Use high-contrast colors for primary CTA buttons (e.g., "Try the Calculator," "Upgrade to Pro") to draw the eye naturally. Do not add navigation items without removing or consolidating existing ones.
 
-**Internal linking:** Build and maintain a logical link hierarchy. Insight articles should link to the calculator. The calculator's marketing page (`index.html`) should link to relevant articles. Related articles should cross-link. The goal is to keep users in the content ecosystem and guide them toward the primary conversion action (Pro upgrade or tool engagement). When adding a new article, identify at least two existing pages to link from and update them.
+**Internal linking:** Build and maintain a logical link hierarchy. Insight articles should link to the calculator. The home page (`/`) should link to relevant articles. Related articles should cross-link. The goal is to keep users in the content ecosystem and guide them toward the primary conversion action (Pro upgrade or tool engagement). When adding a new article, identify at least two existing pages to link from and update them.
 
 ---
 
@@ -1099,7 +1101,7 @@ Embed the following in the `<head>`, not inline in the body:
 
 ### Step 4: Internal Linking
 
-- [ ] **From the new article:** Link to the calculator (`app.html` or `index.html`) at least once, ideally with a contextual CTA (e.g., "Run the numbers on your own spending →")
+- [ ] **From the new article:** Link to the tracker (`app-pro.html`) or the home page (`/`) at least once, ideally with a contextual CTA (e.g., "Run the numbers on your own spending →"). Use `href="/"` for the home page — never `href="../index.html"`.
 - [ ] **From the new article:** Link to at least one other related insights article
 - [ ] **To the new article:** Identify at least two existing pages (other articles, `index.html`, `insights.html`) and add a link to the new article from each. Update those files.
 - [ ] **Insights index:** Add the new article to `insights.html` with title, date, and a 1–2 sentence teaser. Follow the existing card/list pattern.
@@ -1130,6 +1132,8 @@ Run through this after all other steps are complete:
 - [ ] `sitemap.xml` includes the new URL
 - [ ] `insights.html` index includes the new article
 - [ ] Author bio is present and specific
+- [ ] No link in the new file or any updated file uses `href="index.html"` or `href="../index.html"` — home page links must be `href="/"`
+- [ ] The `SEO Lint` GitHub Actions workflow passes (canonical links + sitemap audit)
 
 If any box above cannot be checked, the article is not ready to ship.
 

@@ -1,0 +1,70 @@
+name: SEO Lint
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  canonical-links:
+    name: Internal links use canonical URLs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fail if any HTML file links to index.html instead of /
+        run: |
+          # On a static host (Cloudflare Pages, etc.) both / and /index.html
+          # return HTTP 200 with no redirect — Google treats them as separate
+          # URLs. All internal links must use the canonical form (/).
+          if grep -rEn 'href="(\.\.\/)?index\.html"' --include="*.html" .; then
+            echo ""
+            echo "ERROR: Found href=\"index.html\" or href=\"../index.html\"."
+            echo "Use href=\"/\" instead so internal links match the canonical URL."
+            exit 1
+          fi
+          echo "OK: No non-canonical home page links found."
+
+  sitemap-audit:
+    name: Sitemap URLs match canonical tags
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Each sitemap URL must have a matching file with an identical canonical tag
+        run: |
+          ERRORS=0
+
+          while IFS= read -r url; do
+            path="${url#https://creditcardvaluetracker.com}"
+
+            # Root path maps to index.html on disk
+            if [[ "$path" == "/" ]]; then
+              file="index.html"
+            else
+              file="${path#/}"
+            fi
+
+            if [[ ! -f "$file" ]]; then
+              echo "ERROR: sitemap URL $url -> file '$file' not found on disk"
+              ERRORS=$((ERRORS+1))
+              continue
+            fi
+
+            canonical=$(grep -oP '(?<=<link rel="canonical" href=")[^"]+' "$file" || true)
+
+            if [[ "$canonical" != "$url" ]]; then
+              echo "ERROR: $file canonical is '$canonical', sitemap expects '$url'"
+              ERRORS=$((ERRORS+1))
+            else
+              echo "OK: $file"
+            fi
+          done < <(grep -oP '(?<=<loc>)[^<]+' sitemap.xml)
+
+          if [[ $ERRORS -gt 0 ]]; then
+            echo ""
+            echo "Found $ERRORS mismatch(es). Fix the sitemap or the canonical tag."
+            exit 1
+          fi
+          echo "All sitemap URLs match their canonical tags."

@@ -129,7 +129,7 @@ The core application makes zero network requests for its primary functionality. 
 | `app-pro.html` | Pro-tier application (identical HTML, different tier wrapper) |
 | `demo.html` | Interactive demo with synthetic data |
 | `insights.html` | Insights blog index — lists all articles with SEO (Open Graph, Twitter Card, JSON-LD CollectionPage) |
-| `insights/*.html` | Individual insight articles (e.g., `bilt-palladium-year-one.html`) |
+| `insights/*.html` | Individual insight articles (e.g., `amex-gold-vs-chase-sapphire-preferred.html`) |
 
 ### Core Logic (loaded by app.html and app-pro.html)
 | File | Lines | Purpose |
@@ -1021,6 +1021,15 @@ Every public-facing page must have a unique `<title>` and `<meta name="descripti
 
 **Internal links must also use the canonical form of each URL** — the `<link rel="canonical">` tag is only a hint to Google; internal links that disagree with it send a conflicting signal and can suppress indexing. The most common mistake on this site: linking to `index.html` or `../index.html` when the canonical home page URL is `https://creditcardvaluetracker.com/`. On static hosts (Cloudflare Pages, Netlify, etc.) both `/` and `/index.html` return HTTP 200 with no redirect, so Google can treat them as separate duplicate pages. **Always use `href="/"` for the home page in every nav link and body-text link. Never use `href="index.html"` or `href="../index.html"`.** The `SEO Lint` CI workflow enforces this automatically and will block any PR that reintroduces the pattern.
 
+**The same rule applies to the `.html` extension on every other page.** Cloudflare Pages serves the extension-less URL as the real page and 308-redirects `/page.html` → `/page`. That means a `.html` URL is *always a redirect, never a final destination*. If canonical tags, `og:url`, JSON-LD `url` fields, the sitemap, or internal links point at `.html`, Google is told the canonical page is a URL that immediately redirects away — a self-contradiction that suppresses indexing. This was the root cause of the May 2026 indexing problems.
+
+**Rule: every self-referential URL uses the extension-less form.** No `.html` in canonical tags, `og:url`/`twitter:url`, JSON-LD `url`/`@id`/`mainEntityOfPage`, `sitemap.xml` `<loc>` entries, or internal `href` links to our own pages. Examples:
+- Canonical: `https://creditcardvaluetracker.com/insights/amex-gold-vs-chase-sapphire-preferred` (not `...preferred.html`)
+- Internal link: `href="insights/amex-gold-vs-chase-sapphire-preferred"` (not `...preferred.html`)
+- Sitemap `<loc>`: extension-less, matching the canonical exactly
+
+The files on disk keep their `.html` names (that's how the host stores them); only the *URLs* drop the extension. Verify with: `grep -rno 'creditcardvaluetracker.com/[^"]*\.html"' --include="*.html" .` — should return nothing but the `your-post-slug.html` template placeholder.
+
 ### Schema Markup (Structured Data)
 
 All structured data must be implemented as JSON-LD embedded in the `<head>`, not inline in the HTML body.
@@ -1068,7 +1077,7 @@ This is the end-to-end checklist for shipping a new article to `insights/`. Ever
 
 ### Step 1: Content & Structure
 
-- [ ] **Slug & file:** Create `insights/<slug>.html` using a URL-friendly slug (lowercase, hyphens, no dates in the URL). Keep the slug short and keyword-rich (e.g., `amex-gold-vs-sapphire-preferred-dining`).
+- [ ] **Slug & file:** Create the file `insights/<slug>.html` using a URL-friendly slug (lowercase, hyphens, no dates in the URL). Keep the slug short and keyword-rich (e.g., `amex-gold-vs-sapphire-preferred-dining`). The *file* keeps its `.html` name; every *URL* that references it (canonical, og:url, sitemap, internal links) drops the extension — see Section 17 → Canonical URLs.
 - [ ] **Article format follows GEO template** (see Section 17 → GEO):
   - H1: The article title (matches the `<title>` tag minus the brand suffix)
   - Key Takeaway Box: 2–3 sentence summary directly answering the article's core question, placed before any other content
@@ -1084,7 +1093,7 @@ All of the following must be present and unique to this page:
 
 - [ ] `<title>` — 50–60 characters, front-loaded keyword, ends with `| Credit Card Value Tracker` (see Section 17 → Page-Level Meta Tags for format)
 - [ ] `<meta name="description">` — 140–155 characters, compelling one-sentence summary, does not duplicate the title
-- [ ] `<link rel="canonical" href="https://creditcardvaluetracker.com/insights/<slug>.html">`
+- [ ] `<link rel="canonical" href="https://creditcardvaluetracker.com/insights/<slug>">` (extension-less — **no** `.html`; this must match the sitemap `<loc>` exactly)
 - [ ] **Open Graph tags:** `og:title`, `og:description`, `og:image` (1200×630px), `og:url`, `og:type` (= `article`)
 - [ ] **Twitter Card tags:** `twitter:card` (= `summary_large_image`), `twitter:title`, `twitter:description`, `twitter:image`
 - [ ] **If no `og:image` asset exists**, ask before publishing — do not leave this blank or use a placeholder
@@ -1119,6 +1128,11 @@ Embed the following in the `<head>`, not inline in the body:
 - [ ] All tables are horizontally scrollable or responsive — no layout-breaking overflow
 - [ ] CTA buttons are at least 44px tall
 - [ ] The Key Takeaway Box is visible without scrolling on mobile
+- [ ] **CTA button text is white, not blue.** `.cta-btn` is an `<a>` element, so the browser's default link color (and `:visited`) can override the button's `color: #fff` and render the label blue. This is a recurring bug. The fix is to set the color on every link state, not just the base class:
+  ```css
+  .cta-btn, .cta-btn:link, .cta-btn:visited, .cta-btn:hover, .cta-btn:active { color: #fff; }
+  ```
+  Apply this in the new article's `<style>` block. Do **not** patch it per-article with a one-off `!important` override (that's how the inconsistency crept in across existing articles) — copy the multi-state `.cta-btn` rule verbatim from an already-fixed article so all Insights pages stay identical.
 
 ### Step 7: Final Review Checklist
 
@@ -1133,6 +1147,8 @@ Run through this after all other steps are complete:
 - [ ] `insights.html` index includes the new article
 - [ ] Author bio is present and specific
 - [ ] No link in the new file or any updated file uses `href="index.html"` or `href="../index.html"` — home page links must be `href="/"`
+- [ ] No canonical tag, `og:url`, JSON-LD `url`, sitemap `<loc>`, or internal link to our own pages contains `.html` — all self-referential URLs are extension-less (the live host redirects `.html` → clean, so `.html` URLs are always redirects)
+- [ ] CTA button (`Try It Free`) renders with white text, not blue — verify the `.cta-btn` rule includes `:link`/`:visited`/`:hover`/`:active` states
 - [ ] The `SEO Lint` GitHub Actions workflow passes (canonical links + sitemap audit)
 
 If any box above cannot be checked, the article is not ready to ship.

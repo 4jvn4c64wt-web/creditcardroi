@@ -1,8 +1,10 @@
 User-agent: *
 Allow: /
-Disallow: /app.html
-Disallow: /app-pro.html
-Disallow: /demo.html
+# App and demo pages (/app, /app-pro, /demo) are intentionally NOT Disallowed here.
+# They use <meta name="robots" content="noindex"> instead. Google must be allowed to
+# CRAWL them in order to SEE the noindex tag and drop them from the index. A Disallow
+# would block crawling, hide the noindex, and risk a URL-only listing. Do not add
+# Disallow lines for these pages — keep the noindex tags in the page <head> instead.
 Disallow: /cards/
 Disallow: /app-core.js
 Disallow: /app.js

@@ -26,24 +26,68 @@ jobs:
           fi
           echo "OK: No non-canonical home page links found."
 
+      - name: Fail if any self-referential URL uses the .html extension
+        run: |
+          # Cloudflare Pages serves the extension-less URL as the real page and
+          # 308-redirects /page.html -> /page. A .html URL is therefore ALWAYS a
+          # redirect, never a final destination. Canonical tags, og:url/twitter:url,
+          # JSON-LD url fields, sitemap <loc> entries, and internal links to our own
+          # pages must all use the extension-less form, or Google is told the
+          # canonical page is a URL that immediately redirects away (which suppresses
+          # indexing). Files on disk keep their .html names; only URLs drop it.
+          # The only allowed .html URL is the your-post-slug.html template placeholder.
+          HITS=$(grep -rEn \
+            'href="https://creditcardvaluetracker\.com/[^"]*\.html"|(rel="canonical" href|property="og:url" content|name="twitter:url" content)="https://creditcardvaluetracker\.com/[^"]*\.html"|"url": *"https://creditcardvaluetracker\.com/[^"]*\.html"' \
+            --include="*.html" . | grep -v 'your-post-slug\.html' || true)
+          if [[ -n "$HITS" ]]; then
+            echo "$HITS"
+            echo ""
+            echo "ERROR: Found self-referential URL(s) ending in .html (see above)."
+            echo "Drop the .html extension. The file keeps its name; only the URL changes."
+            exit 1
+          fi
+          # Also catch relative internal links to our own article/tool/app pages.
+          REL=$(grep -rEn 'href="(\.\.\/)?(insights/)?(amex-gold-vs-chase-sapphire-preferred|amex-platinum-vs-chase-sapphire-reserve|chase-sapphire-cardholders-free-year-whoop-life|compare|insights|app|app-pro|demo)\.html"' \
+            --include="*.html" . | grep -v 'your-post-slug\.html' || true)
+          if [[ -n "$REL" ]]; then
+            echo "$REL"
+            echo ""
+            echo "ERROR: Found relative internal link(s) to our own pages using .html."
+            echo "Use the extension-less form (e.g. href=\"insights/<slug>\")."
+            exit 1
+          fi
+          echo "OK: No self-referential .html URLs found."
+
+      - name: Fail if sitemap.xml contains any .html <loc>
+        run: |
+          if grep -nE '<loc>https://creditcardvaluetracker\.com/[^<]+\.html</loc>' sitemap.xml; then
+            echo ""
+            echo "ERROR: sitemap.xml <loc> entries must be extension-less (no .html)."
+            exit 1
+          fi
+          echo "OK: sitemap.xml uses extension-less URLs."
+
   sitemap-audit:
     name: Sitemap URLs match canonical tags
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Each sitemap URL must have a matching file with an identical canonical tag
+      - name: Each sitemap URL must map to a file whose canonical tag matches
         run: |
+          # URLs are extension-less; files on disk are .html. Map the clean URL
+          # back to its file by appending .html (root path -> index.html). The
+          # canonical tag inside that file must equal the sitemap URL exactly
+          # (also extension-less).
           ERRORS=0
 
           while IFS= read -r url; do
             path="${url#https://creditcardvaluetracker.com}"
 
-            # Root path maps to index.html on disk
             if [[ "$path" == "/" ]]; then
               file="index.html"
             else
-              file="${path#/}"
+              file="${path#/}.html"   # append .html to the clean URL to find the file
             fi
 
             if [[ ! -f "$file" ]]; then
@@ -56,6 +100,7 @@ jobs:
 
             if [[ "$canonical" != "$url" ]]; then
               echo "ERROR: $file canonical is '$canonical', sitemap expects '$url'"
+              echo "       (both must be extension-less and identical)"
               ERRORS=$((ERRORS+1))
             else
               echo "OK: $file"

@@ -264,7 +264,25 @@ window.CardTracker.merchants = {
   'dicefm': 'entertainment', 'san diego zoo': 'entertainment', 'seeticket': 'entertainment',
 
   // Rent
-  'bilt': 'rent'
+  'bilt': 'rent',
+
+  // Added from user review
+  'eaton dc': 'hotels-direct',
+  'for five coffee': 'coffee-shop',
+  'sebco laundry': 'other',
+  'sebco': 'other',
+  'anthropic': 'subscription',
+  'electric burrito': 'dining',
+  'american bar association': 'other',
+  'freetaxusacom': 'other',
+  'cloudflare': 'other',
+  'my magic pass': 'entertainment',
+  'window world of columb': 'other',
+  'window world': 'other',
+  'chilis': 'dining',
+  "chili's": 'dining',
+  'hk best barbers': 'salon',
+  'base44': 'other'
 };
 
 window.CardTracker.monarchMap = {

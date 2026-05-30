@@ -109,6 +109,18 @@ assertEq(biltResult.mapping.merchant, 'description', 'Bilt → merchant mapped t
 assertEq(biltResult.mapping.amount, 'amount', 'Bilt → amount mapped');
 assertEq(biltResult.mapping.category, 'category', 'Bilt → category mapped');
 
+// Bilt V2: has "Transaction Date", "Posted Date", "Description", "Amount", "Card Last 4", "Name on Card", "Raw Merchant Name"
+const biltV2Headers = ['Transaction Date', 'Posted Date', 'Description', 'Amount', 'Card Last 4', 'Name on Card', 'Raw Merchant Name'];
+const biltV2Preview = [
+  ['2026-05-29', '2026-05-29', 'MTA', '3.00', '3798', 'Christopher Scott', 'MTA*NYCT PAYGO']
+];
+const biltV2Result = detectCSVFormat(biltV2Headers, biltV2Preview);
+assertEq(biltV2Result.mapping.date, 'posted date', 'Bilt V2 → date mapped to "posted date"');
+assertEq(biltV2Result.mapping.merchant, 'description', 'Bilt V2 → merchant mapped to "description"');
+assertEq(biltV2Result.mapping.amount, 'amount', 'Bilt V2 → amount mapped');
+assertEq(biltV2Result.mapping.account, 'card last 4', 'Bilt V2 → account mapped to "card last 4"');
+assertEq(biltV2Result.mapping.original, 'raw merchant name', 'Bilt V2 → original mapped to "raw merchant name"');
+
 // =============================================================================
 // Test 3: Post-pass account reclassification
 // =============================================================================

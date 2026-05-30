@@ -366,28 +366,28 @@
     <!-- Column Mapping Section -->
     <div id="columnMappingSection" class="card hidden" style="background:#FFFFFF; border:1px solid #E8E5E2; border-radius:16px; padding:32px;">
         <h2 style="font-family:'Outfit', sans-serif; font-size: 28px; font-weight:600; margin:0 0 12px; color:#1C1917;">Map Your Columns</h2>
-        <p style="font-size:16px; color:#57534E; margin:0 0 32px; max-width:600px;">Tell us which columns contain which data. We've tried to auto-detect, but please verify before continuing.</p>
+        <p style="font-size:16px; color:#57534E; margin:0 0 32px; max-width:600px;">Review your column mappings below. We've auto-detected them for you, but please verify before continuing.</p>
         
-        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:16px; margin-bottom:32px;">
-          <div style="background:#F4F1EC; border:1px solid #E8E5E2; border-radius:12px; padding:20px;">
-            <div style="font-size:14px; font-weight:600; color:#1C1917; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
-              <div style="width:8px; height:8px; border-radius:50%; background:#F59E0B;"></div> Accuracy matters
+        <div style="display:flex; gap:24px; margin-bottom:24px; background:#FEF3C7; border:1px solid #FDE68A; border-radius:12px; padding:20px;">
+          <div style="flex:1;">
+            <div style="font-weight:600; color:#92400E; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+              <div style="width:8px; height:8px; border-radius:50%; background:#F59E0B;"></div> Accuracy Matters
             </div>
-            <div style="font-size:14px; color:#57534E; line-height:1.5;">The more columns you map, the more accurate your calculations will be. <strong>Category</strong> and <strong>Original Statement</strong> help identify merchants correctly.</div>
+            <div style="font-size:14px; color:#57534E; line-height:1.5;">Mapping the <strong>Date</strong>, <strong>Merchant</strong>, and <strong>Amount</strong> columns correctly is essential for the system to process your transactions accurately.</div>
           </div>
           
-          <div style="background:#F4F1EC; border:1px solid #E8E5E2; border-radius:12px; padding:20px;">
-            <div style="font-size:14px; font-weight:600; color:#1C1917; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
-              <div style="width:8px; height:8px; border-radius:50%; background:#15803D;"></div> Select Post Date
+          <div style="flex:1;">
+            <div style="font-weight:600; color:#92400E; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+              <div style="width:8px; height:8px; border-radius:50%; background:#F59E0B;"></div> Post Date vs Transaction Date
             </div>
-            <div style="font-size:14px; color:#57534E; line-height:1.5;">If your CSV has both "Post Date" and "Transaction Date", we auto-select <strong>Post Date</strong>. Points are earned when the transaction posts.</div>
+            <div style="font-size:14px; color:#57534E; line-height:1.5;">If your CSV has both "Post Date" and "Transaction Date," we auto-select <strong>Post Date</strong>. Points are typically earned when the transaction posts.</div>
           </div>
-          
-          <div style="background:#F4F1EC; border:1px solid #E8E5E2; border-radius:12px; padding:20px;">
-            <div style="font-size:14px; font-weight:600; color:#1C1917; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
-              <div style="width:8px; height:8px; border-radius:50%; background:#E65F2B;"></div> Account Type
+
+          <div style="flex:1;">
+            <div style="font-weight:600; color:#92400E; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+              <div style="width:8px; height:8px; border-radius:50%; background:#F59E0B;"></div> Filtering non-credit items
             </div>
-            <div style="font-size:14px; color:#57534E; line-height:1.5;">Map your "Account Type" column (e.g., in Rocket Money) to automatically filter out Checking and Savings non-credit transactions.</div>
+            <div style="font-size:14px; color:#57534E; line-height:1.5;">Map your "Account Type" column to filter out non-credit transactions (e.g., transactions from your checking or savings accounts).</div>
           </div>
         </div>
 

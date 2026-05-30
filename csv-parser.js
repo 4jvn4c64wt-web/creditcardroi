@@ -59,10 +59,25 @@ window.CardTracker.csvParser.detectCSVFormat = function(headers, previewRows) {
   // Detection order: specific multi-word fields first, then generic single-word fields
   const alreadyMapped = new Set();
 
+  const validateMatch = (headerName, expectedDataType) => {
+    if (!expectedDataType || !previewRows || previewRows.length === 0) return true;
+    const colIdx = normalizedHeaders.indexOf(headerName);
+    if (colIdx < 0) return true;
+    
+    const sampleValues = previewRows.map(row => row[colIdx]);
+    const detectedType = detectColumnDataType(sampleValues);
+    
+    if (detectedType === expectedDataType) return true;
+    // For general 'account' columns, allow any account-related detected type
+    if (expectedDataType === 'account' && ['account', 'accountName', 'accountType', 'accountCombined'].includes(detectedType)) return true;
+    
+    return false;
+  };
+
   const findHeader = (patterns, expectedDataType) => {
     // Pass 1: Exact phrase within header — h.includes(pattern)
     for (const pattern of patterns) {
-      const found = normalizedHeaders.find(h => h.includes(pattern) && !alreadyMapped.has(h));
+      const found = normalizedHeaders.find(h => h.includes(pattern) && !alreadyMapped.has(h) && validateMatch(h, expectedDataType));
       if (found) { alreadyMapped.add(found); return found; }
     }
     // Pass 2: Data format inspection — check actual cell values in unmapped columns
@@ -70,7 +85,8 @@ window.CardTracker.csvParser.detectCSVFormat = function(headers, previewRows) {
       for (let i = 0; i < normalizedHeaders.length; i++) {
         if (alreadyMapped.has(normalizedHeaders[i])) continue;
         const sampleValues = previewRows.map(row => row[i]);
-        if (detectColumnDataType(sampleValues) === expectedDataType) {
+        const detectedType = detectColumnDataType(sampleValues);
+        if (detectedType === expectedDataType || (expectedDataType === 'account' && ['account', 'accountName', 'accountType', 'accountCombined'].includes(detectedType))) {
           alreadyMapped.add(normalizedHeaders[i]);
           return normalizedHeaders[i];
         }
@@ -79,22 +95,26 @@ window.CardTracker.csvParser.detectCSVFormat = function(headers, previewRows) {
     // Pass 3: Word-boundary partial match
     for (const pattern of patterns) {
       const re = new RegExp('(?:^|\\W)' + pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:$|\\W)');
-      const found = normalizedHeaders.find(h => re.test(h) && !alreadyMapped.has(h));
+      const found = normalizedHeaders.find(h => re.test(h) && !alreadyMapped.has(h) && validateMatch(h, expectedDataType));
       if (found) { alreadyMapped.add(found); return found; }
     }
     return null;
   };
 
   // Detect specific multi-word fields FIRST (before generic single-word fields can steal them)
-  const original = findHeader(['original statement', 'original description', 'memo', 'original']);
+  const original = findHeader([
+    'original statement', 'original description', 'raw merchant name',
+    'raw description', 'raw merchant', 'statement description',
+    'memo'
+  ]);
   const accountName = findHeader(['account name', 'card name', 'account nickname'], 'accountName');
   const accountType = findHeader(['account type'], 'accountType');
 
   // Then detect generic fields
-  const date = findHeader(['post date', 'posting date', 'date', 'transaction date', 'trans date'], 'date');
+  const date = findHeader(['posted date', 'posting date', 'post date', 'date', 'transaction date', 'trans date'], 'date');
   const merchant = findHeader(['merchant', 'description', 'payee', 'name']);
   const category = findHeader(['category']);
-  const account = findHeader(['account number', 'card number', 'account', 'card', 'card no'], 'account');
+  const account = findHeader(['account number', 'card number', 'card last 4', 'card no', 'account', 'card'], 'account');
   const amount = findHeader(['amount', 'debit', 'credit'], 'amount');
 
   // Only fall back to bare "type" for accountType if it wasn't already detected
@@ -156,13 +176,13 @@ window.CardTracker.csvParser.detectAccountColumnType = function(sampleValue) {
   }
 
   // Check for account type keywords (generic account types used for filtering)
-  const accountTypeKeywords = ['checking', 'savings', 'investment', 'brokerage', 'money market', 'debit'];
+  const accountTypeKeywords = ['checking', 'savings', 'investment', 'brokerage', 'money market', 'debit card', 'checking account', 'savings account'];
   if (accountTypeKeywords.some(keyword => lowerValue.includes(keyword))) {
     return 'accountType';
   }
 
   // "Credit Card" alone is an account type
-  if (lowerValue === 'credit card' || lowerValue === 'credit') {
+  if (lowerValue === 'credit card') {
     return 'accountType';
   }
 
@@ -200,10 +220,12 @@ window.CardTracker.csvParser.detectColumnDataType = function(sampleValues) {
 
   // Check for date patterns (most specific)
   const datePatterns = [
-    /^\d{1,2}\/\d{1,2}\/\d{2,4}$/,   // MM/DD/YYYY
-    /^\d{4}-\d{2}-\d{2}$/,             // YYYY-MM-DD
-    /^\d{1,2}-\d{1,2}-\d{2,4}$/,      // MM-DD-YYYY
-    /^\d{4}\/\d{2}\/\d{2}$/            // YYYY/MM/DD
+    /^\d{1,2}\/\d{1,2}\/\d{2,4}$/,    // MM/DD/YYYY
+    /^\d{4}-\d{2}-\d{2}$/,              // YYYY-MM-DD
+    /^\d{1,2}-\d{1,2}-\d{2,4}$/,       // MM-DD-YYYY
+    /^\d{4}\/\d{2}\/\d{2}$/,             // YYYY/MM/DD
+    /^\d{1,2}-[a-zA-Z]{3}-\d{2,4}$/,   // DD-MMM-YYYY
+    /^[a-zA-Z]{3}\s\d{1,2},\s\d{4}$/   // MMM DD, YYYY
   ];
   const dateCount = values.filter(v => datePatterns.some(p => p.test(v))).length;
   if (dateCount / total >= threshold) return 'date';
@@ -211,6 +233,9 @@ window.CardTracker.csvParser.detectColumnDataType = function(sampleValues) {
   // Check for account-related types BEFORE amounts (since "1234" is both a valid amount and card number)
   // Use detectAccountColumnType but only trust strong signals, not the text-length fallback
   const detectAccountColumnType = window.CardTracker.csvParser.detectAccountColumnType;
+  
+  // NOTE FOR FUTURE DEVELOPMENT: 
+  // Update this list whenever adding support for new card modules or bank formats
   const cardNameKeywords = ['visa', 'mastercard', 'amex', 'american express', 'discover',
                             'sapphire', 'reserve', 'freedom', 'unlimited', 'preferred',
                             'gold', 'platinum', 'rewards', 'cash back', 'cashback',
@@ -310,12 +335,12 @@ window.CardTracker.csvParser.showColumnMapping = function(csvText) {
     // Headerless CSV - generate synthetic column names
     headers = firstRowFields.map((_, i) => `Column ${i + 1}`);
     // All lines are data (including first line)
-    previewRows = lines.slice(0, 5).map(line => parseCSVLine(line));
+    previewRows = lines.slice(0, 20).map(line => parseCSVLine(line));
     dataLines = lines; // All lines are data
   } else {
     // Normal CSV with headers
     headers = firstRowFields;
-    previewRows = lines.slice(1, 6).map(line => parseCSVLine(line));
+    previewRows = lines.slice(1, 21).map(line => parseCSVLine(line));
     dataLines = lines.slice(1); // Skip header row
   }
 
@@ -412,9 +437,9 @@ window.CardTracker.csvParser.showColumnMapping = function(csvText) {
       </span>
       ${isHeaderless ? '<div style="font-size:11px;color:#92400e;margin-top:4px;">This file has no header row. First row contains data.</div>' : ''}
     </div>
-    <div style="overflow-x:auto;">
+    <div style="overflow-x:auto; overflow-y:auto; max-height:400px;">
       <table style="min-width:100%;border-collapse:collapse;">
-        <thead>
+        <thead style="position: sticky; top: 0; z-index: 10; background: white; box-shadow: 0 1px 2px rgba(0,0,0,0.1);">
           <tr style="background:#f5f5f4;">
             ${headers.map((h, i) => `
               <th style="padding:8px 12px;border-bottom:1px solid #e7e5e4;min-width:140px;">

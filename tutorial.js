@@ -754,6 +754,9 @@ function initTutorial() {
   });
 
   // Tour event listeners
+  document.getElementById('startTourBtn')?.addEventListener('click', () => {
+    startTour(true);
+  });
   document.getElementById('tourSkip').addEventListener('click', showSkipConfirmation);
   document.getElementById('tourNext').addEventListener('click', () => {
     // If leaving reclassify-modal, close the modal
